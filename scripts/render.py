@@ -217,6 +217,9 @@ def build_report(package: pathlib.Path) -> str:
         footer = "\n\n> " + t("report.rule_note")
         if baseline:
             footer += "\n>\n> " + t("report.baseline_note", baseline=escape(baseline))
+        stale = verd["summary"].get("stale_base")
+        if stale:
+            footer += "\n>\n> " + escape(stale)
         return "\n".join(rows) + footer
 
     def sec_routes():

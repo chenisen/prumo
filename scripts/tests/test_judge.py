@@ -201,9 +201,30 @@ class TestCriteriaAndEvidence(unittest.TestCase):
         v = judge(evidence={"suite": "green", "mandatory_reading_empty": True})
         self.assertEqual(v["verdict"], INTERVENTION)
 
-    def test_behind_the_base(self):
-        v = judge(evidence={"suite": "green", "behind_base": True})
-        self.assertIn("author_fix", route_types(v))
+    def test_behind_the_base_but_merging_cleanly_does_not_hold_it(self):
+        """Being behind and conflicting are different facts. A branch a few commits
+        behind that merges cleanly was measured against code identical to what it will
+        meet — it is annotated, never charged. Decided 2026-11-04."""
+        v = judge(evidence={"suite": "green", "behind_base": True,
+                            "commits_behind_base": 2, "conflicts": False})
+        self.assertEqual(v["verdict"], APPROVED)
+        self.assertNotIn("author_fix", route_types(v))
+        self.assertIsNotNone(v["summary"]["stale_base"])
+
+    def test_a_conflict_with_the_base_holds_it(self):
+        v = judge(evidence={"suite": "green", "behind_base": True,
+                            "commits_behind_base": 2, "conflicts": True,
+                            "conflicted_files": ["app/X.php"]})
+        self.assertEqual(v["verdict"], INTERVENTION)
+        author = [r for r in v["routes"] if r["type"] == "author_fix"][0]
+        self.assertIn("conflict", author["items"])
+
+    def test_an_unmeasured_merge_is_not_evidence_that_it_merges(self):
+        """`None` is not `False`. The annotation has to say it was never checked."""
+        v = judge(evidence={"suite": "green", "behind_base": True,
+                            "commits_behind_base": 1, "conflicts": None,
+                            "conflicts_reason": "git merge-tree unavailable"})
+        self.assertIn("git merge-tree unavailable", v["summary"]["stale_base"])
 
     def test_out_of_scope(self):
         v = judge(scope={"out_of_scope_touched": ["app/Other.php"]})

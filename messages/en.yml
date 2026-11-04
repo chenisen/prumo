@@ -423,6 +423,11 @@ validate:
   waiver_expired: 'checks.{role}: the waiver expired on {date}'
   warning: 'warning: {text}'
 verdict:
+  detail_conflict: 'the proposal does not merge into the resolved base — conflicting files: {files}'
+  stale_base: The proposal is {n} commit(s) behind the resolved base. {merge} Being behind does not hold it; not merging does.
+  stale_clean: It merges cleanly, so the delivery was measured against code identical to what it will meet.
+  stale_conflicts: It does NOT merge cleanly, so what the review measured is not what will be merged.
+  stale_unmeasured: Whether it merges cleanly was NOT measured here ({reason}), so this is not evidence that it does.
   approved: APPROVED
   closes:
     author_fix: a new push triggers the delta review
@@ -431,7 +436,6 @@ verdict:
     manual_check: the evidence recorded on the item triggers the re-judgement
     missing_capability: the profile is updated and reviewed in a proposal
     missing_profile: a person confirms the profile; closes once per repository
-  detail_behind_base: the {proposal} is behind the resolved base
   detail_criterion_unmet: criterion of the {item} that the delivery did not meet
   detail_criterion_unrecorded: criterion the diff does not decide and that nobody recorded
   detail_delivery_untested: behaviour this delivery wrote that no test covers

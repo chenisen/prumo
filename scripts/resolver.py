@@ -121,6 +121,7 @@ def resolve(repo: str, mr: int | None, branch: str | None, item: str | None) -> 
         "merge_base": merge_base,
         "commits_behind_base": int(behind or 0),
         "behind_base": int(behind or 0) > 0,
+        **conflicts_with_base(repo_dir, base_sha, head),
         "item": {"id": item or derived,
                  "source": t("resolver.source_argument") if item else
                            (t("resolver.source_commit_subject") if derived else None),
@@ -128,6 +129,36 @@ def resolve(repo: str, mr: int | None, branch: str | None, item: str | None) -> 
         "commits": subjects,
         "perfil_status": profile.get("status", "absent"),
     }
+
+
+def conflicts_with_base(repo_dir: pathlib.Path, base_sha: str, head: str) -> dict:
+    """Would merging this head into the base conflict?
+
+    Being BEHIND the base and CONFLICTING with it are different facts, and conflating
+    them made every slightly stale proposal look like a defect. A branch two commits
+    behind that merges cleanly has been measured against code identical to what it will
+    meet; one that conflicts has not, and nobody can say what the review proved.
+
+    `git merge-tree --write-tree` answers it without a provider, without a checkout and
+    without touching the working tree or any ref: it writes objects to the odb and exits
+    non-zero when the merge does not resolve, naming the files. That matters because no
+    script here reaches the forge's API — the same reason the item arrives as a file.
+
+    Older git has no `--write-tree`. There the honest answer is `None`: not measured, and
+    the judge is told so rather than handed a `False` it would read as "merges cleanly".
+    """
+    r = subprocess.run(
+        ("git", "merge-tree", "--write-tree", "--name-only", base_sha, head),
+        cwd=repo_dir, capture_output=True, text=True)
+    if r.returncode not in (0, 1):
+        return {"conflicts": None, "conflicted_files": [],
+                "conflicts_reason": (r.stderr or "").strip()[:200]
+                                    or "git merge-tree unavailable"}
+    # On a conflict the first line is the tree oid and the rest are the paths.
+    lines = [l for l in r.stdout.splitlines() if l.strip()]
+    return {"conflicts": r.returncode == 1,
+            "conflicted_files": lines[1:] if r.returncode == 1 else [],
+            "conflicts_reason": None}
 
 
 def main() -> int:

@@ -242,9 +242,16 @@ def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
         route(destination, ["suite"],
               {"detail": t("verdict.detail_suite", value=evidence["suite"], **_words())},
               gate=3 if suite_blocks else None, origin=suite_origin)
-    if evidence.get("behind_base"):
-        route("author_fix", ["rebase"],
-              {"detail": t("verdict.detail_behind_base", **_words())})
+    # Being BEHIND the base and CONFLICTING with it are different facts, and only the
+    # second one holds the proposal. A branch a few commits behind that merges cleanly was
+    # measured against code identical to what it will meet; one that conflicts was not, and
+    # nobody can say what the review proved. Decided on 2026-11-04: staleness is an
+    # annotation in the summary, a conflict is gate 1.
+    if evidence.get("conflicts") is True:
+        route("author_fix", ["conflict"],
+              {"detail": t("verdict.detail_conflict",
+                           files=", ".join(evidence.get("conflicted_files") or []) or "—",
+                           **_words())}, gate=1)
     if evidence.get("mandatory_reading_empty"):
         route("manual_check", ["mandatory_reading"],
               {"detail": t("verdict.detail_mandatory_reading", **_words())}, gate=5)
@@ -271,6 +278,16 @@ def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
             "repo_baseline": (
                 evidence.get("suite_reason") or "")
                 if evidence.get("suite") == "red_not_attributable" else None,
+            # Measured and declared, charged to nobody: the branch is behind, and the
+            # merge either resolves, does not, or could not be measured here.
+            "stale_base": (
+                t("verdict.stale_base",
+                  n=evidence.get("commits_behind_base") or 0,
+                  merge=(t("verdict.stale_conflicts") if evidence.get("conflicts") is True
+                         else t("verdict.stale_clean") if evidence.get("conflicts") is False
+                         else t("verdict.stale_unmeasured",
+                                reason=evidence.get("conflicts_reason") or "")))
+                if evidence.get("behind_base") else None),
             "classes_fired": [c["id"] for c in classes if c["state"] == "fired"],
             "classes_did_not_fire": [c["id"] for c in classes if c["state"] == "did_not_fire"],
             "classes_not_assessable": [c["id"] for c in classes if c["state"] == "not_assessable"],

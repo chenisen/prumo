@@ -45,9 +45,12 @@ class TestItem10001(unittest.TestCase):
     def test_verdict(self):
         self.assertEqual(self.v["verdict"], INTERVENTION)
 
-    def test_the_rebase_is_the_authors(self):
-        author = [r for r in self.v["routes"] if r["type"] == "author_fix"][0]
-        self.assertIn("rebase", author["items"])
+    def test_being_behind_the_base_is_annotated_and_not_charged(self):
+        """It used to open an `author_fix / rebase` route and close gate 1. Since
+        2026-11-04 only a real conflict does that; staleness is declared in the summary."""
+        self.assertIsNotNone(self.v["summary"]["stale_base"])
+        author = [r for r in self.v["routes"] if r["type"] == "author_fix"]
+        self.assertEqual([], [r for r in author if "rebase" in r["items"]])
 
     def test_A7_is_a_human_decision_and_not_the_authors(self):
         self.assertIn("human_decision", route_types(self.v))

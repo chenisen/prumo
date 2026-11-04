@@ -167,6 +167,13 @@ def initial_evidence(package: pathlib.Path) -> dict:
         "suite": "not_run" if not suite.get("available") else "not_run",
         "suite_reason": suite.get("reason") or t("review.suite_not_run"),
         "behind_base": man.get("behind_base", False),
+        "commits_behind_base": man.get("commits_behind_base", 0),
+        # Three states on purpose: True conflicts, False merges cleanly, None was not
+        # measured. A None collapsed into False would read as "merges cleanly" and the
+        # judge would annotate a staleness it never checked.
+        "conflicts": man.get("conflicts"),
+        "conflicted_files": man.get("conflicted_files") or [],
+        "conflicts_reason": man.get("conflicts_reason"),
         "mandatory_reading_empty": not (package / "criteria.json").exists(),
     }
 

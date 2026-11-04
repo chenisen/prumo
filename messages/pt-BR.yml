@@ -426,6 +426,11 @@ validate:
   waiver_expired: 'checks.{role}: a dispensa venceu em {date}'
   warning: 'aviso:   {text}'
 verdict:
+  detail_conflict: 'a proposta não mescla na base resolvida — arquivos em conflito: {files}'
+  stale_base: A proposta está {n} commit(s) atrás da base resolvida. {merge} Estar atrás não a segura; não mesclar segura.
+  stale_clean: Ela mescla sem conflito, então a entrega foi medida contra código idêntico ao que vai encontrar.
+  stale_conflicts: Ela NÃO mescla sem conflito, então o que a revisão mediu não é o que será mesclado.
+  stale_unmeasured: Se ela mescla sem conflito NÃO foi medido aqui ({reason}), então isto não é evidência de que mescla.
   approved: APROVADO
   closes:
     author_fix: o novo push dispara a revisão por delta
@@ -434,7 +439,6 @@ verdict:
     manual_check: a evidência registrada no item dispara o re-julgamento
     missing_capability: o perfil é atualizado e versionado numa proposta
     missing_profile: uma pessoa confirma o perfil; fecha uma vez por repositório
-  detail_behind_base: '{proposal_with_article} está atrás da base resolvida'
   detail_criterion_unmet: critério d{item_with_article} que a entrega não atendeu
   detail_criterion_unrecorded: critério que o diff não decide e que ninguém registrou
   detail_delivery_untested: comportamento que esta entrega escreveu e nenhum teste cobre
