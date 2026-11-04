@@ -1,0 +1,19 @@
+# Configuration used ONLY by the prumo's own suite.
+#
+# The paths deliberately point inside the repository's own tree: a test that writes where
+# it should not then fails visibly, instead of littering the workspace of whoever
+# installed the prumo. `tests/__init__.py` points `PRUMO_CONFIG` here BEFORE any import,
+# because `common.cfg()` caches the result on first access. Without that, the suite would
+# pass or fail according to the machine running it — exactly the coupling `prumo.yml`
+# exists to remove.
+prumo: 1
+language: en
+paths:
+  repositories: ./tree/repositories
+  profiles: ./tree/profiles
+  reports: ./tree/reports
+tracker:
+  type: businessmap
+  url: "https://example.invalid/cards/{id}"
+forge:
+  type: gitlab

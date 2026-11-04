@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Classe avaliada pela triagem",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "section",
+    "state",
+    "reason",
+    "not_applicable",
+    "waiver",
+    "evidence"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[AB](10|[1-9])$"
+    },
+    "section": {
+      "enum": [
+        "A",
+        "B"
+      ]
+    },
+    "state": {
+      "enum": [
+        "fired",
+        "did_not_fire",
+        "not_assessable"
+      ],
+      "description": "o terceiro estado é o que separa 'não há risco' de 'ninguém olhou'"
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "obrigatório SEMPRE: silêncio não vale como ausência de risco"
+    },
+    "not_applicable": {
+      "type": "boolean"
+    },
+    "waiver": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "evidence": {
+      "type": "array"
+    }
+  }
+}

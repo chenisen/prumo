@@ -1,0 +1,213 @@
+
+# Validado por .claude/skills/task-review/scripts/validar_perfil.py
+#
+
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: A repository's review profile
+type: object
+additionalProperties: false
+required: [profile, version, status, stack, conventions, proof_registry, base,
+           living_docs, checks, sensitive_data, size, anchors, evals]
+
+properties:
+  profile:
+    type: string
+    minLength: 1
+    description: name of the repository this profile applies to
+  version:
+    type: integer
+    minimum: 1
+  status:
+    enum: [draft, confirmed]
+  confirmed_by:
+    type: [string, "null"]
+  confirmed_at:
+    type: [string, "null"]
+    description: date ISO-8601 (AAAA-MM-DD)
+
+  stack:
+    type: object
+    additionalProperties: false
+    required: [family, manifests]
+    properties:
+      family:
+        type: string
+        description: free label for this repo's stack family; only the profile interprets it
+      manifests:
+        type: array
+        items: {type: string}
+
+  conventions:
+    type: array
+    description: POINTERS to the repo's convention documents, read at runtime. An empty list is legitimate.
+    items: {type: string}
+
+  proof_registry:
+    type: object
+    additionalProperties: false
+    required: [type, root, note]
+    properties:
+      type:
+        # A FREE label, not an enum. The enum named one company's specification framework
+        # empresa dentro do contrato de todas — o mesmo acoplamento que o profile existe
+        # The only value the method gives meaning to is `absent`, which leaves class A7
+
+        # 
+        type: string
+        minLength: 1
+      root: {type: [string, "null"]}
+      note: {type: [string, "null"]}
+
+  base:
+    type: object
+    additionalProperties: false
+    required: [branch]
+    properties:
+      branch: {type: string, minLength: 1}
+
+  living_docs:
+    type: array
+    description: what class A4 requires updating when an integration surface changes
+    items: {type: string}
+
+  checks:
+    type: object
+    additionalProperties: false
+    required: [secrets, static, lint, dependencies, suite]
+    properties:
+      secrets:     {$ref: "#/$defs/check"}
+      static:     {$ref: "#/$defs/check"}
+      lint:         {$ref: "#/$defs/check"}
+      dependencies: {$ref: "#/$defs/check"}
+      suite:        {$ref: "#/$defs/check"}
+
+  sensitive_data:
+    type: object
+    additionalProperties: false
+    required: [fields, forbidden_destinations]
+    properties:
+      fields: {type: array, items: {type: string}}
+      forbidden_destinations: {type: array, items: {type: string}}
+
+  size:
+    type: object
+    additionalProperties: false
+    required: [ideal, acceptable, split, file_ceiling]
+    properties:
+      ideal: {type: integer, minimum: 1}
+      acceptable: {type: integer, minimum: 1}
+      split: {type: integer, minimum: 1}
+      file_ceiling: {type: integer, minimum: 1}
+
+  local_reviewer:
+    type: [object, "null"]
+    additionalProperties: false
+    required: [type, nome]
+    properties:
+      type: {enum: [agent, skill]}
+      nome: {type: string}
+
+  models:
+    type: [object, "null"]
+    description: rebaixamento opcional de modelo por agente, num repo de baixo risco
+    additionalProperties: {enum: [haiku, sonnet, opus]}
+
+  anchors:
+    type: object
+    description: >
+      Amarra as 18 classes a ESTE repo. Classe absent do mapa fica `nao_avaliavel`.
+      A class that demonstrably does not apply uses `not_applicable`, with a reason and an approver.
+    propertyNames:
+      pattern: "^[AB](10|[1-9])$"
+    additionalProperties:
+      oneOf:
+        - $ref: "#/$defs/anchor"
+        - $ref: "#/$defs/not_applicable"
+
+  evals:
+    type: array
+    description: THIS repo's eval set — one case per incident that has already cost something
+    items:
+      type: object
+      additionalProperties: false
+      required: [item, class, expects]
+      properties:
+        item: {type: [integer, string]}
+        class:
+          type: string
+          pattern: "^([AB](10|[1-9])|nenhuma)$"
+        expects: {enum: [fire, silence]}
+        nota: {type: [string, "null"]}
+
+  pending:
+    type: array
+    description: classes that already came out `not_assessable` in a real run; the profile's work list
+    items:
+      type: object
+      additionalProperties: false
+      required: [class, visto_em]
+      properties:
+        class: {type: string, pattern: "^[AB](10|[1-9])$"}
+        visto_em: {type: string}
+        nota: {type: [string, "null"]}
+
+$defs:
+  check:
+    type: object
+    additionalProperties: false
+    required: [command, required]
+    properties:
+      command:
+        type: [string, "null"]
+        description: null means the role has no tool in this repo — it becomes an absent capability
+      required: {type: boolean}
+      preexisting_reds:
+        type: [string, "null"]
+        description: the baseline, described BY NAME; a count discriminates no delivery at all
+      failure_pattern:
+        type: [string, "null"]
+        description: >
+          A regular expression that, matching the OUTPUT, proves the check failed — even
+          when the exit code is 0. It exists because anything that wraps the process
+          (container, runner, wrapper) can swallow the code, and a green resting on the
+          exit code alone is a green that never looked at the result. Absent is
+          legitimate: the state then says, in words, that it rests on the exit code only.
+      waiver: {$ref: "#/$defs/waiver"}
+
+  anchor:
+    type: object
+    additionalProperties: false
+    properties:
+      paths: {type: array, items: {type: string}}
+      patterns:
+        type: array
+        description: expressões regulares aplicadas ao conteúdo do diff, quando o caminho não basta
+        items: {type: string}
+      verification:
+        type: [string, "null"]
+        description: como uma pessoa prova — obrigatório em classes §B
+      cards: {type: array, items: {type: [integer, string]}}
+      nota: {type: [string, "null"]}
+
+  not_applicable:
+    type: object
+    additionalProperties: false
+    required: [not_applicable]
+    properties:
+      not_applicable:
+        type: object
+        additionalProperties: false
+        required: [reason, approver, date]
+        properties:
+          reason: {type: string, minLength: 1}
+          approver: {type: string, minLength: 1}
+          date: {type: string}
+
+  waiver:
+    type: [object, "null"]
+    additionalProperties: false
+    required: [reason, approver, expires]
+    properties:
+      reason: {type: string, minLength: 1}
+      approver: {type: string, minLength: 1}
+      expires: {type: string}

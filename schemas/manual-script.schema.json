@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Roteiro de verificação manual",
+  "description": "O harness não para em 'precisa de teste manual'. Entrega o manual_script, com o resultado previsto escrito ANTES de executar — é ele que separa verificação de observação.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "trigger",
+    "goal",
+    "environment",
+    "data",
+    "steps",
+    "expected_result",
+    "evidence_to_collect",
+    "acceptance"
+  ],
+  "properties": {
+    "trigger": {
+      "type": "string",
+      "description": "a class que pediu este manual_script"
+    },
+    "goal": {
+      "type": "string"
+    },
+    "environment": {
+      "type": "string"
+    },
+    "data": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "expected_result": {
+      "type": "string",
+      "minLength": 3
+    },
+    "evidence_to_collect": {
+      "type": "string"
+    },
+    "acceptance": {
+      "type": "string"
+    },
+    "cases": {
+      "type": "array",
+      "description": "quando o manual_script é caixa-preta derivada de um critério",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "caso",
+          "tecnica",
+          "entrada",
+          "expected_result"
+        ],
+        "properties": {
+          "caso": {
+            "type": "string"
+          },
+          "tecnica": {
+            "enum": [
+              "valor-limite",
+              "particao valida",
+              "particao invalida",
+              "tabela de decisao",
+              "transicao de estado"
+            ]
+          },
+          "entrada": {
+            "type": "string"
+          },
+          "expected_result": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

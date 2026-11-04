@@ -1,0 +1,25 @@
+__pycache__/
+*.pyc
+# The configuration belongs to each installation, never to the repository: versioning it
+# would publish one team's paths and URLs inside everybody's tool. The contract is the
+# .example.
+/prumo.yml
+# The tree the suite uses as a fake target.
+/scripts/tests/tree/
+
+# Tool cache, never versioned.
+.pytest_cache/
+
+# Run state, never source. `review.py prepare` creates it and `conclude` removes it; a
+# copy swept into a commit by a run that had a review open blocks push and commit for
+# everybody who checks the repo out, until it expires four hours later.
+.claude/.task-review-ativo
+
+# An installation's own facts, which are never the method's: the profiles of somebody's
+# repositories, the reports a run produced, and anything carrying a VALUE rather than a
+# name. `scripts/hygiene.py` fails them if they reach a commit anyway.
+/profiles/
+/reports/
+runs.jsonl
+.env
+*.env

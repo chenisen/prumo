@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Critério de aceite extraído do card",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "text",
+    "state",
+    "record"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "met",
+        "not_met",
+        "not_verifiable"
+      ],
+      "description": "nao_verificavel = o diff não decide; precisa de registro de pessoa"
+    },
+    "record": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "onde a evidência humana ficou; null com nao_verificavel bloqueia"
+    },
+    "evidence": {
+      "type": "array"
+    }
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Veredito do juiz",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "verdict",
+    "routes",
+    "summary"
+  ],
+  "properties": {
+    "verdict": {
+      "enum": [
+        "APPROVED",
+        "INTERVENTION_REQUIRED"
+      ],
+      "description": "binário, com dono por intervenção. Aprovar nunca é mergear."
+    },
+    "routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "items",
+          "owner",
+          "closes_when"
+        ],
+        "properties": {
+          "type": {
+            "enum": [
+              "author_fix",
+              "human_decision",
+              "manual_check",
+              "confirm_finding",
+              "linha_de_base",
+              "missing_profile",
+              "missing_capability"
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "owner": {
+            "type": "string"
+          },
+          "closes_when": {
+            "type": "string"
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object"
+    }
+  }
+}

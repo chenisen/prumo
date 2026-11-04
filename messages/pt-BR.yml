@@ -1,0 +1,434 @@
+# prumo — catálogo em português do Brasil.
+#
+# Traduzido de `en.yml`, que é a referência. Chave que falta aqui é defeito, não
+# degradação: cair no inglês em silêncio faria um relatório meio traduzido parecer
+# pronto, e quem lê não teria como saber.
+#
+# Os placeholders são `{nomeados}` e carregam o MESMO nome do catálogo inglês — a ordem
+# na frase muda, o nome não. Todo texto recebe as DUAS formas do item e da proposta —
+# nua (`{item}`) e com artigo (`{item_with_article}`) — e cada catálogo usa a que a sua
+# língua pede: o inglês a nua, o português a com artigo, porque tem gênero.
+
+agnosticism:
+  failure_forbidden: '"{file}:{line}: {label} `{match}`"'
+  failure_repo_name: '"{file}:{line}: nome de repositório `{repo}`"'
+  families_note: '"{n} famílias com perfil: {detail}"'
+  header: '{n} arquivos de método verificados · {classes} classes'
+  more_failures: '"… e mais {n} (use --verbose)"'
+  no_profiles: nenhum perfil em review-profiles/ — derive-os antes
+  profile_error: '"{file}: {error}"'
+  rule_1: o método não nomeia repositório, stack, ferramenta, armazenamento ou id de item
+  rule_2: todo perfil valida contra o contrato
+  rule_3: a suíte passa
+  rule_4: há perfil em mais de uma família de stack
+  rule_4_note: A regra 4 completa — rodar de ponta a ponta sobre uma proposta de duas famílias
+    — exige uma proposta de verdade e não se fecha neste ambiente.
+  single_family: '"só uma família de stack tem perfil: {families}"'
+cli:
+  name_repo_or_all: informe um repositório, ou use --all
+closure:
+  accepted: '  ✓ {kind} {item}'
+  decision_without_decider: '`#decision {item}`: decisão sem quem decidiu — ignorada'
+  missing_content: '`#{kind} {item}`: sem o conteúdo que a rota pede — ignorado'
+  refused: '  recusado: {reason}'
+  waiver_bad_date: '`#waiver {item}`: validade inválida — ignorada'
+  waiver_incomplete: '`#waiver {item}`: dispensa exige motivo, aprovador e validade (AAAA-MM-DD)
+    — ignorada'
+comment:
+  report_label: Relatório
+  acceptance_value: '{met} de {total} atendidos'
+  classes_value: '{assessed} avaliadas, {unassessed} não avaliáveis'
+  findings_none_blocking: '{total}, nenhum bloqueante'
+  findings_value: '{total}, {blocking} bloqueantes: {ids}'
+  label_acceptance: 'Critérios de aceite:'
+  label_findings: 'Achados desta entrega:'
+  label_risk_classes: 'Classes de risco:'
+  label_size: 'Tamanho:'
+  label_suite: 'Suíte:'
+  measured: Medido
+  not_merge: Aprovar não mergeia e não move {item_with_article}.
+  not_ran: não rodou
+  open_routes: Rotas abertas
+  ran: rodou
+  report_path: 'Relatório: {path}'
+  size_value: '{lines} linhas, faixa <code>{band}</code>'
+  title: 'Revisão de entrega: {verdict}'
+config:
+  impediment: 'IMPEDIMENTO de configuração: {reason}'
+  legacy_keys: chaves antigas em português, ainda aceitas — rode `scripts/migrate_config.py` para
+    reescrever o arquivo
+  missing: '`prumo.yml` não encontrado. O prumo não presume fornecedor nem caminho: copie `prumo.yml.example`
+    da raiz do prumo, preencha, e ponha na raiz do seu workspace — ou aponte `PRUMO_CONFIG` para
+    ele.'
+delta:
+  escalate: '  ESCALAR: {detail}'
+  escalation: '{n} achado(s) bloqueante(s) no {cycle}º ciclo: {findings} — escalar para o tech
+    lead'
+  first_round: primeira rodada sobre esta origem
+  line: '{mode}: {reason}'
+  new_push: push novo sobre {sha}
+  nothing_changed: nada mudou desde a última rodada
+  resolutions_arrived: 'nenhum código novo; chegaram resoluções: {resolutions}'
+derive:
+  already_exists: '{repo}: já existe ({status}); use --force para sobrescrever'
+  base_ambiguous: existe `origin/homolog` além do HEAD `{head}` — uma pessoa decide qual é a base
+  cmd_audit: <audit do gerenciador de pacotes>
+  cmd_lint: <lint do repositório>
+  cmd_static: <análise estática do repositório>
+  cmd_suite: <suíte do repositório>
+  cmd_suite_container: <suíte, no contêiner>
+  cmd_typecheck: <checagem de tipos>
+  done: '{repo}: {family}, base {base}, prova {proof}, {anchors} âncoras, {pending} pendências'
+  header: '# Perfil de revisão — {repo}
+
+    #
+
+    # DERIVADO AUTOMATICAMENTE em {date}. Status: rascunho.
+
+    # Enquanto `status` for `draft`, toda revisão deste repositório termina em
+
+    # INTERVENÇÃO NECESSÁRIA pela rota `missing_profile`. Isso é deliberado: um APROVADO
+
+    # num repositório cujo risco ninguém mapeou vale menos que nenhuma revisão.
+
+    #
+
+    # Para confirmar: preencha o que está abaixo, ponha `status: confirmed`, e nomeie
+
+    # quem confirmou e quando. Classe que não se aplica a este repo não se apaga — se
+
+    # registra com `not_applicable: {{motivo, aprovador, data}}`.
+
+    #
+
+    # O que o derivador NÃO conseguiu preencher:
+
+    {pending}
+
+    '
+  header_nothing_pending: (nada)
+  no_proof_registry: nenhum registro de especificação encontrado; o livro-razão 2 fica vazio e
+    a revisão diz isso no relatório
+  pending_anchors: 'anchors: sem âncora para {classes} — essas classes sairão `nao_avaliavel`
+    com motivo, nunca em silêncio'
+  pending_base: 'base.branch: {reason}'
+  pending_command: 'checks.{role}.command: preencher com o comando real do repositório'
+  pending_conventions: 'conventions: nenhum documento de convenção encontrado — o revisor de arquitetura
+    vai declarar que não havia convenção escrita'
+  pending_proof_registry: 'proof_registry: ausente — a classe A7 ficará `nao_avaliavel`'
+  pending_secrets: 'checks.segredos: sem ferramenta de varredura declarada — A9 fica `nao_avaliavel`
+    e toda revisão abre `capacidade_ausente`'
+  pending_suite_baseline: 'checks.suite.preexisting_reds: medir a linha de base POR NOME antes
+    de confiar no primeiro veredito'
+evidence:
+  authorised: autorizado
+  authorised_by_profile: autorizado pelo perfil
+  command_error: '{type}: {error}'
+  did_not_run: não executou
+  empty_command: comando vazio
+  executable_missing: 'executável ausente: {error}'
+  green_exit_code_only: a suíte terminou com código de saída 0, e o perfil não declara `padrao_de_falha`
+    — este verde repousa SÓ no código de saída, que um executor embrulhado pode engolir. Declare
+    o padrão para medir a saída.
+  green_output_and_code: 'a suíte terminou sem falha: código de saída 0 e a saída não casa com
+    `padrao_de_falha`'
+  invalid_failure_pattern: o perfil declara `padrao_de_falha` inválido ({error}) — sem ele a saída
+    não se lê, e código de saída não basta
+  not_executed: '  (não executado: passe --executar)'
+  not_in_allowlist: não está na allowlist do perfil. A allowlist são os comandos de `checagens`;
+    o que não está lá não roda.
+  output_truncated: 'a saída foi truncada: o previsto × executado não pode ser conferido, e suíte
+    que não termina não é suíte verde'
+  red_no_baseline: a suíte falhou e o perfil não declara linha de base
+  red_with_baseline: 'há vermelhos, e o perfil declara uma linha de base: {baseline}. Compare
+    o conjunto vermelho POR NOME contra o HEAD engavetado — só então se sabe o que é desta entrega.'
+  refused: RECUSADO
+  role_line: "papel `{role}` · comando {command}\n  {decision}: {reason}"
+  run_flag_help: sem isto, só diz se rodaria — a decisão de executar é explícita
+  shell_composition: o comando compõe com shell (`;`, `&&`, `|`, `$(...)`, `>` ou crase) — um
+    comando permitido encadeado com outro é outro comando
+  suite_line: '  suíte: {state} — {reason}'
+  timed_out: estourou {seconds}s
+metrics:
+  no_history: sem histórico ainda em {path} — a primeira execução o cria
+  precision_basis: '{judged} de {total} execuções fechadas por pessoa'
+  repo_header: '{repo}  ({runs} execuções)'
+package:
+  summary: 'pacote: {files} arquivos, {lines} linhas, {removed} removidos, {over_ceiling} acima
+    do teto'
+preflight:
+  header: preflight · {repo} · perfil {status} (cobertura {coverage})
+  impediment: 'IMPEDIMENTO: {text}'
+  item_not_read: '{item} não foi lido'
+  item_remedy: estabeleça a conexão com {tracker} e passe {item} normalizado em `--item-file`
+  local_reviewer_unresolved: o revisor local `{name}` não resolve em {path}
+  no_command: o perfil não declara comando para este papel
+  no_git: sem `git` não há diff, e sem diff não há revisão
+  placeholder: 'o perfil traz um marcador por preencher: ''{value}'''
+  profile_invalid: o perfil existe mas não valida contra o contrato — corrija antes de revisar
+  proof_registry_absent: 'o perfil declara `ausente`: o livro-razão 2 fica vazio, e a revisão
+    diz isso no relatório'
+  proof_registry_unresolved: '`{root}` não resolve a partir de {repo_dir}'
+  proposal_not_read: a DESCRIÇÃO d{proposal_with_article} não foi lida
+  proposal_remedy: exporte {tokens}, ou passe a descrição em `--proposal-file`
+  reading_gate: 'leitura obrigatória: {what} — {remedy}. A revisão NÃO começa sem isso.'
+  repo_missing: o repositório `{repo}` não existe em {root}
+  tool_for:
+    docker: rodar a suíte do repositório no container dele
+    forge_cli: ler metadados d{proposal_with_article} e publicar comentários
+    git: resolver base, SHAs e diff
+    jq: nada no caminho crítico (o hook usa Python)
+    node: nada no caminho crítico (o juiz é Python)
+  tool_missing: '`{tool}` não está neste ambiente'
+  warn_check_unavailable: 'checagem `{role}` obrigatória e indisponível: {reason}'
+  warn_convention_unresolved: 'convenção apontada que não resolve: {path}'
+  warn_draft_profile: 'perfil em `draft`: a revisão roda inteira, mas o juiz abre a rota `missing_profile`
+    com origem `projeto` — declarada no relatório, FORA do veredito'
+  warn_no_token: 'sem token d{proposal_with_article} no ambiente: a publicação fica manual'
+  warn_unresolved_owner: 'o perfil é `confirmado` mas quem assina não está no ambiente: exporte
+    `TASK_REVIEW_RESPONSAVEL`'
+  warning: 'aviso: {text}'
+report:
+  all_assessed: _Nenhuma. Toda classe foi avaliada._
+  approve_not_merge: Aprovar não é mergear. O merge e a coluna d{item_with_article} ficam com
+    o time.
+  available_no: não
+  available_yes: sim
+  baseline_note: 'Linha de base do repositório, que **não** entra na regra por não ser dívida
+    desta entrega: {baseline}'
+  capabilities: Capacidades deste ambiente
+  col_available: Disponível
+  col_class: Classe
+  col_command: Comando
+  col_condition: Condição
+  col_criterion: Critério
+  col_note: Observação
+  col_owner: Dono
+  col_question: Pergunta
+  col_record: Registro
+  col_role: Papel
+  col_route: Rota
+  col_state: Estado
+  col_what: O quê
+  col_why_not_assessed: Por que não foi avaliada
+  consequence: Consequência
+  convention_read: lido
+  criteria_none: _Não vieram critérios legíveis d{item_with_article}, ou a leitura obrigatória
+    veio vazia._
+  did_not_fire: '**Não dispararam — nomeados:**'
+  does_not_resolve: '**não resolve**'
+  evidence: Evidência
+  finding_from_project: _(do projeto, não desta entrega)_
+  findings: Achados
+  form_not_proposed: 'Forma: _não proposta — a classe é de §A, e a decisão é de uma pessoa._'
+  ledger_1: Livro-razão 1 — o que {item_with_article} pediu
+  ledger_2: Livro-razão 2 — o que foi especificado e provado
+  ledger_3: Livro-razão 3 — o que o projeto já decidiu sobre si
+  needs_you: O que precisa de você
+  no_conventions: '**O perfil não aponta nenhum documento de convenção.** O revisor de arquitetura
+    julgou só o que é universal, e não exigiu nenhum padrão que este projeto não adota.'
+  no_findings: _Nenhum achado._
+  no_observations: _Nada. Todo achado desta revisão é da própria entrega._
+  no_open_routes: nenhuma rota aberta
+  no_proof_registry: '**Não há registro de prova neste repositório.** O perfil declara `proof_registry.type:
+    absent`, então o livro-razão 2 fica vazio — e isto está dito aqui em vez de passar em silêncio.
+    A classe **A7** sai `not_assessable`.'
+  none: _nenhuma._
+  not_assessable: Classes que não puderam ser avaliadas
+  not_assessable_note: Estas classes **não foram avaliadas**. Isto não é o mesmo que ausência
+    de risco.
+  nothing_open: Nada. Nenhuma rota aberta contra a entrega.
+  pre_existing: Observações sobre o pré-existente
+  pre_existing_note: 'Isto **não é achado desta revisão**: nenhum destes pontos foi causado pela
+    mudança, e nenhum deles segura {proposal_with_article}. Estão aqui porque um revisor os viu
+    ao ler, e apagá-los seria perder informação que custou leitura. Tratá-los é trabalho de item
+    próprio.'
+  project_pending_none: '_Nenhuma: tudo que esta revisão precisava medir, mediu._'
+  project_pending_note: Não seguram {proposal_with_article} — a entrega não as causou. Seguem
+    abertas para quem mantém o repositório.
+  project_pending_title: Pendências do PROJETO — declaradas, fora do veredito
+  proof_does_not_resolve: '**NÃO RESOLVE**: {reason}'
+  proof_registry_line: Tipo `{type}`, raiz `{root}` — {state}.
+  proof_resolves: resolve
+  reading_empty_stop: Leitura obrigatória vazia é **parada**, não continuação.
+  rule_note: '**APROVADO ⟺ os cinco passam.** Qualquer portão fechado é INTERVENÇÃO NECESSÁRIA,
+    e a seção seguinte diz de quem é a vez.'
+  section_a: §A — classes de decisão humana
+  section_b: §B — classes de verificação manual
+  status: Status
+  subtitle: 'Veredito de dois valores na última seção. Aprovar é o teto: esta revisão nunca mergeia
+    e nunca move {item_with_article}.'
+  suggested_form: Forma sugerida
+  title: Revisão de entrega — {repo} · {item} {id}
+  two_exits: 'Duas saídas, as duas versionadas no perfil e revisadas numa proposta: prover a âncora,
+    ou registrar `not_applicable` com motivo, aprovador e data.'
+  unresolved: (não resolvido)
+  verdict_clean: Nenhuma condição de intervenção vale.
+  verdict_routes: '{n} rota(s) aberta(s) contra a entrega, listadas na seção 1.'
+  verdict_title: Veredito
+  where: Onde
+resolver:
+  base: base
+  base_from_head: origin/HEAD (a base do perfil não resolveu)
+  base_from_profile: perfil
+  base_local: ramo LOCAL, sem remoto — pode estar atrás
+  base_unresolved: 'a base não resolve: tentei `origin/{base}`, `origin/HEAD` e o ramo local `{base}`.
+    Declare a base em `base.branch` no perfil de `{repo}`, ou busque o remoto (`git fetch origin`).'
+  branch_unresolved: a branch `{branch}` não resolve, nem local nem em `origin`
+  commits_ahead: ({n} commits à frente da fusão)
+  head: cabeça
+  item_derived: '← derivado: uma pessoa confirma'
+  item_via: '{item} {id} via {source}'
+  proposal_fetch_failed: não consegui buscar `{ref}` em `origin` — confira o acesso ao remoto
+    e o número d{proposal_with_article}
+  repo_missing: o repositório `{repo}` não existe em {root}
+  source_argument: argumento
+  source_commit_subject: assunto de commit
+  summary: repo {repo} · origem {origin} · base {base} ({source})
+review:
+  act_approve: 3. Approve d{proposal_with_article}
+  act_item: 1. comentário n{item_with_article}
+  act_no_approve: '(sem Approve: o veredito não é APROVADO)'
+  act_proposal: 2. comentário n{proposal_with_article}
+  advisory_mode: 'modo consultivo: sem veredito e sem relatório publicado.'
+  classes_placeholder: <conteúdo de classes.json>
+  empty_diff: diff vazio — sem arquivo não há o que revisar
+  empty_diff_at: o intervalo {ref} não tem arquivo nenhum — não há o que revisar. Confira a origem
+    ({proposal_with_article}, branch) e a base resolvida.
+  final_destination: 'destino final: {path}'
+  findings_split: 'achados: {own} desta entrega · {project} do projeto, movidos para observations.json'
+  help_item_file: 'o item normalizado (markdown). Leitura obrigatória: sem ele a revisão não começa
+    — nenhum script alcança o rastreador.'
+  help_proposal_file: a descrição da proposta (markdown). Exigida quando a origem é uma proposta
+    e não há token no ambiente.
+  help_release: remove um marcador vazado por queda no meio da revisão
+  impediment: 'IMPEDIMENTO: {reason}'
+  impediment_open: a revisão não começa com impedimento aberto
+  invoke_workflow: 'Invoque o workflow com:'
+  marker_removed: 'marcador removido: {path}'
+  never: Merge e a coluna d{item_with_article} NUNCA — nem com autorização.
+  package_ready: 'pacote pronto: {path}'
+  profile_draft_note: '← em rascunho ou ausente: declarado como pendência do PROJETO, fora do
+    veredito'
+  profile_status: 'perfil: {status} v{version}'
+  reading_empty: '{path} está vazio — arquivo em branco não é leitura feita'
+  reading_missing: '{path} não existe — a leitura obrigatória não se declara apontando para o
+    vazio'
+  record_at: 'registro: {path}'
+  rendered: 'render: {path}'
+  report_at: 'relatório: {path}'
+  scope_no_criteria: 'sem criteria.json: nada a comparar'
+  step_failed: o passo `{path}` terminou com código {n} — a revisão para aqui
+  stop: 'parada: {reason}'
+  suite_not_run: a suíte não foi executada nesta rodada
+  telemetry_at: 'telemetria: {path}'
+  telemetry_unmeasured: 'telemetria: NÃO MEDIDA — nenhum registro de workflow encontrado para
+    `{package}` em {root}; o custo desta execução NÃO foi medido'
+  workflow_args_at: "Os argumentos do workflow estão em {path} — {files} arquivos do pacote,\n    {kb}KB, já embutidos para que os revisores não os leiam um a um. Leia e passe o\n    objeto inteiro."
+  then_conclude: 'Depois: review.py conclude --package {path} --findings <arquivo>'
+  three_acts: 'Três atos externos, cada um com o SEU sim — nenhum acontece sozinho:'
+route_label:
+  author_fix: Ajuste do autor
+  baseline: Linha de base
+  confirm_finding: Confirmar achado
+  human_decision: Decisão humana
+  manual_check: Verificação manual
+  missing_capability: Capacidade ausente
+  missing_profile: Perfil ausente
+suite:
+  green: verde
+  not_run: não executada nesta rodada
+  red_baseline: vermelhos, todos da linha de base do repositório
+  red_delivery: vermelha, e os vermelhos são desta entrega
+telemetry:
+  agent_row: '    {agent} {billable}  {messages} msgs  {model}'
+  components: '  componentes: saída {output} · cache_creation {cache_creation} · cache_read {cache_read}'
+  harness_total: '  totalTokens do harness: {harness} (contagem própria dele)'
+  need_target: informe --package ou --run-id
+  no_record: nenhum registro de workflow encontrado para `{target}` em {root} — o custo desta
+    execução NÃO foi medido
+  output_help: 'onde gravar o JSON (padrão: <pacote>/telemetry.json)'
+  per_agent: '  por agente (maior primeiro):'
+  scope: o workflow (revisores, verificadores, plano manual). NÃO inclui a sessão que o invocou
+    nem os scripts da espinha, que não gastam LLM.
+  summary: 'telemetria: {tokens} tokens faturáveis em {minutes} min · {agents} agentes · {tool_calls}
+    chamadas de ferramenta'
+  unmeasured: 'telemetria: NÃO MEDIDA — {reason}'
+triage:
+  by_anchor_path: caminho da âncora
+  by_removed_test: arquivo de teste removido
+  check_not_declared: não declarada no perfil
+  no_anchor: o perfil de `{repo}` não declara âncora para esta classe — prover a âncora, ou registrar
+    `not_applicable` com motivo e aprovador
+  no_tool: 'a checagem `{check}` não tem ferramenta neste ambiente: {reason}'
+  not_applicable: 'não se aplica a este repositório: {reason} (registrado por {approver} em {date})'
+  nothing_matched_anchor: nada no diff casou com âncora do perfil
+  nothing_matched_universal: nada no diff casou com padrões universais da classe
+  production_only: a classe pergunta sobre produção e a entrega só toca arquivo de prova
+  reviewer_not_triggered: a triagem não acionou o terreno deste revisor
+  reviewer_skipped_ideal: 'faixa ideal: o custo fixo de abrir agentes domina'
+  summary: 'triagem: {fired} disparou, {quiet} não disparou, {unknown} NÃO AVALIÁVEL · faixa {band}
+    ({lines} linhas) · {reviewers} revisores'
+  topology_acceptable: só os revisores ativados pela triagem, mais o verificador
+  topology_ideal: um revisor com as skills relevantes, mais o verificador
+  topology_split: pedir divisão; fan-out completo só em emergência declarada
+validate:
+  anchor_empty: 'anchors.{klass}: âncora sem `paths` nem `patterns` não amarra nada — ou declare
+    a âncora, ou registre `not_applicable` com motivo e aprovador'
+  anchor_needs_verification: 'anchors.{klass}.verificacao: classe §B precisa dizer como uma pessoa
+    prova'
+  check_without_tool: 'checks.{role}: obrigatória e sem ferramenta — toda revisão abrirá `capacidade_ausente`
+    até haver comando ou dispensa'
+  confirmation_requires: '{field}: obrigatório quando status é `confirmado` — confirmar um perfil
+    é ato de pessoa, e a pessoa é nomeada'
+  confirmed_at_date: 'confirmed_at: data deve ser AAAA-MM-DD'
+  error: 'erro:    {text}'
+  eval_unknown_class: 'evals[{i}].classe: classe desconhecida `{klass}`'
+  eval_without_anchor: 'evals[{i}]: espera que {klass} dispare, mas o perfil não lhe dá âncora
+    — o caso vai falhar sempre'
+  line: '{repo}  [{status}]  cobertura {mapped}/18'
+  not_applicable_date: 'anchors.{klass}.not_applicable.date: data deve ser AAAA-MM-DD'
+  owner_unresolved: o perfil delega quem assina a `{token}` e TASK_REVIEW_RESPONSAVEL não está
+    no ambiente — defina-a antes de revisar, ou o ato de pessoa fica sem dono
+  profile_missing: '{repo}: perfil ausente em {path}'
+  schema_root: (raiz)
+  thin_coverage: 'cobertura de perfil: só {mapped} de 18 classes têm âncora — confirmar um perfil
+    quase vazio cria confiança falsa'
+  unknown_class: 'anchors.{klass}: classe desconhecida — as classes são {classes}'
+  waiver_date: 'checks.{role}.waiver.expires: data deve ser AAAA-MM-DD'
+  waiver_expired: 'checks.{role}: a dispensa venceu em {date}'
+  warning: 'aviso:   {text}'
+verdict:
+  approved: APROVADO
+  closes:
+    author_fix: o novo push dispara a revisão por delta
+    confirm_finding: a pessoa confirma e vira ajuste, ou dispensa com motivo
+    human_decision: a decisão registrada no item dispara o re-julgamento
+    manual_check: a evidência registrada no item dispara o re-julgamento
+    missing_capability: o perfil é atualizado e versionado numa proposta
+    missing_profile: uma pessoa confirma o perfil; fecha uma vez por repositório
+  detail_behind_base: '{proposal_with_article} está atrás da base resolvida'
+  detail_criterion_unmet: critério d{item_with_article} que a entrega não atendeu
+  detail_criterion_unrecorded: critério que o diff não decide e que ninguém registrou
+  detail_delivery_untested: comportamento que esta entrega escreveu e nenhum teste cobre
+  detail_mandatory_reading: 'leitura obrigatória vazia: sem insumo não há veredito'
+  detail_out_of_scope: arquivo fora do escopo que {item_with_article} declarou
+  detail_profile: 'status `{status}`: as classes sem âncora não foram avaliadas, e um APROVADO
+    aqui criaria confiança falsa'
+  detail_suite: 'suíte: {value}'
+  gates:
+    business_rules: não fere regra de negócio
+    item_covered: contempla o que o item pediu, com a evidência necessária
+    measured: os quatro portões acima foram efetivamente medidos
+    no_manual: não sobra verificação manual a fazer
+    standards: o código segue os padrões e boas práticas do projeto
+  intervention: INTERVENÇÃO NECESSÁRIA
+  project_pending: '— pendências do PROJETO (declaradas, não seguram {proposal_with_article}):'
+  routes:
+    author_fix: autor d{proposal_with_article}
+    confirm_finding: revisor humano
+    human_decision: tech lead, PO ou arquiteto, conforme a classe
+    manual_check: QA ou dev nomeado
+    missing_capability: quem mantém o repositório ou o harness
+    missing_profile: tech lead do repositório
+  unknown_repo: (repositório)

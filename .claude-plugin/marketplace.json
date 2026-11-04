@@ -1,0 +1,15 @@
+{
+  "name": "prumo",
+  "description": "A vitrine do prumo: distribui um plugin, o harness de revisão de entrega, instalado com /plugin install prumo@prumo.",
+  "owner": {
+    "name": "Marcio Chen",
+    "url": "https://github.com/chenisen"
+  },
+  "plugins": [
+    {
+      "name": "prumo",
+      "source": "./",
+      "description": "Revisa uma entrega inteira contra o item que a pediu — card, MR/PR, branch ou diff — e fecha com APROVADO ou INTERVENÇÃO NECESSÁRIA. Espinha determinística em Python, folhas agênticas somente-leitura. Agnóstico de repositório, stack, rastreador e forge: tudo que é fato de uma instalação vem do prumo.yml."
+    }
+  ]
+}

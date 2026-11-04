@@ -1,0 +1,177 @@
+# prumo — installation configuration
+#
+# Copy this to the root of your workspace as `prumo.yml`, or point `PRUMO_CONFIG` at it.
+# WITHOUT THIS FILE THE PRUMO DOES NOT RUN. That is deliberate: it assumes neither
+# provider nor path. A silent default would have you review a GitHub PR with GitLab
+# vocabulary, or publish HTML into a tracker that only renders Markdown — errors that
+# surface later, in text already published.
+#
+# You do not have to write this by hand:
+#
+#     python3 scripts/setup.py --at <your-workspace>
+#
+# asks what cannot be measured and measures the rest. This file is what it produces.
+#
+# Check what the prumo understood with:  python3 scripts/providers.py
+
+prumo: 1          # version of THIS FILE's contract. Not the prumo's version.
+
+# --- LANGUAGE -----------------------------------------------------------------------
+#
+# What the prumo answers in: reports, comments, command-line output. The catalogues live
+# in `messages/<lang>.yml`; adding a language means adding a file, and every key in it is
+# compared against the English one.
+#
+#   en      English (default when this field is absent)
+#   pt-BR   Brazilian Portuguese
+language: en
+
+# --- WHO SIGNS ----------------------------------------------------------------------
+#
+# The human acts a profile records — a waiver, a `not_applicable` — carry a name. It
+# lives HERE and never in the profile: a profile is versioned and shared between everyone
+# who reviews that repository, so a name there would sign everybody's reviews with the
+# first person who confirmed it. The profile writes `${RESPONSAVEL}` and the name is
+# resolved at run time.
+#
+# `TASK_REVIEW_RESPONSAVEL` in the environment WINS over this line. That is the way out
+# for a team that commits its prumo.yml: the file carries the common default, each person
+# overrides it for their own run.
+# owner: "Your Name"
+
+# --- WHERE THINGS LIVE --------------------------------------------------------------
+#
+# A relative path resolves from this file's directory.
+paths:
+  # The tree holding the repositories to review. `--repo my-service` becomes
+  # `<repositories>/my-service`.
+  repositories: ./repositories
+
+  # One `.yml` per repository, carrying that project's anchors and checks. This is what
+  # makes the method agnostic: no path, table or tool lives inside the prumo.
+  # A repository with no profile: run `scripts/derive_profile.py <repo>`.
+  profiles: ./profiles
+
+  # Where reports are written, plus `runs.jsonl` with one line per run.
+  reports: ./reports
+
+# --- TRACKER ------------------------------------------------------------------------
+#
+# Where the item that asked for the delivery lives. The prumo NEVER reaches the tracker
+# on its own: the item is read by whoever conducts the review and handed over in
+# `--item-file`. What is here governs the VOCABULARY and the FORMAT of the published
+# comment.
+#
+# type: businessmap | jira | acelerato | generic
+tracker:
+  type: businessmap
+
+  # Optional: a direct link to the item, used in the report. `{id}` is substituted.
+  url: "https://YOUR-SPACE.kanbanize.com/ctrl_board/79/cards/{id}/details"
+
+  # Everything below comes from the `type` preset. Declare only to override.
+  # item: card              # what your team calls it: card, issue, ticket…
+  # format: html            # html | markdown | wiki — what the tracker renders
+  # heading: '<span class="text-big">{text}</span>'
+  # article: o              # Portuguese gender, for pt-BR output: "o card", "a issue"
+
+# --- FORGE --------------------------------------------------------------------------
+#
+# Where the change proposal lives. The prumo reads the diff through the ref the server
+# publishes, over git — no API needed to review. A token is only required to READ the
+# proposal's description and to PUBLISH; without one, pass the description in
+# `--proposal-file` and publish by hand.
+#
+# type: gitlab | github | bitbucket
+forge:
+  type: gitlab
+
+  # How the HARNESS reaches this forge's API: mcp | token | none.
+  #   mcp    a connector the harness already carries — it reads the proposal's
+  #          description and its pipeline, and publishing still asks for a yes
+  #   token  an environment variable named below, holding a personal access token
+  #   none   no API at all: pass the description with `--proposal-file`, publish by hand
+  # `none` is a valid answer and the default. Reviewing needs none of the three: the
+  # diff is read over git, through the ref the server publishes.
+  connection: none
+
+  # NEVER a token here. This file is versioned, shared and pasted into messages; what
+  # goes in it is the NAME of the environment variable, and the prumo reads the value
+  # from the environment. A token written into a configuration file is a token
+  # published — `providers.py` refuses one, and `scripts/hygiene.py` fails any secret
+  # that reaches a commit.
+  # tokens: [GITLAB_TOKEN, GLAB_TOKEN]
+
+  # Everything below comes from the `type` preset. Declare only to override.
+  # proposal: MR            # MR on GitLab, PR on GitHub and Bitbucket
+  # prefix: "!"             # how the number is written: !820, #820
+  # ref: "refs/merge-requests/{n}/head"
+  # tokens: [GITLAB_TOKEN, GLAB_TOKEN]
+  # cli: glab
+  # approve: true           # the provider has an Approve act of its own
+  # article: a              # Portuguese gender, for pt-BR output: "a MR", "o PR"
+
+# --- AGNOSTICISM (optional) ---------------------------------------------------------
+#
+# `scripts/agnosticism_check.py` fails the method when it names a technology. The
+# universal patterns — stack tool, language, database — belong to the prumo itself.
+# The names of YOUR systems, tables and item-id shapes are yours, and go here: the prumo
+# must not carry the internal system names of whoever installed it first.
+#
+# agnosticism:
+#   forbidden:
+#     - label: "named vendor"
+#       pattern: "(?i)\\b(acme|some-erp|legacy-system)\\b"
+#     - label: "project collection/table"
+#       pattern: "\\b(my_table|my_collection)\\b"
+#     - label: "item id"
+#       pattern: "(?<![\\w.])(4[5-9]\\d{3}|50\\d{3})(?![\\w.])"
+
+# --- DETECTION (optional) -----------------------------------------------------------
+#
+# `derive_profile.py` discovers a repository's proof registry by a marker on disk. The
+# prumo already knows the public ones — Spec Kit and `.claude/specs`. If your team uses
+# a specification framework of its own, declare it here: the declared ones are tested
+# BEFORE the public ones.
+#
+# detection:
+#   proof_registries:
+#     - type: my-framework
+#       marker: my-framework.json
+#       note: "where the artefacts live and what the spec points at"
+
+# ------------------------------------------------------------------------------------
+# EXAMPLES FOR THE OTHER PROVIDERS
+#
+# GitHub + Jira, answering in Portuguese:
+#
+#   language: pt-BR
+#   tracker:
+#     type: jira
+#     url: "https://YOUR-SPACE.atlassian.net/browse/{id}"
+#   forge:
+#     type: github
+#
+# Bitbucket + Acelerato:
+#
+#   tracker:
+#     type: acelerato
+#     url: "https://YOUR-SPACE.acelerato.com/ticket/{id}"
+#   forge:
+#     type: bitbucket
+#
+#   CAREFUL, Bitbucket Cloud: it does NOT publish a pull request ref. The preset above
+#   serves Bitbucket Server/Data Center. On Cloud, review by branch (`--branch`) instead
+#   of `--proposal`; the proposal-description gate does not apply to a `branch` origin.
+#
+# A provider outside the list: use the `type` of the closest one and override the fields.
+# No preset is magic — they are five or six values each.
+#
+# ------------------------------------------------------------------------------------
+# COMING FROM A PORTUGUESE prumo.yml?
+#
+# The old keys (`caminhos`, `rastreador`, `deteccao`, `agnosticismo` and their fields)
+# are still accepted for one cycle, and every run says which ones it found. To rewrite
+# the file — comments and all:
+#
+#   python3 scripts/migrate_config.py prumo.yml --write
