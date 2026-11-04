@@ -155,8 +155,15 @@ review.py conclude --package P --findings A [--scripts-manual R]  # F7 F9 F11
 **The rule** (the five gates, with what closed any that is shut), a **Measured** block
 (suite, risk classes, acceptance criteria, size, findings), **Open routes** when the
 verdict is INTERVENTION, the **acceptance criteria each with its record**, the
-**findings with their evidence**, the **project's pending items** with owners, and the
-line saying that approving does not merge.
+**project's pending items** with owners, and the line saying that approving does not
+merge.
+
+**No class id travels alone.** `A4, A7, A9` is the harness talking to itself: the person
+reading the item has never seen the class catalogue and cannot look it up from there.
+Every id goes in with the question it asks, resolved by `class_question()` in the
+reader's language — the questions live in the catalogues, not as literals in
+`common.py`, which is what used to print eighteen English sentences into a Portuguese
+report.
 
 **It never names a file.** Until 2026-11-04 it closed by printing the report's path, and
 a path under the reports root is unreadable to everybody except whoever ran the review:
@@ -164,12 +171,14 @@ the person reading the item is on another machine, and naming it told them a rep
 existed without letting them read a line of it. So what decides travels inside the
 comment.
 
-**It carries only what THIS delivery caused.** A finding with `attributable: false` does
-not appear. The item belongs to whoever wrote the delivery, and listing the repository's
-pre-existing defects beside theirs reads as a list of things they have to answer for —
-which is exactly what `attributable` exists to prevent. The observations are not erased:
-they live in the report, where the repository's owner reads them. Asked for on
-2026-11-04.
+**No finding appears in it, of any kind.** Not the pre-existing ones, which were never
+this delivery's, and not this delivery's own. A finding is a *reading*, and a reading
+belongs in the report, where it sits beside its evidence, its consequence and its
+status. On the item, the **verdict and the criteria** are what decide; a list of nits
+and FYIs beside them reads as a list of things somebody has to answer for. What the
+reader still gets is the **count**, in `Measured`, with the blocking ones named — enough
+to know whether anything is owed without turning the item into a review thread. Asked
+for on 2026-11-04, in two steps: first the pre-existing ones, then all of them.
 
 A consequence worth knowing when you write a criterion's **record**: it must state its
 fact, never point at a finding id. A record reading "the pipeline runs no test job (see

@@ -22,6 +22,25 @@ agnosticism:
   single_family: '"only one stack family has a profile: {families}"'
 cli:
   name_repo_or_all: name a repository, or use --all
+class_question:
+  A1: was an already-applied schema artefact edited?
+  A2: did the shape of an outbound contract change?
+  A3: was an authorisation-scope or tenant clause touched?
+  A4: did an integration surface change?
+  A5: did a business rule change?
+  A6: was a layer or boundary introduced, or a dependency inverted?
+  A7: does the code state a fact the specification does not hold, or contradict one it does?
+  A8: was a test removed or weakened?
+  A9: did a secret, a credential or key material get in?
+  A10: was a hot path touched with an effect at volume?
+  B1: was a derived artefact, observable only by running, affected?
+  B2: was an integration with a legacy internal system touched?
+  B3: was an external provider touched?
+  B4: did an aggregate spanning two stores change?
+  B5: did a screen, a flow or interface text change?
+  B6: is there a data migration, not only a schema one?
+  B7: is there behaviour that only shows up at volume?
+  B8: does the delivery reach production through a formal process?
 closure:
   accepted: '  ✓ {kind} {item}'
   decision_without_decider: '`#decision {item}`: a decision with nobody who decided it — ignored'
@@ -50,7 +69,6 @@ comment:
   open_routes: Open routes
   ran: ran
   section_criteria: Acceptance criteria
-  section_findings: Findings in this delivery
   section_project_pending: PROJECT pending items — declared, outside the verdict
   size_value: '{lines} lines, band <code>{band}</code>'
   the_rule: The rule

@@ -82,12 +82,49 @@ class TestWhatGoesIn(unittest.TestCase):
               for i, s in enumerate(["met", "met", "not_verifiable"])]
         self.assertIn(t("comment.acceptance_value", met=2, total=3), approved(criteria=cs))
 
-    def test_counts_the_assessed_classes_and_names_the_unassessable_ones(self):
+    def test_counts_the_assessed_classes_and_says_what_each_unassessed_one_ASKS(self):
+        """`A7, A9` is the harness talking to itself. The reader of the item has never
+        seen the class catalogue and has no way to look it up from here."""
         h = approved(verdict={"verdict": "APPROVED", "routes": [],
                               "summary": {"profile_coverage": "16/18",
                                           "classes_not_assessable": ["A7", "A9"]}})
         self.assertIn("16/18", h)
-        self.assertIn("A7, A9", h)
+        for cid in ("A7", "A9"):
+            self.assertIn(cid, h)
+            self.assertIn(t(f"class_question.{cid}"), h)
+
+    def test_a_class_already_explained_is_not_explained_twice(self):
+        """`Measured` spells out the unassessed classes; the route below names the same
+        ones. Repeating nine long questions inside one comment doubles its length and
+        teaches the reader nothing twice."""
+        h = approved(verdict={
+            "verdict": "APPROVED",
+            "routes": [{"type": "missing_capability", "origin": "project",
+                        "owner": "whoever maintains it", "items": ["A7", "A9"],
+                        "closes_when": "the profile is versioned", "details": []}],
+            "summary": {"profile_coverage": "16/18",
+                        "classes_not_assessable": ["A7", "A9"]}})
+        self.assertEqual(1, h.count(t("class_question.A7")))
+        self.assertEqual(1, h.count(t("class_question.A9")))
+
+    def test_a_route_naming_classes_says_what_each_one_ASKS(self):
+        h = approved(verdict={
+            "verdict": "APPROVED",
+            "routes": [{"type": "missing_capability", "origin": "project",
+                        "owner": "whoever maintains it", "items": ["A9", "B3"],
+                        "closes_when": "the profile is versioned", "details": []}],
+            "summary": {"profile_coverage": "16/18", "classes_not_assessable": []}})
+        for cid in ("A9", "B3"):
+            self.assertIn(t(f"class_question.{cid}"), h)
+
+    def test_a_route_naming_something_that_is_not_a_class_stays_a_plain_list(self):
+        h = approved(verdict={
+            "verdict": "APPROVED",
+            "routes": [{"type": "missing_profile", "origin": "project",
+                        "owner": "tech lead", "items": ["repo-x"],
+                        "closes_when": "somebody confirms it", "details": []}],
+            "summary": {"profile_coverage": "9/18", "classes_not_assessable": []}})
+        self.assertIn("repo-x", h)
 
     def test_the_counter_names_the_blocking_findings_and_only_those(self):
         """The counter in `Measured` is the at-a-glance line: it names what BLOCKS. The
@@ -139,51 +176,6 @@ class TestWhatGoesIn(unittest.TestCase):
         self.assertIn("the suite is green", h)
         self.assertIn("168 tests, 357 assertions", h)
 
-    def test_carries_a_non_blocking_finding_with_its_evidence(self):
-        f = [{"id": "SC-2", "severity": "nit", "status": "confirmed", "attributable": True,
-              "claim": "assertions are duplicated", "consequence": "two places to update",
-              "evidence": [{"file": "tests/A.php", "line": 559}]}]
-        h = approved(findings=f)
-        self.assertIn("SC-2", h)
-        self.assertIn("assertions are duplicated", h)
-        self.assertIn("tests/A.php:559", h)
-
-    def test_evidence_without_a_line_carries_no_placeholder(self):
-        """A URL is legitimate evidence, and `:?` glued to one reads as part of the
-        address."""
-        f = [{"id": "CI-1", "severity": "fyi", "status": "confirmed", "attributable": True,
-              "claim": "the pipeline runs no test job", "consequence": "c",
-              "evidence": [{"file": "https://host/pipelines/188523", "line": None}]}]
-        h = approved(findings=f)
-        self.assertIn("https://host/pipelines/188523", h)
-        self.assertNotIn("188523:?", h)
-
-    def test_carries_what_this_delivery_caused_and_nothing_else(self):
-        """The item belongs to whoever wrote the delivery. A pre-existing defect listed
-        beside theirs reads as something they have to answer for — which is what
-        `attributable` exists to prevent. It is not erased: it lives in the report."""
-        d = package(
-            verdict={"verdict": "APPROVED", "routes": [], "summary": {}},
-            findings=[{"id": "SC-2", "severity": "nit", "status": "confirmed",
-                       "attributable": True, "claim": "mine", "consequence": "c",
-                       "evidence": [{"file": "a", "line": 1}]}],
-            observations=[{"id": "CI-1", "severity": "fyi", "status": "confirmed",
-                           "attributable": False, "claim": "not mine",
-                           "evidence": [{"file": "b", "line": 2}]}])
-        h = build_item_comment(d)
-        self.assertIn("mine", h)
-        self.assertNotIn("not mine", h)
-        self.assertNotIn("CI-1", h)
-
-    def test_drops_a_non_attributable_finding_left_in_the_findings_file(self):
-        """Second lock: `conclude` normally moves it to `observations.json`, but a
-        package assembled by hand can leave it in place."""
-        h = approved(findings=[
-            {"id": "SC-9", "severity": "fyi", "status": "confirmed", "attributable": False,
-             "claim": "the repository already did this", "consequence": "c",
-             "evidence": [{"file": "a", "line": 1}]}])
-        self.assertNotIn("the repository already did this", h)
-
     def test_carries_the_project_pending_items_with_their_owner(self):
         h = approved(verdict={
             "verdict": "APPROVED",
@@ -217,6 +209,23 @@ class TestWhatStaysOUT(unittest.TestCase):
         self.assertNotIn("repo-x/12345-", h)
         self.assertNotIn(str(dir_reports()), h)
 
+    def test_carries_no_finding_at_all(self):
+        """A finding is a reading, and a reading belongs in the report, beside its
+        evidence, its consequence and its status. On the item, the verdict and the
+        criteria decide; a list of nits and FYIs beside them reads as a list of things
+        somebody has to answer for. The COUNT stays, in `Measured`."""
+        h = approved(findings=[
+            {"id": "SC-2", "severity": "nit", "status": "confirmed", "attributable": True,
+             "claim": "assertions are duplicated", "consequence": "two places to update",
+             "evidence": [{"file": "tests/A.php", "line": 559}]},
+            {"id": "CI-1", "severity": "fyi", "status": "confirmed", "attributable": False,
+             "claim": "the pipeline runs no test job", "consequence": "c",
+             "evidence": [{"file": "b", "line": 1}]}])
+        self.assertNotIn("assertions are duplicated", h)
+        self.assertNotIn("the pipeline runs no test job", h)
+        self.assertNotIn("tests/A.php", h)
+        self.assertIn(t("comment.label_findings"), h)   # the counter stays
+
     def test_leaves_out_what_is_an_instruction_to_execute_later(self):
         """The manual scripts and this environment's capabilities are work orders, not
         the record of a verdict — and they are what would drown the comment on a
@@ -239,8 +248,7 @@ class TestWhatStaysOUT(unittest.TestCase):
         """A heading with no body cannot be told apart from 'nobody looked'."""
         h = build_item_comment(package(
             verdict={"verdict": "APPROVED", "routes": [], "summary": {}}))
-        for absent in ("comment.section_criteria", "comment.section_findings",
-                       "comment.section_project_pending"):
+        for absent in ("comment.section_criteria", "comment.section_project_pending"):
             self.assertNotIn(heading(t(absent)), h)
 
     def test_does_not_invent_a_field_the_package_does_not_carry(self):

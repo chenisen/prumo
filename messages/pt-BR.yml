@@ -26,6 +26,25 @@ agnosticism:
   single_family: '"só uma família de stack tem perfil: {families}"'
 cli:
   name_repo_or_all: informe um repositório, ou use --all
+class_question:
+  A1: um artefato de esquema já aplicado foi editado?
+  A2: a forma de um contrato de saída mudou?
+  A3: uma cláusula de escopo de autorização ou de inquilino foi tocada?
+  A4: uma superfície de integração mudou?
+  A5: uma regra de negócio mudou?
+  A6: uma camada ou fronteira foi introduzida, ou uma dependência invertida?
+  A7: o código afirma um fato que a especificação não tem, ou contradiz um que ela tem?
+  A8: um teste foi removido ou enfraquecido?
+  A9: um segredo, uma credencial ou material de chave entrou?
+  A10: um caminho quente foi tocado com efeito em volume?
+  B1: um artefato derivado, observável só executando, foi afetado?
+  B2: uma integração com sistema legado interno foi tocada?
+  B3: um fornecedor externo foi tocado?
+  B4: um agregado que atravessa dois armazenamentos mudou?
+  B5: uma tela, um fluxo ou texto de interface mudou?
+  B6: há migração de dados, e não só de esquema?
+  B7: há comportamento que só aparece em volume?
+  B8: a entrega chega à produção por um processo formal?
 closure:
   accepted: '  ✓ {kind} {item}'
   decision_without_decider: '`#decision {item}`: decisão sem quem decidiu — ignorada'
@@ -54,7 +73,6 @@ comment:
   open_routes: Rotas abertas
   ran: rodou
   section_criteria: Critérios de aceite
-  section_findings: Achados desta entrega
   section_project_pending: Pendências do PROJETO — declaradas, fora do veredito
   size_value: '{lines} linhas, faixa <code>{band}</code>'
   the_rule: A regra

@@ -42,6 +42,16 @@ ROUTE_READABLE = {
 }
 
 
+def class_question(class_id: str) -> str:
+    """What a class ASKS, in the reader's language.
+
+    It used to be an English literal in `common.py`, which meant a Portuguese report
+    printed eighteen English questions — the same bug the catalogue exists to prevent.
+    `CLASSES` keeps the structure (section, anchor, combination); the sentence a person
+    reads lives in the catalogue."""
+    return t(f"class_question.{class_id}")
+
+
 def vocabulary() -> dict:
     """Both forms of every vocabulary word, so each catalogue can take the one its
     language needs: English takes the bare noun, Portuguese the one carrying the article.
@@ -99,7 +109,7 @@ def class_list(classes: list[dict], section: str, state: str) -> str:
     if not target:
         return t("report.none")
     return "\n".join(
-        f"- **{c['id']}** — {CLASSES[c['id']]['question']}  \n  {c['reason']}" for c in target)
+        f"- **{c['id']}** — {class_question(c['id'])}  \n  {c['reason']}" for c in target)
 
 
 def build_report(package: pathlib.Path) -> str:
@@ -149,7 +159,7 @@ def build_report(package: pathlib.Path) -> str:
                 f"| {t('report.col_class')} | {t('report.col_question')} | "
                 f"{t('report.col_why_not_assessed')} |", "|---|---|---|"]
         for c in target:
-            body.append(f"| **{c['id']}** | {CLASSES[c['id']]['question']} | {c['reason']} |")
+            body.append(f"| **{c['id']}** | {class_question(c['id'])} | {c['reason']} |")
         body.append("\n" + t("report.two_exits", **vocabulary()))
         return "\n".join(body)
 
@@ -298,6 +308,10 @@ def build_item_comment(package: pathlib.Path) -> str:
     evidence, criteria = optional("evidence.json", {}), optional("criteria.json", [])
     findings, size = optional("findings.json", []), optional("size.json", {})
 
+    # Class ids whose question this comment has already spelled out. A second mention
+    # prints the bare id: the reader met it a few lines above.
+    explained: set[str] = set()
+
     measured = []
     suite = evidence.get("suite")
     if suite:
@@ -310,12 +324,18 @@ def build_item_comment(package: pathlib.Path) -> str:
     if summary:
         unassessed = summary.get("classes_not_assessable") or []
         # `cobertura_de_perfil` arrives already formatted as "N/18" — the judge builds it.
+        # The ids ALONE say nothing to the person reading the item: `A4, A7, A9` is the
+        # harness talking to itself. Each one goes in with the question it asks, and is
+        # recorded as explained so that a route below does not repeat it.
+        unassessed_detail = "".join(
+            f"<li>{escape(cid)} — {escape(class_question(cid))}</li>" for cid in unassessed)
+        explained.update(c for c in unassessed if c in CLASSES)
         measured.append(
             f"<li><strong>{t('comment.label_risk_classes')}</strong> "
             + t("comment.classes_value",
                 assessed=escape(str(summary.get("profile_coverage", "?"))),
                 unassessed=len(unassessed))
-            + (f" ({escape(', '.join(unassessed))})" if unassessed else "") + "</li>")
+            + (f"<ul>{unassessed_detail}</ul>" if unassessed else "") + "</li>")
     if criteria:
         met = sum(1 for c in criteria if c.get("state") == "met")
         measured.append(f"<li><strong>{t('comment.label_acceptance')}</strong> "
@@ -359,12 +379,33 @@ def build_item_comment(package: pathlib.Path) -> str:
         return block
 
     def route_items(origin: str) -> list[str]:
-        return [f"<li><strong>{escape(t(ROUTE_READABLE[r['type']]))}, {escape(r['owner'])}:"
-                f"</strong> {escape(', '.join(r['items']))}"
-                + (f" — {escape(' '.join(r.get('details') or []) or r['closes_when'])}"
-                   if origin == "project" else "") + "</li>"
-                for r in verd.get("routes", [])
-                if r.get("origin", "delivery") == origin]
+        """A route's items are class ids as often as not, and a bare `A4` is the harness
+        talking to itself. A class gets its question here UNLESS `Measured` already
+        explained it a few lines above — repeating nine long questions inside the same
+        comment doubles its length and teaches the reader nothing twice."""
+        def listed(items):
+            fresh = [i for i in items if i in CLASSES and i not in explained]
+            if not fresh:
+                return escape(", ".join(items))
+            explained.update(fresh)
+            return "<ul>" + "".join(
+                f"<li>{escape(i)}" + (f" — {escape(class_question(i))}" if i in CLASSES else "")
+                + "</li>" for i in items) + "</ul>"
+
+        out = []
+        for r in verd.get("routes", []):
+            if r.get("origin", "delivery") != origin:
+                continue
+            items = listed(r["items"])
+            # A list closes with `</ul>`; a comma-separated run does not. The separator
+            # before the detail has to know which one it just printed.
+            detail = (" ".join(r.get("details") or []) or r["closes_when"]
+                      if origin == "project" else "")
+            joiner = "" if items.endswith("</ul>") else " — "
+            out.append(f"<li><strong>{escape(t(ROUTE_READABLE[r['type']]))}, "
+                       f"{escape(r['owner'])}:</strong> {items}"
+                       + (f"{joiner}{escape(detail)}" if detail else "") + "</li>")
+        return out
 
     def criteria_items() -> list[str]:
         """Every criterion with its state AND its record. The record is the whole point:
@@ -374,36 +415,10 @@ def build_item_comment(package: pathlib.Path) -> str:
                 + (f"<br>{escape(c['record'])}" if c.get("record") else "") + "</li>"
                 for c in criteria]
 
-    def finding_items(source: list[dict], with_consequence: bool) -> list[str]:
-        """Worst first, and **a refuted finding does not appear**. The verifier knocked it
-        down; carrying it here would make a reader count a defect the review decided was
-        not one — the same reason it leaves the blocking count."""
-        out = []
-        live = [a for a in source if a.get("status") != "refuted"]
-        for a in sorted(live, key=lambda x: SEVERITY_ORDER.index(x["severity"])
-                        if x["severity"] in SEVERITY_ORDER else len(SEVERITY_ORDER)):
-            # No line, no `:?`. The report can afford the placeholder because it sits in
-            # a column; here it lands mid-sentence, and on a URL — which is a legitimate
-            # piece of evidence — it reads as part of the address.
-            ev = "; ".join(escape(e["file"]) + (f":{e['line']}" if e.get("line") else "")
-                           for e in a.get("evidence", []))
-            line = (f"<li><strong>{escape(a['id'])}</strong> "
-                    f"(<code>{escape(a['severity'])}</code>) — {escape(a.get('claim', ''))}")
-            if ev:
-                line += f"<br>{t('comment.evidence')} {ev}"
-            if with_consequence and a.get("consequence"):
-                line += f"<br>{t('comment.consequence')} {escape(a['consequence'])}"
-            out.append(line + "</li>")
-        return out
-
     body = f"<p><strong>{t('comment.measured')}</strong></p><ul>" + "".join(measured) + "</ul>"
     body = rule() + body
     body += section("comment.open_routes", route_items("delivery"))
     body += section("comment.section_criteria", criteria_items())
-    # `conclude` already moves the non-attributable ones to `observations.json`; the
-    # filter here is the second lock, for a package assembled by hand.
-    body += section("comment.section_findings",
-                    finding_items([a for a in findings if a.get("attributable", True)], True))
     body += section("comment.section_project_pending", route_items("project"))
 
     template = (DIR_TEMPLATES / "item-comment.html").read_text(encoding="utf-8")
