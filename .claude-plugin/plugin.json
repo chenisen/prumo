@@ -1,12 +1,17 @@
 {
   "name": "prumo",
   "description": "Revisa uma entrega inteira contra o item que a pediu — card, MR/PR, branch ou diff — e fecha com APROVADO ou INTERVENÇÃO NECESSÁRIA. Espinha determinística em Python, folhas agênticas somente-leitura. Agnóstico de repositório, stack, rastreador e forge: tudo que é fato de uma instalação vem do prumo.yml.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": {
     "name": "Marcio Chen",
     "url": "https://github.com/chenisen"
   },
   "homepage": "https://github.com/chenisen/prumo",
   "license": "MIT",
-  "keywords": ["code-review", "merge-request", "pull-request", "agents"]
+  "keywords": [
+    "code-review",
+    "merge-request",
+    "pull-request",
+    "agents"
+  ]
 }

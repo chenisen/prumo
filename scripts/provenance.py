@@ -24,10 +24,10 @@ What counts as foreign, and why each rule is shaped the way it is:
   * **a proposal number.** Read from the origin ref's own shape, so it follows the forge
     the installation declared instead of assuming one.
   * **an item id that this review's own item never mentions.** The asymmetry matters: an
-    item may legitimately name a sibling — "follows the test pattern of card 50273" is a
-    sentence card 50275 really contains — and flagging that would make the check cry wolf
-    on the item's own words. An id that appears in the OUTPUT and nowhere in the item came
-    from somewhere else.
+    item may legitimately name a sibling — "follows the test pattern of item X" is a
+    sentence real items contain, and the second of two items routinely points at the
+    first — and flagging that would make the check cry wolf on the item's own words. An
+    id that appears in the OUTPUT and nowhere in the item came from somewhere else.
 
 Usage:
     provenance.py --package DIR FILE...

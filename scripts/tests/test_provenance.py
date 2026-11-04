@@ -21,14 +21,14 @@ from provenance import foreign_references, check
 OWN = {
     "repo": "repo-x",
     "origin": "refs/merge-requests/821/head",
-    "base": {"sha": "f6d9e1047e20ad0b89030511f54f2ff42cdb69d9"},
-    "merge_base": "23cc14f1350ef45c0932a4cead3b42a7f42e4770",
-    "head_sha": "cbf771e0ef693a44e8b1e07ec923128a2a52f381",
-    "item": {"id": "50275"},
+    "base": {"sha": "aaaa1111bbbb2222cccc3333dddd4444eeee5555"},
+    "merge_base": "bbbb2222cccc3333dddd4444eeee5555ffff6666",
+    "head_sha": "cccc3333dddd4444eeee5555ffff6666aaaa7777",
+    "item": {"id": "12346"},
 }
 
-ITEM = ("# Card 50275\n\nSegundo de 2 cards; segue o padrão de testes definido no "
-        "card 50273.\n")
+ITEM = ("# Item 12346\n\nSegundo de 2 cards; segue o padrão de testes definido no "
+        "item 12345.\n")
 
 
 def package(manifest=None, item=ITEM):
@@ -41,15 +41,16 @@ def package(manifest=None, item=ITEM):
 
 class TestItSpeaksOnlyAboutThisReview(unittest.TestCase):
     def test_its_own_shas_are_not_foreign(self):
-        text = ("rodada contra o diff 23cc14f1350e..cbf771e0ef69, base "
-                "f6d9e1047e20ad0b89030511f54f2ff42cdb69d9")
+        text = ("rodada contra o diff bbbb2222cccc..cccc3333dddd, base "
+                "aaaa1111bbbb2222cccc3333dddd4444eeee5555")
         self.assertEqual([], foreign_references(text, package()))
 
     def test_a_sha_from_another_delivery_is_caught(self):
-        """The real signal: the contaminated run carried f6d9e104..0f4642d6, the SHAs of
-        the neighbouring review."""
-        found = foreign_references("git diff f6d9e1047e20..0f4642d600e4", package())
-        self.assertEqual([{"kind": "sha", "value": "0f4642d600e4"}], found)
+        """The real signal. In the contamination this was written for, the planner's
+        scripts carried the neighbouring review's two SHAs and nothing else gave it
+        away."""
+        found = foreign_references("git diff aaaa1111bbbb..dead9999beef", package())
+        self.assertEqual([{"kind": "sha", "value": "dead9999beef"}], found)
 
     def test_another_proposal_number_is_caught_in_this_forges_ref_shape(self):
         found = foreign_references("refs/merge-requests/820/head", package())
@@ -65,14 +66,14 @@ class TestItSpeaksOnlyAboutThisReview(unittest.TestCase):
         self.assertIn({"kind": "proposal", "value": "820"}, found)
 
     def test_an_item_the_ITEM_ITSELF_names_is_not_foreign(self):
-        """The asymmetry that keeps this from crying wolf: card 50275 really does say
-        'segue o padrão do card 50273', and a finding may quote it."""
-        found = foreign_references("segue o padrão de testes do card 50273", package())
+        """The asymmetry that keeps this from crying wolf: item 12346 really does say
+        'segue o padrão do item 12345', and a finding may quote it."""
+        found = foreign_references("segue o padrão de testes do item 12345", package())
         self.assertEqual([], found)
 
     def test_an_item_that_appears_from_nowhere_is_caught(self):
-        found = foreign_references("revisão do card 49945", package())
-        self.assertEqual([{"kind": "item", "value": "49945"}], found)
+        found = foreign_references("revisão do item 70707", package())
+        self.assertEqual([{"kind": "item", "value": "70707"}], found)
 
     def test_a_plain_number_is_not_a_sha(self):
         """`188523` is a pipeline id and `42` a count. Hex with no letter is a number."""
@@ -88,19 +89,19 @@ class TestTheFileLevelCheck(unittest.TestCase):
     def test_a_clean_file_passes(self):
         d = package()
         f = d / "scripts_manual.json"
-        f.write_text(json.dumps([{"goal": "diff 23cc14f1350e..cbf771e0ef69"}]),
+        f.write_text(json.dumps([{"goal": "diff bbbb2222cccc..cccc3333dddd"}]),
                      encoding="utf-8")
         self.assertEqual([], check(d, [f]))
 
     def test_a_contaminated_file_is_named_with_what_gave_it_away(self):
         d = package()
         f = d / "scripts_manual.json"
-        f.write_text(json.dumps([{"goal": "diff f6d9e1047e20..0f4642d600e4"}]),
+        f.write_text(json.dumps([{"goal": "diff aaaa1111bbbb..dead9999beef"}]),
                      encoding="utf-8")
         problems = check(d, [f])
         self.assertEqual(1, len(problems))
         self.assertIn("scripts_manual.json", problems[0])
-        self.assertIn("0f4642d600e4", problems[0])
+        self.assertIn("dead9999beef", problems[0])
 
     def test_a_file_that_is_not_there_is_not_a_problem(self):
         d = package()
