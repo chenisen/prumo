@@ -115,6 +115,13 @@ CHECK_ROLES = ("secrets", "static", "lint", "dependencies", "suite")
 
 BLOCKING_SEVERITIES = ("critical", "required")
 
+# Worst first. These are the DATA values of `finding.schema.json`'s severity enum, so
+# anything that sorts findings reads them from here. Spelling the list out a second time
+# inside a sort key is how `render.py` came to sort on five words that stopped being the
+# enum: the id changed, the copy did not, and the report raised ValueError on the first
+# `critical` it ever saw.
+SEVERITY_ORDER = ("critical", "required", "nit", "optional", "fyi")
+
 
 class UsageError(Exception):
     """Malformed input: the message goes to the person, not into a stack trace."""

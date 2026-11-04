@@ -34,6 +34,12 @@ The report is written **always**, without asking for anything, at:
 That is the only place this skill writes. An intervention verdict stays **only** in the
 local report until someone authorises publication.
 
+**The path never goes into a published comment.** It is local to whoever ran the review,
+and the people reading the item or the proposal are not on that machine — naming it tells
+them a report exists without letting them read a line of it. The item comment therefore
+carries what decides inside itself (see the skill), and the proposal-comment templates
+below do the same.
+
 ## The board's HTML
 
 The comment on the item accepts a subset: `p`, `strong`, `em`, `code`, `ul`, `ol`, `li`,

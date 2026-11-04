@@ -17,7 +17,7 @@ import re
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from common import (CLASSES, PRUMO_ROOT, BLOCKING_SEVERITIES, dir_reports, load_profile, forge, tracker,
+from common import (CLASSES, PRUMO_ROOT, BLOCKING_SEVERITIES, SEVERITY_ORDER, dir_reports, load_profile, forge, tracker,
                    today, read_json, slug)
 from i18n import t
 
@@ -157,8 +157,7 @@ def build_report(package: pathlib.Path) -> str:
         if not findings:
             return t("report.no_findings")
         parts = []
-        for a in sorted(findings, key=lambda x: ("critico obrigatorio nit opcional fyi"
-                                                 .split().index(x["severity"]))):
+        for a in sorted(findings, key=lambda x: SEVERITY_ORDER.index(x["severity"])):
             ev = "; ".join(f"`{e['file']}`:{e.get('line') or '?'}" for e in a["evidence"])
             mark = "" if a.get("attributable", True) else "  " + t("report.finding_from_project")
             parts.append(
@@ -260,12 +259,23 @@ SUITE_READABLE = {
 
 
 def build_item_comment(package: pathlib.Path) -> str:
-    """The item comment is a RECORD, not a report.
+    """The item comment is a RECORD of fixed shape, and it STANDS ON ITS OWN.
 
-    It states what was measured and what holds the verdict up, in a fixed shape. No
-    narrative, no suggestion, no pending item in prose: whoever needs the reasoning opens
-    the report, whose path is on the last line. The shape is the same on every run, so
-    that two reviews of the same repository can be compared by reading top to bottom.
+    It states what was measured and what holds the verdict up. No narrative, no
+    suggestion, no pending item in prose. The shape is the same on every run, so that two
+    reviews of the same repository can be compared by reading top to bottom.
+
+    **It never points at a file.** Until 2026-11-04 the last line carried the report's
+    path, and that path is meaningless to everybody except whoever ran the review: the
+    reader of the item is on another machine, and a local path tells them a report exists
+    without letting them read a line of it. So what decides now travels INSIDE the
+    comment — the five gates, the acceptance criteria with their records, the findings
+    with their evidence, the observations and the project's pending items.
+
+    What stays out is what is an instruction for somebody to execute later — the manual
+    scripts and this environment's capabilities. Those are work orders, not the record of
+    a verdict, and they are what would drown the comment on a repository whose profile
+    leaves nine classes unassessable.
     """
     def optional(name, default):
         path = package / name
@@ -312,12 +322,77 @@ def build_item_comment(package: pathlib.Path) -> str:
              ids=escape(', '.join(blocking))) if blocking
            else t("comment.findings_none_blocking", total=len(findings))) + "</li>")
 
+    def section(label_key: str, items: list[str]) -> str:
+        """A titled list, or nothing at all. An empty section is noise: a reader who sees
+        a heading with no body cannot tell 'there was none' from 'it was not looked
+        at'."""
+        return (f"<p><strong>{t(label_key)}</strong></p><ul>" + "".join(items) + "</ul>"
+                if items else "")
+
+    def rule() -> str:
+        """The five gates, verbatim from the judge. This is what decides, so it opens the
+        comment — before the measurements that feed it."""
+        lines = []
+        for gate in verd.get("gates", []):
+            mark = "✅" if gate["passed"] else "❌"
+            detail = ("" if gate["passed"]
+                      else " → " + escape(", ".join(gate["items"])))
+            lines.append(f"<li>{mark} <strong>{gate['number']}.</strong> "
+                         f"{escape(gate['condition'])}{detail}</li>")
+        block = section("comment.the_rule", lines)
+        baseline = summary.get("repo_baseline")
+        if block and baseline:
+            block += (f"<p><em>{t('comment.baseline_note')} "
+                      f"{escape(baseline)}</em></p>")
+        return block
+
+    def route_items(origin: str) -> list[str]:
+        return [f"<li><strong>{escape(t(ROUTE_READABLE[r['type']]))}, {escape(r['owner'])}:"
+                f"</strong> {escape(', '.join(r['items']))}"
+                + (f" — {escape(' '.join(r.get('details') or []) or r['closes_when'])}"
+                   if origin == "project" else "") + "</li>"
+                for r in verd.get("routes", [])
+                if r.get("origin", "delivery") == origin]
+
+    def criteria_items() -> list[str]:
+        """Every criterion with its state AND its record. The record is the whole point:
+        `met` with no evidence behind it is an opinion."""
+        return [f"<li><strong>{escape(c.get('text', c['id']))}</strong> — "
+                f"<code>{escape(c['state'])}</code>"
+                + (f"<br>{escape(c['record'])}" if c.get("record") else "") + "</li>"
+                for c in criteria]
+
+    def finding_items(source: list[dict], with_consequence: bool) -> list[str]:
+        """Worst first, and **a refuted finding does not appear**. The verifier knocked it
+        down; carrying it here would make a reader count a defect the review decided was
+        not one — the same reason it leaves the blocking count."""
+        out = []
+        live = [a for a in source if a.get("status") != "refuted"]
+        for a in sorted(live, key=lambda x: SEVERITY_ORDER.index(x["severity"])
+                        if x["severity"] in SEVERITY_ORDER else len(SEVERITY_ORDER)):
+            # No line, no `:?`. The report can afford the placeholder because it sits in
+            # a column; here it lands mid-sentence, and on a URL — which is a legitimate
+            # piece of evidence — it reads as part of the address.
+            ev = "; ".join(escape(e["file"]) + (f":{e['line']}" if e.get("line") else "")
+                           for e in a.get("evidence", []))
+            line = (f"<li><strong>{escape(a['id'])}</strong> "
+                    f"(<code>{escape(a['severity'])}</code>) — {escape(a.get('claim', ''))}")
+            if ev:
+                line += f"<br>{t('comment.evidence')} {ev}"
+            if with_consequence and a.get("consequence"):
+                line += f"<br>{t('comment.consequence')} {escape(a['consequence'])}"
+            out.append(line + "</li>")
+        return out
+
     body = f"<p><strong>{t('comment.measured')}</strong></p><ul>" + "".join(measured) + "</ul>"
-    if verd.get("verdict") != "APPROVED":
-        items = "".join(
-            f"<li><strong>{escape(t(ROUTE_READABLE[r['type']]))}, {escape(r['owner'])}:"
-            f"</strong> {escape(', '.join(r['items']))}</li>" for r in verd.get("routes", []))
-        body += f"<p><strong>{t('comment.open_routes')}</strong></p><ul>{items}</ul>"
+    body = rule() + body
+    body += section("comment.open_routes", route_items("delivery"))
+    body += section("comment.section_criteria", criteria_items())
+    body += section("comment.section_findings",
+                    finding_items([a for a in findings if a.get("attributable", True)], True))
+    body += section("comment.section_observations",
+                    finding_items(optional("observations.json", []), False))
+    body += section("comment.section_project_pending", route_items("project"))
 
     template = (DIR_TEMPLATES / "item-comment.html").read_text(encoding="utf-8")
     return template.format(
@@ -327,10 +402,8 @@ def build_item_comment(package: pathlib.Path) -> str:
         item=escape(tracker().item),
         sha_initial=escape(man["merge_base"][:12]), sha_final=escape(man["head_sha"][:12]),
         body=body,
-        report_label=t("comment.report_label"),
         not_merge=escape(t("comment.not_merge", item=tracker().item,
-                          item_with_article=tracker().with_article())),
-        report_path=escape(report_path(man)))
+                          item_with_article=tracker().with_article())))
 
 
 def report_path(man: dict) -> str:

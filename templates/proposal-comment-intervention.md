@@ -10,7 +10,5 @@
 
 {manual_scripts}
 
-Report: `{report_path}`
-
 > Approving is the ceiling of this review, and it did not approve. The merge and the
 > {item}'s column stay with the team.

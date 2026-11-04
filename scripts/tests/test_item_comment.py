@@ -1,10 +1,16 @@
-"""The item comment is a RECORD of fixed shape, not a report.
+"""The item comment is a RECORD of fixed shape, and it stands on its own.
 
 It came out of feedback in 2026-10-29: the comment had turned into prose — a narrative of
 what the review knocked down, pending items in running text, suggestions for a next step.
 None of that decides anything on the item, and it drowns what does. The comment states
-**what was measured** and **what holds the verdict up**; whoever wants the reasoning opens
-the report.
+**what was measured** and **what holds the verdict up**.
+
+Feedback in 2026-11-04 took the other half: the comment used to close by naming the
+report's path, and a local path is unreadable to everybody but whoever ran the review.
+So what decides now travels INSIDE the comment — gates, criteria with their records,
+findings with their evidence, observations, project pending items — and no filesystem
+path appears at all. What stays out is what is an instruction to execute later: the
+manual scripts and this environment's capabilities.
 """
 import json
 import pathlib
@@ -15,6 +21,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from render import build_item_comment
+from common import dir_reports
 from i18n import t
 
 MANIFEST = {"repo": "repo-x", "origin": "refs/merge-requests/411/head",
@@ -30,9 +37,21 @@ def package(**files):
     return d
 
 
+def heading(label: str) -> str:
+    """How a SECTION title appears, as opposed to the same words inside a list item."""
+    return f"<p><strong>{label}</strong></p>"
+
+
+def measured_line(html: str, label: str) -> str:
+    """The single `Measured` bullet carrying `label`."""
+    return [li for li in html.split("<li>") if label in li][0]
+
+
 def approved(**extra):
     base = dict(
         verdict={"verdict": "APPROVED", "routes": [],
+                 "gates": [{"number": 1, "name": "standards", "condition": "c",
+                            "passed": True, "items": []}],
                  "summary": {"profile_coverage": "18/18", "classes_not_assessable": []}},
         evidence={"suite": "green"},
         criteria=[{"id": "AC-1", "text": "t", "state": "met", "record": "r"}],
@@ -70,22 +89,99 @@ class TestWhatGoesIn(unittest.TestCase):
         self.assertIn("16/18", h)
         self.assertIn("A7, A9", h)
 
-    def test_names_the_blocking_findings_and_only_those(self):
-        f = [{"id": "X-1", "severity": "required", "status": "confirmed", "attributable": True},
-             {"id": "X-2", "severity": "nit", "status": "confirmed", "attributable": True},
-             {"id": "X-3", "severity": "required", "status": "refuted", "attributable": True}]
-        h = approved(findings=f)
-        self.assertIn("X-1", h)
-        self.assertNotIn("X-2", h)
-        self.assertNotIn("X-3", h)
+    def test_the_counter_names_the_blocking_findings_and_only_those(self):
+        """The counter in `Measured` is the at-a-glance line: it names what BLOCKS. The
+        detail section below lists the rest — so the assertion is scoped to the counter,
+        not to the whole comment."""
+        f = [{"id": "X-1", "severity": "required", "status": "confirmed",
+              "attributable": True, "claim": "c", "evidence": []},
+             {"id": "X-2", "severity": "nit", "status": "confirmed",
+              "attributable": True, "claim": "c", "evidence": []},
+             {"id": "X-3", "severity": "required", "status": "refuted",
+              "attributable": True, "claim": "c", "evidence": []}]
+        counter = measured_line(approved(findings=f), t("comment.label_findings"))
+        self.assertIn("X-1", counter)
+        self.assertNotIn("X-2", counter)
+        self.assertNotIn("X-3", counter)
 
-    def test_always_points_at_the_report(self):
-        # The repository, the item and the date — not a hard-coded prefix. The prefix
-        # comes from `paths.reports`, which every installation sets differently; pinning
-        # it here made the test pass only on the machine that wrote it.
-        html = approved()
-        self.assertIn("repo-x/12345-", html)
-        self.assertIn(".md", html)
+    def test_a_refuted_finding_appears_nowhere(self):
+        """The verifier knocked it down. Listing it would make a reader count a defect
+        the review decided was not one."""
+        f = [{"id": "X-3", "severity": "required", "status": "refuted",
+              "attributable": True, "claim": "the refuted claim", "consequence": "c",
+              "evidence": [{"file": "a", "line": 1}]}]
+        h = approved(findings=f)
+        self.assertNotIn("the refuted claim", h)
+
+    def test_carries_the_five_gates_with_their_condition(self):
+        h = approved(verdict={
+            "verdict": "APPROVED", "routes": [],
+            "gates": [{"number": n, "name": "g", "condition": f"condition {n}",
+                       "passed": True, "items": []} for n in range(1, 6)],
+            "summary": {"profile_coverage": "18/18", "classes_not_assessable": []}})
+        self.assertIn(t("comment.the_rule"), h)
+        for n in range(1, 6):
+            self.assertIn(f"condition {n}", h)
+
+    def test_marks_a_closed_gate_and_names_what_closed_it(self):
+        h = approved(verdict={
+            "verdict": "INTERVENTION_REQUIRED", "routes": [],
+            "gates": [{"number": 3, "name": "item_covered", "condition": "covers the item",
+                       "passed": False, "items": ["AC-2"]}],
+            "summary": {"profile_coverage": "18/18", "classes_not_assessable": []}})
+        self.assertIn("❌", h)
+        self.assertIn("AC-2", h)
+
+    def test_carries_every_criterion_with_its_record(self):
+        cs = [{"id": "AC-1", "text": "the suite is green", "state": "met",
+               "record": "168 tests, 357 assertions"}]
+        h = approved(criteria=cs)
+        self.assertIn("the suite is green", h)
+        self.assertIn("168 tests, 357 assertions", h)
+
+    def test_carries_a_non_blocking_finding_with_its_evidence(self):
+        f = [{"id": "SC-2", "severity": "nit", "status": "confirmed", "attributable": True,
+              "claim": "assertions are duplicated", "consequence": "two places to update",
+              "evidence": [{"file": "tests/A.php", "line": 559}]}]
+        h = approved(findings=f)
+        self.assertIn("SC-2", h)
+        self.assertIn("assertions are duplicated", h)
+        self.assertIn("tests/A.php:559", h)
+
+    def test_evidence_without_a_line_carries_no_placeholder(self):
+        """A URL is legitimate evidence, and `:?` glued to one reads as part of the
+        address."""
+        f = [{"id": "CI-1", "severity": "fyi", "status": "confirmed", "attributable": True,
+              "claim": "the pipeline runs no test job", "consequence": "c",
+              "evidence": [{"file": "https://host/pipelines/188523", "line": None}]}]
+        h = approved(findings=f)
+        self.assertIn("https://host/pipelines/188523", h)
+        self.assertNotIn("188523:?", h)
+
+    def test_separates_the_pre_existing_from_this_delivery(self):
+        d = package(
+            verdict={"verdict": "APPROVED", "routes": [], "summary": {}},
+            findings=[{"id": "SC-2", "severity": "nit", "status": "confirmed",
+                       "attributable": True, "claim": "mine", "consequence": "c",
+                       "evidence": [{"file": "a", "line": 1}]}],
+            observations=[{"id": "CI-1", "severity": "fyi", "status": "confirmed",
+                           "attributable": False, "claim": "not mine",
+                           "evidence": [{"file": "b", "line": 2}]}])
+        h = build_item_comment(d)
+        self.assertIn(heading(t("comment.section_findings")), h)
+        self.assertIn(heading(t("comment.section_observations")), h)
+        self.assertIn("not mine", h)
+
+    def test_carries_the_project_pending_items_with_their_owner(self):
+        h = approved(verdict={
+            "verdict": "APPROVED",
+            "routes": [{"type": "missing_profile", "origin": "project", "owner": "tech lead",
+                        "items": ["repo-x"], "closes_when": "somebody confirms the profile",
+                        "details": []}],
+            "summary": {"profile_coverage": "9/18", "classes_not_assessable": []}})
+        self.assertIn(heading(t("comment.section_project_pending")), h)
+        self.assertIn("tech lead", h)
+        self.assertIn("somebody confirms the profile", h)
 
     def test_says_that_approving_does_not_merge(self):
         self.assertIn("does not merge", approved())
@@ -100,10 +196,40 @@ class TestWhatStaysOUT(unittest.TestCase):
                           "cliffhanger", "suggest", "next step", "recommend"):
             self.assertNotIn(forbidden, h)
 
-    def test_the_approval_comment_is_short(self):
-        """A deliberate ceiling. If a new field does not fit, the field belongs to the
-        report."""
-        self.assertLess(len(approved()), 1200)
+    def test_never_names_a_file_on_the_machine_that_ran_the_review(self):
+        """The reason the comment grew in the first place. A path under the reports root
+        is unreadable to the person reading the item, and naming it tells them a report
+        exists without letting them read a line of it."""
+        h = approved()
+        self.assertNotIn(".md", h)
+        self.assertNotIn("repo-x/12345-", h)
+        self.assertNotIn(str(dir_reports()), h)
+
+    def test_leaves_out_what_is_an_instruction_to_execute_later(self):
+        """The manual scripts and this environment's capabilities are work orders, not
+        the record of a verdict — and they are what would drown the comment on a
+        repository whose profile leaves nine classes unassessable."""
+        d = package(
+            verdict={"verdict": "APPROVED", "routes": [], "summary": {}},
+            scripts_manual=[{"trigger": "A9 came out not_assessable",
+                             "goal": "scan the diff by hand",
+                             "steps": ["run grep over the patch"]}])
+        h = build_item_comment(d)
+        self.assertNotIn("scan the diff by hand", h)
+        self.assertNotIn("run grep over the patch", h)
+
+    def test_stays_within_what_a_board_comment_can_hold(self):
+        """A ceiling still, just a real one: the comment carries what decides, never the
+        appendices. If a new SECTION does not fit, it belongs to the report."""
+        self.assertLess(len(approved()), 12000)
+
+    def test_shows_no_empty_section(self):
+        """A heading with no body cannot be told apart from 'nobody looked'."""
+        h = build_item_comment(package(
+            verdict={"verdict": "APPROVED", "routes": [], "summary": {}}))
+        for absent in ("comment.section_criteria", "comment.section_findings",
+                       "comment.section_observations", "comment.section_project_pending"):
+            self.assertNotIn(heading(t(absent)), h)
 
     def test_does_not_invent_a_field_the_package_does_not_carry(self):
         h = build_item_comment(package(

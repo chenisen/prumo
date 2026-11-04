@@ -35,9 +35,12 @@ closure:
   waiver_incomplete: '`#waiver {item}`: dispensa exige motivo, aprovador e validade (AAAA-MM-DD)
     — ignorada'
 comment:
-  report_label: Relatório
   acceptance_value: '{met} de {total} atendidos'
+  baseline_note: "Linha de base do repositório, que NÃO entra na regra por não ser\
+    \ dívida desta entrega:"
   classes_value: '{assessed} avaliadas, {unassessed} não avaliáveis'
+  consequence: 'Consequência:'
+  evidence: 'Evidência:'
   findings_none_blocking: '{total}, nenhum bloqueante'
   findings_value: '{total}, {blocking} bloqueantes: {ids}'
   label_acceptance: 'Critérios de aceite:'
@@ -50,8 +53,13 @@ comment:
   not_ran: não rodou
   open_routes: Rotas abertas
   ran: rodou
-  report_path: 'Relatório: {path}'
+  section_criteria: Critérios de aceite
+  section_findings: Achados desta entrega
+  section_observations: Observações sobre o pré-existente — fora da contagem e fora do
+    veredito
+  section_project_pending: Pendências do PROJETO — declaradas, fora do veredito
   size_value: '{lines} linhas, faixa <code>{band}</code>'
+  the_rule: A regra
   title: 'Revisão de entrega: {verdict}'
 config:
   impediment: 'IMPEDIMENTO de configuração: {reason}'

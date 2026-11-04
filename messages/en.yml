@@ -31,9 +31,12 @@ closure:
   waiver_incomplete: '`#waiver {item}`: a waiver requires a reason, an approver and an expiry
     date (YYYY-MM-DD) — ignored'
 comment:
-  report_label: Report
   acceptance_value: '{met} of {total} met'
+  baseline_note: "Repository baseline, which does NOT enter the rule, not being this\
+    \ delivery's debt:"
   classes_value: '{assessed} assessed, {unassessed} not assessable'
+  consequence: 'Consequence:'
+  evidence: 'Evidence:'
   findings_none_blocking: '{total}, none blocking'
   findings_value: '{total}, {blocking} blocking: {ids}'
   label_acceptance: 'Acceptance criteria:'
@@ -46,8 +49,13 @@ comment:
   not_ran: did not run
   open_routes: Open routes
   ran: ran
-  report_path: 'Report: {path}'
+  section_criteria: Acceptance criteria
+  section_findings: Findings in this delivery
+  section_observations: Observations on the pre-existing — outside the count and outside
+    the verdict
+  section_project_pending: PROJECT pending items — declared, outside the verdict
   size_value: '{lines} lines, band <code>{band}</code>'
+  the_rule: The rule
   title: 'Delivery review: {verdict}'
 config:
   impediment: 'CONFIGURATION IMPEDIMENT: {reason}'

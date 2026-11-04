@@ -10,6 +10,4 @@
 
 {observations}
 
-Report: `{report_path}`
-
 > Approving is not merging. The merge and the {item}'s column stay with the team.

@@ -228,6 +228,19 @@ class TestVocabularyReachesPublishedText(unittest.TestCase):
     TEMPLATES = ("report.md", "item-comment.html",
                  "proposal-comment-approved.md", "proposal-comment-intervention.md")
 
+    def test_no_published_template_names_a_local_file(self):
+        """A path under the reports root is local to whoever ran the review. Naming it in
+        something that gets published tells the reader a report exists without letting
+        them read a line of it — so what decides travels inside the comment instead.
+        Added 2026-11-04, after the feedback that `report_path` was meaningless to anyone
+        but the machine that produced it."""
+        root = pathlib.Path(__file__).resolve().parent.parent.parent / "templates"
+        published = [n for n in self.TEMPLATES if n != "report.md"]
+        for name in published:
+            text = (root / name).read_text(encoding="utf-8")
+            self.assertNotIn("report_path", text, name)
+            self.assertNotIn(".md`", text, name)
+
     def test_no_template_hard_codes_the_item_or_proposal_name(self):
         import re
         root = pathlib.Path(__file__).resolve().parent.parent.parent / "templates"
