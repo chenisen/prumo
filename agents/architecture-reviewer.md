@@ -3,7 +3,7 @@ name: architecture-reviewer
 description: Answers one question about a change — does it follow what this project decided to be? Read-only. Driven by the task-review workflow.
 tools: Read, Grep, Glob
 model: sonnet
-maxTurns: 14
+maxTurns: 24
 skills:
   - five-axis-review
 ---

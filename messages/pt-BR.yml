@@ -180,6 +180,7 @@ gate_name:
   no_manual: verificação manual
   measured: foi efetivamente medido
 item_meaning:
+  review: a revisão como um todo
   suite: como a suíte de testes terminou
   delivery_untested: o que a entrega escreveu não tem teste sobre ele
   conflict: a proposta não mescla com a base
@@ -329,6 +330,7 @@ resolver:
   source_commit_subject: assunto de commit
   summary: repo {repo} · origem {origin} · base {base} ({source})
 review:
+  help_coverage: o que cada revisor olhou e quantos não responderam (JSON). Opcional, mas sem ele uma fatia por ler passa despercebida
   act_approve: 3. Approve d{proposal_with_article}
   act_item: 1. comentário n{item_with_article}
   act_no_approve: '(sem Approve: o veredito não é APROVADO)'
@@ -374,6 +376,7 @@ review:
   then_conclude: 'Depois: review.py conclude --package {path} --findings <arquivo>'
   three_acts: 'Três atos externos, cada um com o SEU sim — nenhum acontece sozinho:'
 route_label:
+  review_incomplete: Revisão incompleta
   author_fix: Ajuste do autor
   baseline: Linha de base
   confirm_finding: Confirmar achado
@@ -445,6 +448,9 @@ validate:
   waiver_expired: 'checks.{role}: a dispensa venceu em {date}'
   warning: 'aviso:   {text}'
 verdict:
+  detail_review_incomplete: '{n} revisor(es) que a triagem acionou não responderam nem na
+    segunda tentativa: essa fatia NINGUÉM leu, e silêncio de revisor é indistinguível de
+    revisor que nada achou. Aprovar aqui seria aprovar sem ter avaliado.'
   detail_conflict: 'a proposta não mescla na base resolvida — arquivos em conflito: {files}'
   stale_base: A proposta está {n} commit(s) atrás da base resolvida. {merge} Estar atrás não a segura; não mesclar segura.
   stale_clean: Ela mescla sem conflito, então a entrega foi medida contra código idêntico ao que vai encontrar.
@@ -452,6 +458,7 @@ verdict:
   stale_unmeasured: Se ela mescla sem conflito NÃO foi medido aqui ({reason}), então isto não é evidência de que mescla.
   approved: APROVADO
   closes:
+    review_incomplete: a fatia é relida e a revisão re-julgada
     author_fix: o novo push dispara a revisão por delta
     confirm_finding: a pessoa confirma e vira ajuste, ou dispensa com motivo
     human_decision: a decisão registrada no item dispara o re-julgamento
@@ -475,6 +482,7 @@ verdict:
   intervention: INTERVENÇÃO NECESSÁRIA
   project_pending: '— pendências do PROJETO (declaradas, não seguram {proposal_with_article}):'
   routes:
+    review_incomplete: quem conduz a revisão
     author_fix: autor d{proposal_with_article}
     confirm_finding: revisor humano
     human_decision: tech lead, PO ou arquiteto, conforme a classe

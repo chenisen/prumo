@@ -39,8 +39,22 @@ UNIVERSAL_PATTERNS = {
     "A6": [r"^\+\s*(abstract\s+class|interface|trait)\s",
            r"^\+\s*(class|final\s+class)\s+\w+\s+implements\s",
            r"^\+[^\n]*\b(ServiceProvider|->bind\(|->singleton\(|ContainerInterface)"],
+    # The third pattern looks for a test DISABLED or NARROWED, and it used to look for
+    # the bare words `skip` and `only`. `only` is an ordinary English word: the comment
+    # `// Known current behavior, not the desired one: only the exact spelling …` fired
+    # A8 on a delivery that added 217 tests and removed none, and a fired §A class
+    # closes gate 2 — so a comment cost a human decision and an INTERVENTION. Measured
+    # twice on 2026-11-04. What it matches now is the SHAPE of a directive, which prose
+    # does not have: the call, the attribute, the decorator.
     "A8": [r"^-\s*.*\b(assert|expect|should|toBe|toEqual)", r"^-\s*.*\b(it|test|def test_)\s*\(",
-           r"^\+\s*.*\b(skip|only|markTestSkipped|xit|xdescribe|@pytest\.mark\.skip)"],
+           r"^\+\s*.*(\.(skip|only|failing|todo)\s*[(\.]"
+           r"|\b(markTestSkipped|markTestIncomplete)\s*\("
+           r"|\b(xit|xdescribe|fit|fdescribe)\s*\("
+           r"|@pytest\.mark\.(skip|skipif|xfail)"
+           r"|@(unittest\.)?(skip|skipIf|skipUnless|expectedFailure)\b"
+           r"|\bt\.Skip(Now)?\s*\("
+           r"|#\[\s*(ignore|Ignore)\s*\]"
+           r"|\$this->markTestSkipped)"],
     "A9": [r"(?i)(api[_-]?key|secret|password|passwd|token|bearer)\s*[=:]\s*['\"][^'\"]{8,}",
            r"-----BEGIN [A-Z ]*PRIVATE KEY-----", r"glpat-[A-Za-z0-9_\-]{10,}",
            r"gh[pousr]_[A-Za-z0-9]{20,}", r"AKIA[0-9A-Z]{16}"],

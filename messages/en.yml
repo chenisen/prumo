@@ -178,6 +178,7 @@ gate_name:
   no_manual: manual verification
   measured: actually measured
 item_meaning:
+  review: the review as a whole
   suite: how the test suite ended
   delivery_untested: what the delivery wrote has no test over it
   conflict: the proposal does not merge with the base
@@ -329,6 +330,7 @@ resolver:
   source_commit_subject: commit subject
   summary: repo {repo} · origin {origin} · base {base} ({source})
 review:
+  help_coverage: what each reviewer looked at and how many never answered (JSON). Optional, but without it a slice nobody read goes unnoticed
   act_approve: 3. Approve the {proposal}
   act_item: 1. comment on the {item}
   act_no_approve: '(no Approve: the verdict is not APPROVED)'
@@ -372,6 +374,7 @@ review:
   then_conclude: 'Then: review.py conclude --package {path} --findings <file>'
   three_acts: 'Three external acts, each with its OWN yes — none happens on its own:'
 route_label:
+  review_incomplete: Review incomplete
   author_fix: Author fix
   baseline: Baseline
   confirm_finding: Confirm finding
@@ -442,6 +445,9 @@ validate:
   waiver_expired: 'checks.{role}: the waiver expired on {date}'
   warning: 'warning: {text}'
 verdict:
+  detail_review_incomplete: '{n} reviewer(s) the triage activated did not answer, not even
+    on the retry: NOBODY read that slice, and a silent reviewer is indistinguishable from
+    one that found nothing. Approving here would be approving without having assessed.'
   detail_conflict: 'the proposal does not merge into the resolved base — conflicting files: {files}'
   stale_base: The proposal is {n} commit(s) behind the resolved base. {merge} Being behind does not hold it; not merging does.
   stale_clean: It merges cleanly, so the delivery was measured against code identical to what it will meet.
@@ -449,6 +455,7 @@ verdict:
   stale_unmeasured: Whether it merges cleanly was NOT measured here ({reason}), so this is not evidence that it does.
   approved: APPROVED
   closes:
+    review_incomplete: the slice is read again and the review re-judged
     author_fix: a new push triggers the delta review
     confirm_finding: the person confirms it and it becomes a fix, or waives it with a reason
     human_decision: the decision recorded on the item triggers the re-judgement
@@ -472,6 +479,7 @@ verdict:
   intervention: INTERVENTION REQUIRED
   project_pending: '— PROJECT pending items (declared, they do not hold the {proposal}):'
   routes:
+    review_incomplete: whoever is conducting the review
     author_fix: author of the {proposal}
     confirm_finding: human reviewer
     human_decision: tech lead, PO or architect, depending on the class

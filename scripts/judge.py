@@ -94,6 +94,7 @@ ROUTE_GATE = {
     "manual_check":       4,
     "missing_profile":    5,
     "missing_capability": 5,
+    "review_incomplete":  5,
 }
 
 # --- WHOSE DEBT IT IS ----------------------------------------------------------------
@@ -255,6 +256,20 @@ def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
     if evidence.get("mandatory_reading_empty"):
         route("manual_check", ["mandatory_reading"],
               {"detail": t("verdict.detail_mandatory_reading", **_words())}, gate=5)
+
+    # A reviewer the triage ACTIVATED and that never answered leaves a slice nobody
+    # read. Whose debt is it? Not the delivery's — the author did not break the agent —
+    # and not the repository's. It is the REVIEW's own, and it closes gate 5 anyway,
+    # for the same reason empty mandatory reading does: whose fault it was does not
+    # change that there is nothing to judge with. "Approve on its own when it could not
+    # assess" is the one thing this method never does, and until 2026-11-04 it did
+    # exactly that whenever an agent ran out of turns — silently, because a reviewer
+    # that returns nothing is indistinguishable from a reviewer that found nothing.
+    if evidence.get("reviewers_without_return"):
+        route("review_incomplete",
+              sorted(evidence.get("slices_unread") or ["review"]),
+              {"detail": t("verdict.detail_review_incomplete",
+                           n=evidence["reviewers_without_return"], **_words())}, gate=5)
 
     route("author_fix", list(scope.get("out_of_scope_touched") or []),
           {"detail": t("verdict.detail_out_of_scope", **_words())}, gate=3)

@@ -319,7 +319,8 @@ def conclude(args) -> int:
     package = pathlib.Path(args.package)
     for name, source in (("findings.json", args.findings),
                          ("scripts_manual.json", args.scripts_manual),
-                         ("conventions_observed.json", args.conventions)):
+                         ("conventions_observed.json", args.conventions),
+                         ("coverage.json", args.coverage)):
         if source:
             write_json(package / name, read_json(pathlib.Path(source)))
 
@@ -367,8 +368,21 @@ def conclude(args) -> int:
     if ev_path.exists():
         ev = read_json(ev_path)
         empty = not (package / "criteria.json").exists()
-        if ev.get("mandatory_reading_empty") != empty:
-            ev["mandatory_reading_empty"] = empty
+        changed = ev.get("mandatory_reading_empty") != empty
+        ev["mandatory_reading_empty"] = empty
+        # A reviewer the triage ACTIVATED and that never answered leaves a slice nobody
+        # read. Until 2026-11-04 that fact stopped at the report, and the verdict went
+        # on claiming gate 5 while a quarter of the review had not happened — measured
+        # over two runs of the same delivery. It belongs beside the suite, which is
+        # where the judge already reads what was and was not measured.
+        cov_path = package / "coverage.json"
+        if cov_path.exists():
+            cov = read_json(cov_path)
+            missing = cov.get("reviewers_without_return") or 0
+            changed = changed or ev.get("reviewers_without_return") != missing
+            ev["reviewers_without_return"] = missing
+            ev["slices_unread"] = list(cov.get("slices_unread") or [])
+        if changed:
             write_json(ev_path, ev)
 
     _py("judge.py", "--package", str(package))
@@ -479,6 +493,7 @@ def main() -> int:
     b.add_argument("--findings")
     b.add_argument("--scripts-manual")
     b.add_argument("--conventions", help=t("review.help_conventions"))
+    b.add_argument("--coverage", help=t("review.help_coverage"))
     b.add_argument("--advisory", action="store_true")
 
     sub.add_parser("release", help=t("review.help_release"))

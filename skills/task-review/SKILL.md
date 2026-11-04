@@ -346,7 +346,20 @@ the route: a repository whose profile nobody finished would never approve any de
 all, and the verdict would stop telling a good delivery from a bad one.
 
 What still holds the proposal: an attributable, blocking finding, a §A class fired, an item
-criterion unmet or with no record, a §B class fired, and empty mandatory reading.
+criterion unmet or with no record, a §B class fired, empty mandatory reading, and **a
+reviewer the triage activated that never answered**.
+
+That last one is neither the delivery's debt nor the repository's — it is the REVIEW's —
+and it closes gate 5 all the same, by the same logic as empty mandatory reading: whose
+fault it was does not change that there is nothing to judge with. It exists because the
+method did the opposite for a while. Measured on 2026-11-04: `architecture-reviewer` ran
+out of its turn budget twice over the same delivery, 1.7M tokens spent reading and never
+answering — a third of that run's bill — and both reports came out claiming gate 5 had
+passed. **A reviewer that returns nothing is indistinguishable from a reviewer that found
+nothing**, which is exactly why it cannot be allowed to pass in silence. The workflow
+retries once, telling the agent to read less and answer; what survives the retry goes to
+`coverage.json`, which `conclude --coverage` folds into the evidence, and the route names
+WHICH slice nobody read.
 
 **What does NOT go into the rule:** a suite red the delivery did not cause. A pre-existing
 baseline is the repository's debt, goes into the report's summary and does not hold the
@@ -422,6 +435,15 @@ widely (835k against 10.8M on the first measurement), and it is the breakdown �
 an expensive review look cheap, and `metrics.py` publishes `runs_without_measurement`
 alongside the median so that the median is not read as the whole.
 
+**And `null` is a bug until proven otherwise.** The run is found by looking for the
+package path in the harness's record, and that path MOVED: it used to be inlined in a
+script built per review, and since the method travels as a plugin there is one generic
+script and the package arrives in `args`. The lookup kept reading `script`, went
+permanently false, and every review for weeks reported "cost not measured" — the
+measurement did not get worse, it went **silent**, which is harder to notice and quietly
+removes the ground under every efficiency decision. Fixed on 2026-11-04; both fields are
+read now. If a run comes back unmeasured, suspect the lookup before suspecting the disk.
+
 The two levers that rule the cost, measured:
 
 - **the slice**, which is the input payload of every new context. Only `scope-coherence`
@@ -431,3 +453,10 @@ The two levers that rule the cost, measured:
 - **the number of requests per agent**, which is what multiplies `cache_read`. On the second
   measurement, four `finding-verifier` runs cost 10.4M of the run's 30M: verification
   fan-out is the axis that grows most on a bad delivery.
+- **an agent's turn budget, when it is too SMALL.** The counter-intuitive one, and the
+  most expensive bug measured so far. `maxTurns: 14` on three reviewers was never
+  measured against a real change: 14 turns is enough to read a diff and not enough to
+  read it *and* answer, so the agent spent the whole budget and returned nothing. A
+  budget that is too tight does not save money — it buys the entire context and throws
+  the answer away. Raised to 24 on 2026-11-04, after the failure cost 1.7M tokens in one
+  run.

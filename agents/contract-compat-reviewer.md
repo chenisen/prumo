@@ -3,7 +3,7 @@ name: contract-compat-reviewer
 description: Answers one question about a change — does any consumer break? Read-only. Driven by the task-review workflow.
 tools: Read, Grep, Glob
 model: sonnet
-maxTurns: 14
+maxTurns: 24
 skills:
   - five-axis-review
 ---

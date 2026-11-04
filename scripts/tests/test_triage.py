@@ -307,3 +307,47 @@ class TestThePackageKeysTriageReads(unittest.TestCase):
         source = pathlib.Path(__file__).resolve().parent.parent / "triage.py"
         asked = set(re.findall(r'change\.get\("([a-z_]+)"\)', source.read_text(encoding="utf-8")))
         self.assertEqual(set(), asked - written, f"triage.py reads keys change.json never writes")
+
+
+class TestA8DoesNotFireOnProse(unittest.TestCase):
+    """`only` is an ordinary English word, and A8 used to match it bare. A comment
+    reading `// Known current behavior, not the desired one: only the exact spelling …`
+    fired A8 on a delivery that ADDED 217 tests and removed none — and a fired §A class
+    closes gate 2, so a comment cost a human decision and an INTERVENTION. Measured
+    twice on 2026-11-04, over the same delivery."""
+
+    def fires(self, added_line):
+        profile = minimal_profile()
+        profile["anchors"] = {"A8": {"paths": ["tests/**"], "cards": []}}
+        diff = ("diff --git a/tests/FooTest.php b/tests/FooTest.php\n"
+                "--- a/tests/FooTest.php\n+++ b/tests/FooTest.php\n@@ -1 +1,2 @@\n"
+                f"{added_line}\n")
+        return assess("A8", profile,
+                      change(["tests/FooTest.php"], diff=diff))["state"] == "fired"
+
+    def test_the_english_word_only_in_a_comment_does_not_fire(self):
+        self.assertFalse(self.fires(
+            "+        // Known current behavior, not the desired one: only the exact "
+            "spelling content-type replaces the GET default."))
+
+    def test_the_english_word_skip_in_prose_does_not_fire(self):
+        self.assertFalse(self.fires("+        // we skip the second branch on purpose"))
+
+    def test_a_method_named_after_the_word_does_not_fire(self):
+        self.assertFalse(self.fires(
+            "+    public function it_sends_json_when_form_is_asked_for_known_current_behavior()"))
+
+    def test_a_real_javascript_narrowing_still_fires(self):
+        self.assertTrue(self.fires("+  it.only('does the thing', () => {"))
+
+    def test_a_real_phpunit_skip_still_fires(self):
+        self.assertTrue(self.fires("+        $this->markTestSkipped('flaky');"))
+
+    def test_a_real_pytest_skip_still_fires(self):
+        self.assertTrue(self.fires("+@pytest.mark.skip(reason='broken')"))
+
+    def test_a_real_go_skip_still_fires(self):
+        self.assertTrue(self.fires("+	t.Skip(\"needs a database\")"))
+
+    def test_a_removed_test_still_fires_whatever_the_wording(self):
+        self.assertTrue(self.fires("-    it('does the thing', () => {"))

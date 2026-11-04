@@ -159,5 +159,36 @@ class TestTelemetry(unittest.TestCase):
         self.assertEqual(telemetry.measure("/tmp/pkg-x", None)["run_id"], "wf_new")
 
 
+    def test_the_package_is_found_when_it_arrives_in_args_and_not_in_the_script(self):
+        """Where the package path lives in the harness's record MOVED, and the lookup
+        followed one step too late. The script used to be built per review with the
+        path inlined; since the method travels as a plugin there is ONE generic script
+        and the package arrives in `args`. `package in script` went permanently false
+        and every review printed `tokens: null` — the measurement did not get worse, it
+        went silent, which is harder to notice. Measured on 2026-11-04 over two runs
+        that had in fact cost 3.8M and 5.4M tokens."""
+        session = _session(self.root, run_id="wf_args", agents=[("x", [])])
+        (session / "workflows" / "wf_args.json").write_text(json.dumps({
+            "runId": "wf_args", "timestamp": "2026-11-04T18:00:00.000Z",
+            "script": "export const meta = { name: 'task-review' }",
+            "args": '{"package":"/tmp/pkg-args","plan":{}}',
+            "totalTokens": 1, "durationMs": 1000, "status": "completed",
+        }), encoding="utf-8")
+        self.assertEqual(telemetry.measure("/tmp/pkg-args", None)["run_id"], "wf_args")
+
+    def test_a_record_written_before_the_move_still_resolves(self):
+        _session(self.root, run_id="wf_old_shape", agents=[("x", [])])
+        self.assertEqual(telemetry.measure("/tmp/pkg-x", None)["run_id"], "wf_old_shape")
+
+    def test_another_package_in_args_is_not_this_review(self):
+        session = _session(self.root, run_id="wf_other", agents=[("x", [])])
+        (session / "workflows" / "wf_other.json").write_text(json.dumps({
+            "runId": "wf_other", "timestamp": "2026-11-04T18:00:00.000Z",
+            "script": "export const meta = {}", "args": '{"package":"/tmp/pkg-NOT-MINE"}',
+            "totalTokens": 1, "durationMs": 1000, "status": "completed",
+        }), encoding="utf-8")
+        self.assertIsNone(telemetry.measure("/tmp/pkg-args", None)["tokens"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

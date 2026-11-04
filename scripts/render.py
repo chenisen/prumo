@@ -39,6 +39,7 @@ ROUTE_READABLE = {
     "baseline": "route_label.baseline",
     "missing_profile": "route_label.missing_profile",
     "missing_capability": "route_label.missing_capability",
+    "review_incomplete": "route_label.review_incomplete",
 }
 
 

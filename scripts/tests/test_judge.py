@@ -460,3 +460,44 @@ class TestSuiteOnlyBlocksWhenItMustNot(unittest.TestCase):
         v = judge(evidence={"suite": "green", "delivery_untested": True,
                             "item_is_coverage_debt": True})
         self.assertEqual(v["verdict"], APPROVED)
+
+
+class TestASliceNobodyRead(unittest.TestCase):
+    """A reviewer the triage ACTIVATED and that never answered leaves a slice nobody
+    read. Until 2026-11-04 that fact stopped at the report and the verdict went on
+    claiming gate 5 — measured over two runs of the same delivery, where the same
+    reviewer exhausted its turn budget twice and the review still came out saying it
+    had measured. 'Approve on its own when it could not assess' is the one thing this
+    method never does."""
+
+    SILENT = {"suite": "green", "reviewers_without_return": 1,
+              "slices_unread": ["architecture-reviewer"]}
+
+    def test_a_silent_reviewer_holds_the_proposal(self):
+        self.assertEqual(judge(evidence=self.SILENT)["verdict"], INTERVENTION)
+
+    def test_it_closes_the_gate_that_measures_the_review(self):
+        gates = {g["number"]: g for g in judge(evidence=self.SILENT)["gates"]}
+        self.assertFalse(gates[5]["passed"])
+        self.assertIn("architecture-reviewer", gates[5]["items"])
+
+    def test_it_names_WHICH_slice_nobody_read(self):
+        route = next(r for r in judge(evidence=self.SILENT)["routes"]
+                     if r["type"] == "review_incomplete")
+        self.assertEqual(route["items"], ["architecture-reviewer"])
+
+    def test_the_owner_is_whoever_conducts_the_review_not_the_author(self):
+        route = next(r for r in judge(evidence=self.SILENT)["routes"]
+                     if r["type"] == "review_incomplete")
+        # Not the delivery's debt — but it closes a gate all the same, because whose
+        # fault it was does not change that there is nothing to judge with.
+        self.assertEqual(route["origin"], "delivery")
+        self.assertTrue(route["owner"])
+
+    def test_every_reviewer_returning_leaves_the_gate_alone(self):
+        clean = {"suite": "green", "reviewers_without_return": 0, "slices_unread": []}
+        self.assertEqual(judge(evidence=clean)["verdict"], APPROVED)
+
+    def test_an_evidence_that_never_heard_of_coverage_still_approves(self):
+        # A package produced before this field existed must not start failing.
+        self.assertEqual(judge(evidence={"suite": "green"})["verdict"], APPROVED)

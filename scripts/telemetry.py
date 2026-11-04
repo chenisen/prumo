@@ -51,7 +51,18 @@ def workflow_records() -> list[pathlib.Path]:
 
 
 def find_run(package: str | None, run_id: str | None) -> dict | None:
-    """The run that reviewed THIS package. The workflow's script carries the path inside.
+    """The run that reviewed THIS package.
+
+    Where the package path lives in the record has MOVED, and the lookup followed it
+    one step too late. It used to be inlined in the workflow's `script`, back when the
+    harness was handed a script built per review. Since the method travels as a plugin
+    there is ONE generic `task-review.js` for every run and the package arrives in
+    `args` — so `package in script` became permanently false and every review since
+    printed `tokens: null`, "no workflow record found". The measurement did not get
+    worse; it went silent, which is harder to notice, and it is the number every
+    efficiency decision is judged against. Both fields are read now: `args` for how the
+    harness records a run today, `script` so a record written before the move still
+    resolves.
 
     More than one run over the same package (one repeated after a failure) resolves to
     the most recent, which is the one that produced the findings `conclude` is judging.
@@ -64,7 +75,8 @@ def find_run(package: str | None, run_id: str | None) -> dict | None:
             continue
         if run_id and data.get("runId") != run_id:
             continue
-        if package and package not in (data.get("script") or ""):
+        if package and not any(
+                package in str(data.get(field) or "") for field in ("args", "script")):
             continue
         data["_path"] = path
         candidates.append(data)

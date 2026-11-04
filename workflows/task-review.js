@@ -218,26 +218,57 @@ phase('Review')
 log(`${plan.reviewers.length} reviewers activated; ${plan.skipped.length} skipped by triage`)
 for (const s of plan.skipped) log(`skipped: ${s.agent} — ${s.reason}`)
 
-const reviews = await parallel(plan.reviewers.map((r) => () =>
-  agent(context(r.slice), {
+// What a reviewer is told when its first attempt came back empty. The cause measured on
+// 2026-11-04 was a turn budget spent entirely on reading: the agent read the change and
+// ran out before it could answer. Repeating the same prompt would exhaust it the same
+// way, so the retry changes the instruction, not just the dice.
+const RAN_OUT = [
+  'A PREVIOUS ATTEMPT AT THIS REVIEW RETURNED NOTHING — it spent its whole turn budget',
+  'reading and never answered. Read LESS this time: open only what you cannot judge',
+  'without, and return your structured answer well before you run out. A partial answer',
+  'that names in `checked` what you did not reach is worth far more than no answer at',
+  'all — a reviewer that returns nothing leaves a slice nobody read, and the review has',
+  'no way to tell that apart from a slice where there was nothing to find.',
+].join(' ')
+
+// A reviewer that returns nothing has already cost a whole context AND bought a slice
+// nobody read. Measured: two attempts of the same reviewer over the same change, 1.7M
+// tokens spent reading and never answering, while the run carried on as though three
+// reviewers had been the plan all along. One retry, and it is `coverage` that records
+// whether the retry worked — silence is never allowed to pass as "nothing to find".
+const review = async (r) => {
+  const opts = {
     agentType: agentFor(r.agent),
     label: r.agent,
     phase: 'Review',
     schema: FINDINGS_SCHEMA,
     ...(r.model ? { model: r.model } : {}),
-  })))
+  }
+  const first = await agent(context(r.slice), opts)
+  if (first) return first
+  log(`${r.agent} returned nothing — one retry, told to read less and answer`)
+  return agent(`${context(r.slice)}\n\n${RAN_OUT}`, { ...opts, label: `${r.agent} (retry)` })
+}
 
+const reviews = await parallel(plan.reviewers.map((r) => () => review(r)))
+
+// WHICH reviewer went silent, not just how many. The judge closes gate 5 on this, and
+// "one reviewer did not return" is not actionable — "nobody read the architecture
+// slice" is. Read by index, because `filter(Boolean)` throws away the only thing that
+// says who is missing.
+const silent = plan.reviewers.filter((_, i) => !reviews[i]).map((r) => r.agent)
 const alive = reviews.filter(Boolean)
-if (alive.length < plan.reviewers.length) {
-  log(`WARNING: ${plan.reviewers.length - alive.length} reviewer(s) did not return — ` +
-      'the report will record the slice nobody read')
+if (silent.length) {
+  log(`WARNING: ${silent.length} reviewer(s) did not return even after the retry — ` +
+      `the slice nobody read: ${silent.join(', ')}`)
 }
 const findings = alive.flatMap((r) => r.findings || [])
 const conventionsObserved = alive.flatMap((r) => r.conventions_observed || [])
 const coverage = {
   checked: alive.flatMap((r) => r.checked || []),
   not_applicable: alive.flatMap((r) => r.not_applicable || []),
-  reviewers_without_return: plan.reviewers.length - alive.length,
+  reviewers_without_return: silent.length,
+  slices_unread: silent,
 }
 
 phase('Verification')

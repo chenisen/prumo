@@ -3,7 +3,7 @@ name: performance-ops-reviewer
 description: Answers one question about a change — does it hold up under volume, and can it be operated? Read-only. Driven by the task-review workflow.
 tools: Read, Grep, Glob
 model: sonnet
-maxTurns: 14
+maxTurns: 24
 skills:
   - five-axis-review
 ---
