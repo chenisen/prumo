@@ -262,7 +262,35 @@ if (silent.length) {
   log(`WARNING: ${silent.length} reviewer(s) did not return even after the retry — ` +
       `the slice nobody read: ${silent.join(', ')}`)
 }
-const findings = alive.flatMap((r) => r.findings || [])
+// A finding's id is the METHOD's to give, never the reviewer's. Each agent numbers from
+// `F1` inside its own context and has no idea what the others called theirs, so three
+// reviewers return three different `F1`s — and everything downstream keys by id: the
+// verification map here, `by_finding` in `render.py`, the blocking lists in `judge.py`.
+// Measured on 2026-11-04, on a review with four reviewers: the architecture reviewer's
+// finding and the scope reviewer's finding both VANISHED, each overwritten by a copy of
+// the correctness reviewer's `F1`, which then appeared three times in one report. Silent,
+// and shaped exactly like a correct result — a lost finding leaves no hole to notice.
+//
+// `reviewer` is taken from the plan for the same reason: nothing tells the agents what to
+// put there, so they wrote the name of a SKILL they had loaded, identically, which is
+// what made the collision invisible to anyone reading the output.
+const tagFor = (agent) =>
+  (agent.replace(/-reviewer$/, '').split('-')[0] || 'rev').slice(0, 3).toUpperCase()
+// Uniqueness is CONSTRUCTED, not hoped for: a profile may name a local reviewer whose tag
+// collides with one of the method's own, and a collision must show as `SEC` and `SEC2`,
+// never as two findings quietly becoming one.
+const tags = (() => {
+  const seen = new Map()
+  return plan.reviewers.map((r) => {
+    const base = tagFor(r.agent)
+    const n = (seen.get(base) || 0) + 1
+    seen.set(base, n)
+    return n === 1 ? base : `${base}${n}`
+  })
+})()
+const findings = plan.reviewers.flatMap((r, i) =>
+  (reviews[i]?.findings || []).map((f, n) => ({ ...f, reviewer: r.agent,
+                                                id: `${tags[i]}-${n + 1}` })))
 const conventionsObserved = alive.flatMap((r) => r.conventions_observed || [])
 const coverage = {
   checked: alive.flatMap((r) => r.checked || []),

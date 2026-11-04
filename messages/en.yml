@@ -226,6 +226,9 @@ preflight:
   warn_unresolved_owner: 'the profile is `confirmed` but whoever signs is not in the environment:
     export `TASK_REVIEW_RESPONSAVEL`'
   warning: 'warning: {text}'
+findings:
+  colliding_ids: 'findings.json carries {n} id(s) given to more than one finding: {ids}. An id is what the verification, the judge and the report key by, so two findings sharing one means findings were LOST — overwritten by a copy of each other — and the result is shaped exactly like a correct one.'
+  colliding_remedy: 'The id belongs to the METHOD, not to the reviewer: each agent numbers from `F1` inside its own context and cannot know what the others chose. The workflow stamps a unique id per reviewer; a collision here means it did not run, or ran an older version. Re-run the workflow rather than renumbering by hand.'
 provenance:
   contaminated: '{file}: speaks about ANOTHER review — {refs}. A review relates only to its own item and its own proposal.'
   remedy: 'Re-run the agent that produced it, naming this review''s manifest. Do not hand-edit the ids: whatever read the wrong review read it for a reason, and the next run would do it again.'

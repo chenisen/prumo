@@ -19,7 +19,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from i18n import t
 from common import (CLASSES, CHECK_ROLES, UsageError, load_profile, casa_algum,
-                   waiver_in_force, is_document, write_json, read_json)
+                   waiver_in_force, is_document, write_json, read_json, cfg)
 
 # Content patterns that hold in any stack. This is the floor under the eight classes with
 # no anchor: what is looked for is the SHAPE of the change in the diff, never a path that
@@ -264,13 +264,26 @@ def agent_prefix() -> str:
     """`prumo:` when the method is installed as a plugin, empty when the agents sit loose
     in `.claude/agents/`.
 
-    `CLAUDE_PLUGIN_ROOT` is set by the harness only in the plugin form, and that is why it
-    decides: it is the one signal that tells the two installations apart without asking
-    anybody. `PRUMO_PREFIXO_AGENTE` exists to force it by hand when the detection does not
-    serve."""
+    Three sources, in order, and the first two are DECLARED rather than detected:
+    `PRUMO_PREFIXO_AGENTE` forces it for one run, `agents.prefix` in `prumo.yml` states it
+    for the installation, and only then does `CLAUDE_PLUGIN_ROOT` decide.
+
+    The detection is last because it is the weakest of the three: the harness sets that
+    variable only while it is running the plugin's own skill, so preparing a package from
+    a plain shell — which is how a review gets re-run by hand — leaves it absent, the plan
+    goes out with the bare name, and the workflow dies on its first agent with `agent type
+    'scope-coherence-reviewer' not found`. The failure lands after the package is built,
+    names no remedy, and says nothing about a prefix. Measured on 2026-11-04, on a review
+    that had to be thrown away."""
     forced = os.environ.get("PRUMO_PREFIXO_AGENTE")
     if forced is not None:
         return forced
+    try:
+        declared = cfg().agent_prefix
+    except Exception:
+        declared = None
+    if declared is not None:
+        return declared
     return "prumo:" if os.environ.get("CLAUDE_PLUGIN_ROOT") else ""
 
 

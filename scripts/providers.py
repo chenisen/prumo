@@ -318,6 +318,17 @@ class Config:
     # Markers `derive_profile.py` looks for to discover a repository's proof registry.
     # Adds to the public ones; does not replace them.
     proof_registries: tuple = DEFAULT_REGISTRIES
+    # How THIS harness addresses the agents the method travels with. Installed as a
+    # plugin they answer to `prumo:<name>`; loose in `.claude/agents/`, to the bare name.
+    # `None` means "nobody declared it" and the detection in `triage.py` decides.
+    #
+    # It is declared here, and not guessed, because the one signal a script had —
+    # `CLAUDE_PLUGIN_ROOT` in the environment — is set only while the harness is running
+    # the plugin's own skill. Prepare a package from a plain shell and the variable is
+    # absent, the plan goes out with the bare name, and the workflow dies on its first
+    # agent with `agent type 'scope-coherence-reviewer' not found` — far from the cause,
+    # after the package is already built. Measured on 2026-11-04.
+    agent_prefix: str | None = None
     # Legacy keys found while loading. The caller prints them once; silence would let an
     # installation drift until support is removed.
     legacy_keys: tuple = ()
@@ -529,6 +540,16 @@ def build(data: dict, source: pathlib.Path | None = None) -> Config:
                 f"`agnosticism.forbidden[{i}].pattern` is not a valid regex: {e}") from e
         extras.append({"label": entry["label"], "pattern": entry["pattern"]})
 
+    # --- agents (optional)
+    ag_cfg = data.get("agents") or {}
+    if not isinstance(ag_cfg, dict):
+        raise InvalidConfiguration("`agents` must be a mapping")
+    agent_prefix = ag_cfg.get("prefix")
+    if agent_prefix is not None and not isinstance(agent_prefix, str):
+        raise InvalidConfiguration(
+            "`agents.prefix` must be a string — `prumo:` when the method is installed "
+            "as a plugin, `''` when the agents sit loose in `.claude/agents/`")
+
     # --- detection (optional)
     det = data.get("detection") or {}
     if not isinstance(det, dict):
@@ -543,7 +564,8 @@ def build(data: dict, source: pathlib.Path | None = None) -> Config:
 
     return Config(forge=forge, tracker=tracker, paths=paths, source=source,
                   language=language, owner=owner.strip(), agnosticism=tuple(extras),
-                  proof_registries=tuple(registries), legacy_keys=tuple(legacy))
+                  proof_registries=tuple(registries), agent_prefix=agent_prefix,
+                  legacy_keys=tuple(legacy))
 
 
 def load_config(start: pathlib.Path | None = None) -> Config:

@@ -351,3 +351,72 @@ class TestA8DoesNotFireOnProse(unittest.TestCase):
 
     def test_a_removed_test_still_fires_whatever_the_wording(self):
         self.assertTrue(self.fires("-    it('does the thing', () => {"))
+
+
+class TestAgentPrefix(unittest.TestCase):
+    """How the harness addresses the agents, and in which order the three sources speak.
+
+    The order matters because the only one that is DETECTED is the one that goes quiet
+    the moment a package is prepared outside the plugin's own skill — and a plan carrying
+    the wrong prefix kills the workflow on its first agent, after the package is built."""
+
+    def setUp(self):
+        import os, triage
+        self.triage = triage
+        self.saved = {k: os.environ.get(k)
+                      for k in ("PRUMO_PREFIXO_AGENTE", "CLAUDE_PLUGIN_ROOT")}
+        for k in self.saved:
+            os.environ.pop(k, None)
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        import os
+        for k, v in self.saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    def _with_config(self, prefix):
+        """Stand `cfg()` in for one call, the way the installation would answer."""
+        import unittest.mock as mock
+        from providers import test_config
+        return mock.patch.object(self.triage, "cfg",
+                                 lambda: test_config(agents={"prefix": prefix})
+                                 if prefix is not None else test_config())
+
+    def test_the_configuration_decides_when_it_declares_a_prefix(self):
+        with self._with_config("prumo:"):
+            self.assertEqual(self.triage.agent_prefix(), "prumo:")
+
+    def test_an_empty_string_in_the_configuration_is_an_answer_not_a_silence(self):
+        # agents loose in `.claude/agents/` answer to the bare name, and declaring that
+        # must not fall through to the detection
+        with self._with_config(""):
+            self.assertEqual(self.triage.agent_prefix(), "")
+
+    def test_the_environment_overrides_the_configuration(self):
+        import os
+        os.environ["PRUMO_PREFIXO_AGENTE"] = "other:"
+        with self._with_config("prumo:"):
+            self.assertEqual(self.triage.agent_prefix(), "other:")
+
+    def test_undeclared_falls_back_to_the_plugin_variable(self):
+        import os
+        with self._with_config(None):
+            self.assertEqual(self.triage.agent_prefix(), "")
+            os.environ["CLAUDE_PLUGIN_ROOT"] = "/somewhere/prumo"
+            self.assertEqual(self.triage.agent_prefix(), "prumo:")
+
+    def test_a_configuration_that_cannot_be_read_does_not_break_the_triage(self):
+        # `prumo.yml` is a precondition of the REVIEW, not of this function: a missing
+        # file must come out as the readable impediment `load_config` raises elsewhere,
+        # never as a traceback inside the activation plan.
+        import unittest.mock as mock
+        from providers import MissingConfiguration
+
+        def boom():
+            raise MissingConfiguration("no prumo.yml")
+
+        with mock.patch.object(self.triage, "cfg", boom):
+            self.assertEqual(self.triage.agent_prefix(), "")

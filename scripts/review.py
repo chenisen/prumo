@@ -30,7 +30,7 @@ import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from common import (MissingConfiguration, InvalidConfiguration, dir_packages, dir_reports, forge, tracker, UsageError, profile_path, load_profile, write_json,
-                   today, read_json, slug)
+                   today, read_json, slug, cfg)
 from i18n import t
 
 ROOT = pathlib.Path(__file__).resolve().parent
@@ -65,9 +65,31 @@ def _vocabulary() -> dict:
 #
 # This function and `MARCADOR` in `hooks/review-guard.sh` have to resolve to the SAME
 # file. There is a test holding both ends.
+#
+# The fallback is the INSTALLATION's root — where `prumo.yml` sits — and not the current
+# directory, because the current directory is not a fact about anything. The harness sets
+# `CLAUDE_PROJECT_DIR` for a hook but not for an ordinary shell command, so a `review.py
+# prepare` fired from the scripts directory wrote the marker to
+# `scripts/.claude/.task-review-ativo` while the hook went on reading the project root:
+# the guard over push, commit and moving the item was off for the whole review, in
+# silence. The same loss this function's history already paid for once, reached by
+# another road — so the remedy is the same one the test states: a path two pieces share
+# is derived from ONE origin, and `prumo.yml` is an origin that does not move with the
+# shell. Measured on 2026-11-04.
 def marker() -> pathlib.Path:
-    base = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    base = os.environ.get("CLAUDE_PROJECT_DIR") or _installation_root() or os.getcwd()
     return pathlib.Path(base) / ".claude" / ".task-review-ativo"
+
+
+def _installation_root() -> str | None:
+    """Where `prumo.yml` was read from. `None` when there is no configuration — the
+    review will die of that later, with a readable impediment; it must not die HERE,
+    inside the guard, where the message would be about the wrong thing."""
+    try:
+        source = cfg().source
+    except Exception:
+        return None
+    return str(source.parent) if source else None
 
 
 def mark(package: pathlib.Path) -> None:
@@ -315,6 +337,27 @@ def inline_payload(package: pathlib.Path) -> dict:
     return out
 
 
+def colliding_ids(findings: list[dict]) -> dict[str, int]:
+    """Ids given to more than one finding, with how many findings each one covers.
+
+    An id is the only handle the verification map, `judge.py`'s blocking lists and
+    `render.py`'s `by_finding` have on a finding. Each of those keys a dict by it, so two
+    findings sharing an id do not come out as two rows: one silently replaces the other,
+    and the survivor is then printed once per collision. Measured on 2026-11-04 — four
+    reviewers, three of them numbering from `F1` in their own context, two findings gone
+    and a third printed three times.
+
+    Returns a mapping rather than a bool because the caller has to NAME the ids: `two
+    findings collided` is not something anyone can act on."""
+    counts: dict[str, int] = {}
+    for f in findings:
+        fid = f.get("id")
+        if fid is None:
+            continue
+        counts[fid] = counts.get(fid, 0) + 1
+    return {fid: n for fid, n in counts.items() if n > 1}
+
+
 def conclude(args) -> int:
     package = pathlib.Path(args.package)
     for name, source in (("findings.json", args.findings),
@@ -338,6 +381,17 @@ def conclude(args) -> int:
         for line in contaminated:
             print(t("review.impediment", reason=line))
         print(t("provenance.remedy"))
+        return 1
+
+    # Two findings under one id means findings were LOST on the way here, and what
+    # arrives is shaped exactly like a complete result. It STOPS for the same reason
+    # provenance does: nobody reading the report could tell.
+    collisions = colliding_ids(read_json(package / "findings.json") or [])
+    if collisions:
+        named = ", ".join(f"{fid} ({n})" for fid, n in sorted(collisions.items()))
+        print(t("review.impediment",
+                reason=t("findings.colliding_ids", n=len(collisions), ids=named)))
+        print(t("findings.colliding_remedy"))
         return 1
 
     if args.advisory:

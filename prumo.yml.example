@@ -72,6 +72,25 @@ paths:
   # directory per run, never cleaned up by this method.
   # packages: ./packages
 
+# --- AGENTS (optional) --------------------------------------------------------------
+#
+# How THIS harness addresses the ten agents the method travels with.
+#   "prumo:"   installed as a plugin (the normal case): they answer to
+#              `prumo:scope-coherence-reviewer`, and the plugin's name is part of the
+#              address
+#   ""         the agents sit loose in `.claude/agents/`, under their bare names
+#
+# Optional only because there is a detection behind it — and the detection is the
+# weakest of the three sources, which is why declaring it is worth the two lines.
+# Undeclared, `triage.py` falls back to `CLAUDE_PLUGIN_ROOT` in the environment, which
+# the harness sets only while it is running the plugin's own skill. A `review.py
+# prepare` fired from a plain shell sits outside that: the plan goes out with the bare
+# name, and the workflow dies on its first agent — after the package is already built,
+# naming no remedy and saying nothing about a prefix.
+# `PRUMO_PREFIXO_AGENTE` in the environment overrides both, for a single run.
+# agents:
+#   prefix: "prumo:"
+
 # --- TRACKER ------------------------------------------------------------------------
 #
 # Where the item that asked for the delivery lives. The prumo NEVER reaches the tracker

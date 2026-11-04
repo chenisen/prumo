@@ -227,6 +227,9 @@ preflight:
   warn_unresolved_owner: 'o perfil é `confirmado` mas quem assina não está no ambiente: exporte
     `TASK_REVIEW_RESPONSAVEL`'
   warning: 'aviso: {text}'
+findings:
+  colliding_ids: 'findings.json traz {n} id(s) dado(s) a mais de um achado: {ids}. O id é por onde a verificação, o juiz e o relatório indexam, então dois achados com o mesmo id significam achados PERDIDOS — sobrescritos por cópia um do outro — e o resultado tem a forma exata de um correto.'
+  colliding_remedy: 'O id é do MÉTODO, não do revisor: cada agente numera a partir de `F1` dentro do próprio contexto e não tem como saber o que os outros escolheram. O workflow carimba um id único por revisor; uma colisão aqui quer dizer que isso não rodou, ou rodou numa versão antiga. Rode o workflow de novo, em vez de renumerar à mão.'
 provenance:
   contaminated: '{file}: fala de OUTRA revisão — {refs}. Uma revisão se relaciona só ao próprio item e à própria proposta.'
   remedy: 'Rode de novo o agente que o produziu, nomeando o manifesto desta revisão. Não corrija os ids à mão: o que leu a revisão errada teve um motivo, e a próxima rodada faria igual.'
