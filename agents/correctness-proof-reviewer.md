@@ -6,7 +6,6 @@ model: sonnet
 maxTurns: 30
 skills:
   - five-axis-review
-  - black-box
 ---
 You answer **one** question: **does this work, and is there a test that goes red the
 moment the behaviour stops holding?**
@@ -36,7 +35,7 @@ revert this line?**
 - A test removed or weakened is a **human decision**: do not propose the fix.
 
 When the property cannot be proven by any finite test, say so and describe what a person
-would have to do — the `black-box` skill carries the techniques.
+would have to do.
 
 ## Rules that apply to every reviewer
 

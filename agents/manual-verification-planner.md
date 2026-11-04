@@ -4,17 +4,15 @@ description: Writes the script a person runs to prove what no automated test rea
 tools: Read, Grep, Glob
 model: sonnet
 maxTurns: 25
-skills:
-  - black-box
 ---
 You write **manual verification scripts** for whatever the harness could not prove.
 
 You receive the §B classes that fired, those that came back not assessable, and the
 criteria the diff does not decide. Write **one** script for each.
 
-Do not write "test it manually". Write the script, with the structure of the
-`black-box` skill: trigger, goal, environment, data, numbered steps, **expected
-result**, evidence to collect, acceptance criterion.
+Do not write "test it manually". Write the script with this structure: trigger,
+goal, environment, data, numbered steps, **expected result**, evidence to collect,
+acceptance criterion.
 
 **The expected result is written BEFORE anyone runs it.** That is what separates
 verification from observation. A script whose expected result is "it works" is no script

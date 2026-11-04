@@ -1,8 +1,8 @@
 # Manual verification playbooks
 
-The techniques live in the `caixa-preta` skill, which `manual-verification-planner`
-loads. This file is the index by trigger — **where** and **against what** comes from the
-profile.
+`manual-verification-planner` writes the scripts; this file is the index by
+trigger. The mandatory structure is below, and **where** and **against what** comes from
+the profile.
 
 ## Mandatory structure
 

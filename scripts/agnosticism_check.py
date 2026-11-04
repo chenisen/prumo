@@ -29,7 +29,6 @@ METHOD_TARGETS = [
     PRUMO_ROOT / "workflows" / "task-review.js",
     PRUMO_ROOT / "hooks" / "review-guard.sh",
 ]
-KNOWLEDGE_SKILLS = ["owasp-asvs", "lgpd-dados-sensiveis", "revisao-cinco-eixos", "caixa-preta"]
 AGENTS = ["criteria-extractor", "scope-coherence-reviewer", "correctness-proof-reviewer",
           "domain-rules-reviewer", "contract-compat-reviewer", "security-privacy-reviewer",
           "architecture-reviewer", "performance-ops-reviewer", "finding-verifier",
@@ -100,7 +99,6 @@ def method_files() -> list[pathlib.Path]:
                     if p.is_file() and p.suffix in (".md", ".py", ".js", ".sh", ".json", ".html", ".yml")
                     and "__pycache__" not in p.parts]
     base = PRUMO_ROOT
-    out += [base / "skills" / s / "SKILL.md" for s in KNOWLEDGE_SKILLS]
     out += [base / "agents" / f"{a}.md" for a in AGENTS]
     return [p for p in out if p.exists()]
 
