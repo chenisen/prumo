@@ -47,6 +47,19 @@
     },
     "evidence": {
       "type": "array"
+    },
+    "cause": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "no_anchor",
+        "no_tool",
+        "not_applicable",
+        null
+      ],
+      "description": "por que a classe chegou a este estado, em id estavel. `reason` e a frase que uma pessoa le e muda com o idioma; `cause` e o que o codigo agrupa. Sem ele, agrupar exigiria casar a frase traduzida."
     }
   }
 }

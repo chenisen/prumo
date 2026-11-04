@@ -212,8 +212,23 @@ const coverage = {
 
 phase('Verification')
 // Only what blocks comes through here. A nit or an FYI does not pay for an agent.
-const blocking = findings.filter((f) => ['critical', 'required'].includes(f.severity))
+// Severity AND attribution. A finding the reviewer already marked `attributable: false`
+// does not hold the proposal whatever the verifier says, so refuting it buys nothing and
+// costs a whole fresh context. Measured on one real review: three of four verifier runs
+// were spent on pre-existing defects, 135k tokens of a 524k run, and all three came back
+// "confirmed, but not caused by this change" — which is what the reviewer had already
+// written. What the verifier is FOR is the finding that would close a gate.
+const blocking = findings.filter((f) => ['critical', 'required'].includes(f.severity)
+                                     && f.attributable !== false)
+const preExistingSevere = findings.filter((f) => ['critical', 'required'].includes(f.severity)
+                                             && f.attributable === false)
 log(`${blocking.length} of ${findings.length} findings block and go to the verifier`)
+if (preExistingSevere.length) {
+  // Not a silent cap: say what was not verified and why, so the report can too.
+  log(`${preExistingSevere.length} severe finding(s) NOT verified — ` +
+      `marked attributable:false, so they never hold the proposal: ` +
+      preExistingSevere.map((f) => f.id).join(', '))
+}
 
 const verified = await pipeline(blocking, (f) =>
   agent([
@@ -233,22 +248,74 @@ const verified = await pipeline(blocking, (f) =>
                     verifier_reason: v ? v.reason : 'the verifier did not return' })))
 
 const byId = new Map(verified.filter(Boolean).map((f) => [f.id, f]))
+const SKIPPED_PRE_EXISTING =
+  'not verified: marked attributable:false, and a finding the change did not cause never ' +
+  'holds the proposal — the verifier would decide nothing'
 const final = findings.map((f) => byId.get(f.id)
-  || (['critical', 'required'].includes(f.severity)
+  // A severe finding that SHOULD have been verified and was not is `uncertain`: it goes
+  // to a person, never silently to the author. One that was deliberately not sent keeps
+  // what the reviewer said, with the reason it was not sent — the two are different
+  // states and collapsing them would read as a verifier failure that never happened.
+  || (['critical', 'required'].includes(f.severity) && f.attributable !== false
       ? { ...f, status: 'uncertain', verifier_reason: 'not verified' }
-      : { ...f, status: 'confirmed' }))
+      : { ...f, status: 'confirmed',
+          ...(['critical', 'required'].includes(f.severity)
+              ? { verifier_reason: SKIPPED_PRE_EXISTING } : {}) }))
 
 phase('Manual plan')
-const needsScript = classes.filter(
+const candidates = classes.filter(
   (c) => (c.section === 'B' && c.state === 'fired')
       || (c.state === 'not_assessable' && !c.not_applicable))
 
+// Classes that went quiet for the SAME reason get ONE script, not one each. When a
+// profile declares no anchors, every unassessable class carries the identical cause —
+// "this repository never said where to look" — and the honest answer to all of them is
+// the same act: version the anchors. Writing nine bespoke walkthroughs for one missing
+// section of one YAML file cost 64k tokens on a review whose whole delivery was tests,
+// and the nine read as nine problems when they are one.
+//
+// Grouping is by `cause`, the stable id the triage stamps — never by `reason`, which is
+// a translated sentence. A class with no cause (a §B that FIRED, which is a real finding
+// about this change) is never grouped: it gets its own script.
+const grouped = new Map()
+const needsScript = []
+for (const c of candidates) {
+  if (c.cause && c.state === 'not_assessable') {
+    if (!grouped.has(c.cause)) grouped.set(c.cause, [])
+    grouped.get(c.cause).push(c)
+  } else {
+    needsScript.push(c)
+  }
+}
+for (const [cause, members] of grouped) {
+  needsScript.push(members.length === 1 ? members[0] : {
+    id: members.map((m) => m.id).join(', '),
+    reason: `${members[0].reason}  — ${members.length} classes share this one cause ` +
+            `(${cause}); write ONE script that closes it for all of them, naming each.`,
+    cause,
+  })
+}
+if (candidates.length !== needsScript.length) {
+  log(`${candidates.length} classes need manual work, collapsed into ${needsScript.length} ` +
+      `script(s): classes sharing a cause are answered by one act, not one each`)
+}
+
+// WHICH delivery these scripts are for comes first, and it is not optional. Without it
+// the planner knows only a list of class ids and a package path, and it has the whole
+// workspace to read: on a repository that already holds a report from a SIBLING review,
+// it anchored on that one and wrote fifteen scripts for the previous item's SHAs. Every
+// line of them was plausible and none of them was about the delivery under review.
 const scripts = needsScript.length
   ? await agent([
       'Write a manual verification script for each item below.',
+      `THE DELIVERY UNDER REVIEW, and no other: ${bundle}/manifest.json — it names the`,
+      'item, the origin and the two SHAs. Every script must verify THAT delivery. Any',
+      'report, package or item you find elsewhere on disk belongs to a different review:',
+      'do not read it, and never take its item id, its SHAs or its findings as yours.',
       `Classes: ${JSON.stringify(needsScript.map((c) => ({ id: c.id, reason: c.reason })))}`,
       `Profile (the anchor says where and against what to verify): ${bundle}/profile.yml`,
       `Criteria from the item: ${bundle}/criteria.json`,
+      `The item itself: ${bundle}/item.md`,
       'The expected result is written BEFORE executing.',
     ].join('\n'), { agentType: agentFor('manual-verification-planner'), phase: 'Manual plan',
                     schema: SCRIPT_SCHEMA })

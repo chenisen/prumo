@@ -105,6 +105,7 @@ def assess_class(class_id: str, meta: dict, profile: dict, change: dict,
         return dict(id=class_id, section=meta["section"], state="did_not_fire",
                     reason=t("triage.not_applicable", reason=na["reason"],
                              approver=na["approver"], date=na["date"]),
+                    cause="not_applicable",
                     not_applicable=True, waiver=None, evidence=[])
 
     # 2. capability: a class that leans on a check is not assessable without the tool
@@ -116,6 +117,7 @@ def assess_class(class_id: str, meta: dict, profile: dict, change: dict,
             return dict(id=class_id, section=meta["section"], state="not_assessable",
                         reason=t("triage.no_tool", check=role,
                                  reason=cap.get("reason") or t("triage.check_not_declared")),
+                        cause="no_tool",
                         not_applicable=False,
                         waiver=waiver if waiver_in_force(waiver) else None, evidence=[])
 
@@ -124,6 +126,7 @@ def assess_class(class_id: str, meta: dict, profile: dict, change: dict,
     if not has_anchor and meta["anchor_required"]:
         return dict(id=class_id, section=meta["section"], state="not_assessable",
                     reason=t("triage.no_anchor", repo=profile.get("profile")),
+                    cause="no_anchor",
                     not_applicable=False, waiver=None, evidence=[])
 
     # 4. assess. The path says where; the pattern says what. `combination` decides whether

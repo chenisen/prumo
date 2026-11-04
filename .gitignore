@@ -13,7 +13,12 @@ __pycache__/
 # Run state, never source. `review.py prepare` creates it and `conclude` removes it; a
 # copy swept into a commit by a run that had a review open blocks push and commit for
 # everybody who checks the repo out, until it expires four hours later.
-.claude/.task-review-ativo
+# Run state, never source. The pattern is UNANCHORED on purpose: the marker is written
+# next to `CLAUDE_PROJECT_DIR` or the cwd, so a review launched from inside this
+# repository drops it under `scripts/.claude/` — which the old root-anchored pattern did
+# not match, and one `git add -A` later it was committed. The hygiene test caught it; the
+# ignore should have.
+**/.claude/.task-review-ativo
 
 # An installation's own facts, which are never the method's: the profiles of somebody's
 # repositories, the reports a run produced, and anything carrying a VALUE rather than a

@@ -70,7 +70,13 @@ CLASSES = {
                 question="was an already-applied schema artefact edited?"),
     "A2":  dict(section="A", anchor_required=True,
                 question="did the shape of an outbound contract change?"),
-    "A3":  dict(section="A", anchor_required=False, combination="e",
+    # A3 asks what the SYSTEM authorises, so proof is not where it happens: a test that
+    # asserts a 401 or names a tenant touches no authorisation scope, and matching the
+    # word `tenant` inside a test file cost a human decision about something that did not
+    # occur. Same argument as A5 and A6, applied here on 2026-11-04 after a test-only
+    # delivery fired it on one word.
+    "A3":  dict(section="A", anchor_required=False, code_only=True, production_only=True,
+                combination="e",
                 question="was an authorisation-scope or tenant clause touched?"),
     "A4":  dict(section="A", anchor_required=True,
                 question="did an integration surface change?"),
