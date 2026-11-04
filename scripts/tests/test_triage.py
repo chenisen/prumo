@@ -18,8 +18,8 @@ CAP_NONE = {"checks": {r: {"available": False, "reason": "tool absent"} for r in
 
 
 def change(files=(), diff="", removed=(), lines=10):
-    return {"arquivos": list(files), "diff": diff,
-            "removidos": list(removed), "lines_changed": lines}
+    return {"files": list(files), "diff": diff,
+            "removed": list(removed), "lines_changed": lines}
 
 
 def assess(class_id, profile, chg, cap=CAP_ALL):
@@ -258,3 +258,52 @@ def test_every_reviewer_slice_is_written_by_the_package():
     assert used <= declared, (
         f"slice with no matching file: {sorted(used - declared)} — "
         f"package.py writes {sorted(declared)}")
+
+
+class TestThePackageKeysTriageReads(unittest.TestCase):
+    """`triage.py` reads `change.json`. A key the package never writes is not a nil-safe
+    default: it is a rule that can never fire, and it fails in SILENCE — the class simply
+    reports "nothing matched the anchor" forever.
+
+    Found on 2026-11-04: `change.json` has called the list `files` since the method was
+    written in English, and triage still asked for `arquivos`. Every anchored class was
+    dead, and the three always-on reviewers never activated.
+    """
+
+    def test_an_anchored_class_fires_when_a_file_matches_its_anchor(self):
+        """A1 takes the path alone — no `combination` — so an anchor match IS the
+        evidence. Under the defect this was unreachable: `files` came back empty, so
+        `by_path` was empty, so no anchored class could ever fire."""
+        profile = {"profile": "repo-x", "anchors": {"A1": {"paths": ["database/migrations/**"]}}}
+        change = {"files": ["database/migrations/2026_01_01_add_column.php"],
+                  "removed": [], "diff": "+ $table->string('x');\n"}
+        state = assess_class("A1", CLASSES["A1"], profile, change, CAP_ALL)
+        self.assertEqual("fired", state["state"], state["reason"])
+
+    def test_A8_still_needs_a_removal_and_not_merely_a_test_path(self):
+        """A8 combines path AND pattern. Adding tests under an anchored `tests/**` is not
+        removing or weakening one, and the fix above must not turn every test delivery
+        into a human decision."""
+        profile = {"profile": "repo-x", "anchors": {"A8": {"paths": ["tests/**"]}}}
+        change = {"files": ["tests/Module/XTest.php"], "removed": [],
+                  "diff": "+ $this->assertSame(1, 1);\n"}
+        state = assess_class("A8", CLASSES["A8"], profile, change, CAP_ALL)
+        self.assertEqual("did_not_fire", state["state"])
+
+    def test_the_always_on_reviewers_activate_when_the_change_has_files(self):
+        from triage import REVIEWERS
+        change = {"files": ["tests/Module/XTest.php"], "diff": ""}
+        always_on = [r["agent"] for r in REVIEWERS
+                     if not r.get("always") and r["when"](change, [])]
+        for agent in ("correctness-proof-reviewer", "security-privacy-reviewer",
+                      "architecture-reviewer"):
+            self.assertIn(agent, always_on)
+
+    def test_no_reader_asks_for_a_key_the_package_does_not_write(self):
+        """The general form of the same defect, so the next rename is caught here."""
+        import re
+        written = {"files", "removed", "added", "lines_changed", "diff", "slices",
+                   "over_ceiling"}  # exactly what package.py writes
+        source = pathlib.Path(__file__).resolve().parent.parent / "triage.py"
+        asked = set(re.findall(r'change\.get\("([a-z_]+)"\)', source.read_text(encoding="utf-8")))
+        self.assertEqual(set(), asked - written, f"triage.py reads keys change.json never writes")

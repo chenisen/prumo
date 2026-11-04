@@ -91,7 +91,11 @@ def assess_class(class_id: str, meta: dict, profile: dict, change: dict,
                  capabilities: dict) -> dict:
     """Decides the state of ONE class. A pure function: same input, same state."""
     anchor = (profile.get("anchors") or {}).get(class_id)
-    files = change.get("arquivos") or []
+    # `change.json` calls this `files`. It was `arquivos` until the method was written
+    # in English, and the rename missed here — which made `files` silently EMPTY, so no
+    # anchor ever matched and every anchored class reported "nothing matched the anchor".
+    # A key the package does not write is not a nil-safe default: it is a dead rule.
+    files = change.get("files") or []
     diff = change.get("diff") or ""
     body = _added_and_removed_lines(diff)
 
@@ -155,7 +159,7 @@ def assess_class(class_id: str, meta: dict, profile: dict, change: dict,
             break
 
     if class_id == "A8":
-        for f in change.get("removidos") or []:
+        for f in change.get("removed") or []:
             if RE_TEST.search(f):
                 by_pattern.append({"file": f, "by": t("triage.by_removed_test")})
 
@@ -225,11 +229,11 @@ def size_band(profile: dict, change: dict) -> dict:
 REVIEWERS = [
     dict(agent="scope-coherence-reviewer", slice="complete", always=True),
     dict(agent="correctness-proof-reviewer", slice="code-and-tests", always=False,
-         when=lambda m, c: bool(m.get("arquivos"))),
+         when=lambda m, c: bool(m.get("files"))),
     dict(agent="security-privacy-reviewer", slice="code-and-config", always=False,
-         when=lambda m, c: bool(m.get("arquivos"))),
+         when=lambda m, c: bool(m.get("files"))),
     dict(agent="architecture-reviewer", slice="code-and-tests", always=False,
-         when=lambda m, c: bool(m.get("arquivos"))),
+         when=lambda m, c: bool(m.get("files"))),
     dict(agent="contract-compat-reviewer", slice="contract", always=False,
          when=lambda m, c: any(x["id"] in ("A1", "A2", "A4") and x["state"] == "fired" for x in c)),
     dict(agent="domain-rules-reviewer", slice="code-and-tests", always=False,

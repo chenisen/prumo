@@ -28,7 +28,7 @@ DIFF_PRODUCTION = """diff --git a/app/Rules/Rule.php b/app/Rules/Rule.php
 
 
 def change(files, diff):
-    return {"arquivos": files, "removidos": [], "diff": diff, "corpo": diff}
+    return {"files": files, "removed": [], "diff": diff}
 
 
 def assess(class_id, files, diff):
@@ -69,8 +69,8 @@ class TestA8StillLooksAtTests(unittest.TestCase):
                 "--- a/tests/Unit/Promotion/RuleTest.php\n"
                 "+++ b/tests/Unit/Promotion/RuleTest.php\n"
                 "-        $this->assertTrue($refused);\n")
-        m = {"arquivos": ["tests/Unit/Promotion/RuleTest.php"], "removidos": [],
-             "diff": diff, "corpo": diff}
+        m = {"files": ["tests/Unit/Promotion/RuleTest.php"], "removed": [],
+             "diff": diff}
         c = assess_class("A8", CLASSES["A8"], {"profile": "repo-x",
                          "anchors": {"A8": {"paths": ["tests/**"]}}}, m, CAP)
         self.assertEqual(c["state"], "fired", c)
