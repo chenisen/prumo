@@ -155,9 +155,8 @@ review.py conclude --package P --findings A [--scripts-manual R]  # F7 F9 F11
 **The rule** (the five gates, with what closed any that is shut), a **Measured** block
 (suite, risk classes, acceptance criteria, size, findings), **Open routes** when the
 verdict is INTERVENTION, the **acceptance criteria each with its record**, the
-**findings with their evidence**, the **observations on the pre-existing** and the
-**project's pending items** with owners, and the line saying that approving does not
-merge.
+**findings with their evidence**, the **project's pending items** with owners, and the
+line saying that approving does not merge.
 
 **It never names a file.** Until 2026-11-04 it closed by printing the report's path, and
 a path under the reports root is unreadable to everybody except whoever ran the review:
@@ -165,15 +164,34 @@ the person reading the item is on another machine, and naming it told them a rep
 existed without letting them read a line of it. So what decides travels inside the
 comment.
 
-What stays out is what is an **instruction to execute later** — the manual scripts and
-this environment's capabilities. Those are work orders, not the record of a verdict, and
-they are what would drown the comment on a repository whose profile leaves nine classes
-unassessable. Narrative, prose pending work and a suggestion for the next step stay out
-too: they **decide nothing on the item** and drown what does. An empty section is never
-printed, because a heading with no body cannot be told apart from "nobody looked"; and a
-**refuted** finding appears nowhere, because the verifier knocked it down. All of it is
-pinned in `tests/test_item_comment.py`; a new SECTION that does not fit belongs to the
-report.
+**It carries only what THIS delivery caused.** A finding with `attributable: false` does
+not appear. The item belongs to whoever wrote the delivery, and listing the repository's
+pre-existing defects beside theirs reads as a list of things they have to answer for —
+which is exactly what `attributable` exists to prevent. The observations are not erased:
+they live in the report, where the repository's owner reads them. Asked for on
+2026-11-04.
+
+A consequence worth knowing when you write a criterion's **record**: it must state its
+fact, never point at a finding id. A record reading "the pipeline runs no test job (see
+CI-1)" travels into the comment while `CI-1` does not, and a dangling cross-reference in
+a published comment is the same defect as the path that used to close it.
+
+What stays out for the same reason is what is an **instruction to execute later** — the
+manual scripts and this environment's capabilities. Those are work orders, not the record
+of a verdict, and they are what would drown the comment on a repository whose profile
+leaves nine classes unassessable. Narrative, prose pending work and a suggestion for the
+next step stay out too: they **decide nothing on the item** and drown what does. An empty
+section is never printed, because a heading with no body cannot be told apart from
+"nobody looked"; and a **refuted** finding appears nowhere, because the verifier knocked
+it down.
+
+The **project's pending items** are the one thing that is not this delivery's and stays,
+because they are not findings: they are the declared limit of the review's own reach,
+with owners, and they are what the `Measured` block's "nine not assessable" points at.
+Dropping them would leave that number unexplained on the comment that states the verdict.
+
+All of it is pinned in `tests/test_item_comment.py`; a new SECTION that does not fit
+belongs to the report.
 
 **An empty diff is a stop**, not a clean review: with no file there is nothing to review.
 

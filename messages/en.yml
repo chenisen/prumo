@@ -51,8 +51,6 @@ comment:
   ran: ran
   section_criteria: Acceptance criteria
   section_findings: Findings in this delivery
-  section_observations: Observations on the pre-existing — outside the count and outside
-    the verdict
   section_project_pending: PROJECT pending items — declared, outside the verdict
   size_value: '{lines} lines, band <code>{band}</code>'
   the_rule: The rule

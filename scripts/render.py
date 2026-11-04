@@ -269,13 +269,25 @@ def build_item_comment(package: pathlib.Path) -> str:
     path, and that path is meaningless to everybody except whoever ran the review: the
     reader of the item is on another machine, and a local path tells them a report exists
     without letting them read a line of it. So what decides now travels INSIDE the
-    comment — the five gates, the acceptance criteria with their records, the findings
-    with their evidence, the observations and the project's pending items.
+    comment — the five gates, the acceptance criteria with their records, and the
+    findings with their evidence.
 
-    What stays out is what is an instruction for somebody to execute later — the manual
-    scripts and this environment's capabilities. Those are work orders, not the record of
-    a verdict, and they are what would drown the comment on a repository whose profile
-    leaves nine classes unassessable.
+    **It carries only what THIS delivery caused.** A finding the change did not cause
+    (`attributable: false`) does not appear: the comment is the record of a verdict on a
+    delivery, and the item it hangs on belongs to whoever wrote that delivery. Listing
+    the repository's pre-existing defects beside theirs reads as a list of things they
+    have to answer for, which is exactly what `attributable` exists to prevent. The
+    observations are not erased — somebody chose to look and saw them — they live in the
+    report, where the repository's owner reads them.
+
+    What stays out for the same reason is what is an instruction for somebody to execute
+    later — the manual scripts and this environment's capabilities. Those are work
+    orders, not the record of a verdict.
+
+    The project's pending items DO stay, and they are not findings: they are the declared
+    limit of this review's own reach, with owners. They are what the `Measured` block's
+    "nine not assessable" points at, and dropping them would leave that number unexplained
+    on the very comment that states the verdict.
     """
     def optional(name, default):
         path = package / name
@@ -388,10 +400,10 @@ def build_item_comment(package: pathlib.Path) -> str:
     body = rule() + body
     body += section("comment.open_routes", route_items("delivery"))
     body += section("comment.section_criteria", criteria_items())
+    # `conclude` already moves the non-attributable ones to `observations.json`; the
+    # filter here is the second lock, for a package assembled by hand.
     body += section("comment.section_findings",
                     finding_items([a for a in findings if a.get("attributable", True)], True))
-    body += section("comment.section_observations",
-                    finding_items(optional("observations.json", []), False))
     body += section("comment.section_project_pending", route_items("project"))
 
     template = (DIR_TEMPLATES / "item-comment.html").read_text(encoding="utf-8")

@@ -55,8 +55,6 @@ comment:
   ran: rodou
   section_criteria: Critérios de aceite
   section_findings: Achados desta entrega
-  section_observations: Observações sobre o pré-existente — fora da contagem e fora do
-    veredito
   section_project_pending: Pendências do PROJETO — declaradas, fora do veredito
   size_value: '{lines} linhas, faixa <code>{band}</code>'
   the_rule: A regra

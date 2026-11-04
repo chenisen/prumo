@@ -158,7 +158,10 @@ class TestWhatGoesIn(unittest.TestCase):
         self.assertIn("https://host/pipelines/188523", h)
         self.assertNotIn("188523:?", h)
 
-    def test_separates_the_pre_existing_from_this_delivery(self):
+    def test_carries_what_this_delivery_caused_and_nothing_else(self):
+        """The item belongs to whoever wrote the delivery. A pre-existing defect listed
+        beside theirs reads as something they have to answer for — which is what
+        `attributable` exists to prevent. It is not erased: it lives in the report."""
         d = package(
             verdict={"verdict": "APPROVED", "routes": [], "summary": {}},
             findings=[{"id": "SC-2", "severity": "nit", "status": "confirmed",
@@ -168,9 +171,18 @@ class TestWhatGoesIn(unittest.TestCase):
                            "attributable": False, "claim": "not mine",
                            "evidence": [{"file": "b", "line": 2}]}])
         h = build_item_comment(d)
-        self.assertIn(heading(t("comment.section_findings")), h)
-        self.assertIn(heading(t("comment.section_observations")), h)
-        self.assertIn("not mine", h)
+        self.assertIn("mine", h)
+        self.assertNotIn("not mine", h)
+        self.assertNotIn("CI-1", h)
+
+    def test_drops_a_non_attributable_finding_left_in_the_findings_file(self):
+        """Second lock: `conclude` normally moves it to `observations.json`, but a
+        package assembled by hand can leave it in place."""
+        h = approved(findings=[
+            {"id": "SC-9", "severity": "fyi", "status": "confirmed", "attributable": False,
+             "claim": "the repository already did this", "consequence": "c",
+             "evidence": [{"file": "a", "line": 1}]}])
+        self.assertNotIn("the repository already did this", h)
 
     def test_carries_the_project_pending_items_with_their_owner(self):
         h = approved(verdict={
@@ -228,7 +240,7 @@ class TestWhatStaysOUT(unittest.TestCase):
         h = build_item_comment(package(
             verdict={"verdict": "APPROVED", "routes": [], "summary": {}}))
         for absent in ("comment.section_criteria", "comment.section_findings",
-                       "comment.section_observations", "comment.section_project_pending"):
+                       "comment.section_project_pending"):
             self.assertNotIn(heading(t(absent)), h)
 
     def test_does_not_invent_a_field_the_package_does_not_carry(self):
