@@ -375,10 +375,14 @@ def build_item_comment(package: pathlib.Path) -> str:
             lines.append(f"<li>{mark} <strong>{gate['number']}.</strong> "
                          f"{escape(gate['condition'])}{detail}</li>")
         block = section("comment.the_rule", lines)
-        baseline = summary.get("repo_baseline")
-        if block and baseline:
-            block += (f"<p><em>{t('comment.baseline_note')} "
-                      f"{escape(baseline)}</em></p>")
+        # Measured facts that decide nothing but explain the verdict: the repository's
+        # own red baseline, and a proposal sitting behind its base. Both sit next to the
+        # rule because that is where a reader asks "and what about…".
+        for note in (summary.get("repo_baseline") and
+                     f"{t('comment.baseline_note')} {escape(summary['repo_baseline'])}",
+                     summary.get("stale_base") and escape(summary["stale_base"])):
+            if block and note:
+                block += f"<p><em>{note}</em></p>"
         return block
 
     def route_items(origin: str) -> list[str]:

@@ -77,6 +77,17 @@ class TestWhatGoesIn(unittest.TestCase):
         self.assertIn(t("suite.red_baseline"), h)
         self.assertNotIn("X" * 50, h)
 
+    def test_carries_the_staleness_note_when_the_proposal_is_behind_its_base(self):
+        """It decides nothing — only a real conflict does — but it is measured, and the
+        reader of the item asks about it."""
+        h = approved(verdict={
+            "verdict": "APPROVED", "routes": [],
+            "gates": [{"number": 1, "name": "standards", "condition": "c",
+                       "passed": True, "items": []}],
+            "summary": {"profile_coverage": "18/18", "classes_not_assessable": [],
+                        "stale_base": "two commits behind, merges cleanly"}})
+        self.assertIn("two commits behind, merges cleanly", h)
+
     def test_counts_the_criteria_met_over_the_total(self):
         cs = [{"id": f"AC-{i}", "text": "t", "state": s, "record": None}
               for i, s in enumerate(["met", "met", "not_verifiable"])]
