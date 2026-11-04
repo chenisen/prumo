@@ -76,10 +76,21 @@ def find_run(package: str | None, run_id: str | None) -> dict | None:
 def usage_per_agent(session: pathlib.Path, run_id: str) -> list[dict]:
     """One record per workflow agent: type, model, messages and the four components.
 
-    `messages` counts assistant messages in the transcript, which is **not** the agent's
-    `maxTurns`: an agent capped at 25 showed up here with 44. Calling that "turns" would
-    make it look as though the cap had been breached. What the count measures is how many
-    requests the agent made — and that is what multiplies the cost.
+    `messages` counts the agent's REQUESTS, which is **not** its `maxTurns`: an agent
+    capped at 25 showed up here with 29. Calling that "turns" would make it look as though
+    the cap had been breached. What the count measures is how many requests the agent
+    made — and that is what multiplies the cost.
+
+    **One request is one `message.id`, never one line.** The transcript writes a line per
+    streaming chunk, and every chunk repeats the same `usage` snapshot of the response it
+    belongs to. Summing line by line therefore counted each request two to five times:
+    measured on 2026-11-04, one agent had 46 lines carrying `usage` and 17 distinct ids,
+    and the eleven reviews on disk added up to 112M against a real 48M. An inflated figure
+    is worse than no figure here, because it is the number every optimisation is judged
+    against — and it was about to be used to cut a phase that was not the expensive one.
+
+    The LAST snapshot of an id wins: the chunks of one response carry the usage as it was
+    known when each was emitted, and only the final one is complete.
     """
     agents_dir = session / "subagents" / "workflows" / run_id
     out = []
@@ -91,25 +102,35 @@ def usage_per_agent(session: pathlib.Path, run_id: str) -> list[dict]:
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             meta = {}
-        counts, models, messages = collections.Counter(), set(), 0
-        for line in jsonl.read_text(encoding="utf-8", errors="ignore").splitlines():
+        counts, models = collections.Counter(), set()
+        # Keyed by `message.id` so the streaming chunks of one response collapse into the
+        # single request they are. A line with no id cannot be collapsed with anything —
+        # it gets a key of its own rather than being dropped, because an uncountable
+        # request is still a request.
+        per_request: dict[str, dict] = {}
+        for n, line in enumerate(
+                jsonl.read_text(encoding="utf-8", errors="ignore").splitlines()):
             try:
                 o = json.loads(line)
             except json.JSONDecodeError:
                 continue
             if o.get("type") != "assistant":
                 continue
-            messages += 1
             msg = o.get("message") or {}
             if msg.get("model"):
                 models.add(msg["model"])
-            for k, v in (msg.get("usage") or {}).items():
+            usage = msg.get("usage") or {}
+            if not usage:
+                continue
+            per_request[msg.get("id") or f"line-{n}"] = usage
+        for usage in per_request.values():
+            for k, v in usage.items():
                 if k in COMPONENTS and isinstance(v, int):
                     counts[k] += v
         out.append({
             "agent": meta.get("agentType", jsonl.stem),
             "model": sorted(models)[0] if models else None,
-            "messages": messages,
+            "messages": len(per_request),
             **{k: counts[k] for k in COMPONENTS},
             "billable": sum(counts[k] for k in COMPONENTS),
         })

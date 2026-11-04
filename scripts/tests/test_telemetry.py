@@ -1,7 +1,8 @@
 """Telemetry is the ground under every cost decision — if it lies, the next cut is blind.
 
 What these tests hold: absence does not become zero, instances of the same agent add up,
-and the two totals stay apart.
+the two totals stay apart, and the streaming chunks of one response count as the single
+request they are.
 """
 import json
 import os
@@ -100,6 +101,51 @@ class TestTelemetry(unittest.TestCase):
         m = telemetry.measure("/tmp/pkg-x", None)
         self.assertEqual(m["harness_tokens"], 42)
         self.assertEqual(m["billable_tokens"], 7)
+
+
+    def test_the_chunks_of_one_response_count_as_one_request(self):
+        """The transcript writes a line per streaming chunk, and every chunk repeats the
+        same `usage` snapshot. Summing line by line counted each request two to five
+        times: one agent measured on 2026-11-04 had 46 lines carrying `usage` and 17
+        distinct ids, and the eleven reviews on disk added up to 112M against a real 48M.
+
+        This is the test that stops an inflated figure, which is worse than no figure —
+        it is what every optimisation is judged against, and it was about to be used to
+        cut a phase that was not the expensive one."""
+        session = _session(self.root, agents=[("correctness-proof-reviewer", [])])
+        agents_dir = session / "subagents" / "workflows" / "wf_test"
+        chunk = {"input_tokens": 2, "output_tokens": 8,
+                 "cache_creation_input_tokens": 1878, "cache_read_input_tokens": 56812}
+        final = dict(chunk, output_tokens=448)
+        lines = [json.dumps({"type": "assistant",
+                             "message": {"id": "msg_A", "model": "claude-opus-5",
+                                         "usage": u}})
+                 # four partial chunks and the complete one, all of a single response
+                 for u in (chunk, chunk, chunk, chunk, final)]
+        lines.append(json.dumps({"type": "assistant",
+                                 "message": {"id": "msg_B", "model": "claude-opus-5",
+                                             "usage": chunk}}))
+        (agents_dir / "agent-0.jsonl").write_text("\n".join(lines) + "\n",
+                                                  encoding="utf-8")
+
+        m = telemetry.measure("/tmp/pkg-x", None)
+        self.assertEqual(m["per_agent"][0]["messages"], 2)
+        # the LAST snapshot of an id wins: only the final chunk carries the whole output
+        self.assertEqual(m["tokens"], sum(final.values()) + sum(chunk.values()))
+
+
+    def test_a_response_with_no_id_is_still_counted_once(self):
+        """An uncountable request is still a request: with nothing to collapse it with,
+        it gets a key of its own rather than being dropped."""
+        _session(self.root, agents=[("security-privacy-reviewer", [
+            {"input_tokens": 1, "output_tokens": 1,
+             "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0},
+            {"input_tokens": 1, "output_tokens": 1,
+             "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0},
+        ])])
+        m = telemetry.measure("/tmp/pkg-x", None)
+        self.assertEqual(m["per_agent"][0]["messages"], 2)
+        self.assertEqual(m["tokens"], 4)
 
 
     def test_the_most_recent_run_wins_when_there_is_a_repeat(self):
