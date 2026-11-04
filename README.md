@@ -218,6 +218,8 @@ paths:
   repositories: ./repositories            # where the repos to review live
   profiles:     ./profiles                # one .yml per repository
   reports:      ./reports                 # reports + runs.jsonl
+  # knowledge:  ./knowledge               # optional — defaults to <reports>/_knowledge
+  # packages:   ./packages                # optional — defaults to $TMPDIR/task-review
 
 tracker:
   type: businessmap                       # businessmap | jira | acelerato | generic
@@ -243,6 +245,8 @@ configuration: /my-workspace/prumo.yml
   repositories /my-workspace/repositories
   profiles     /my-workspace/profiles
   reports      /my-workspace/reports
+  knowledge    /my-workspace/reports/_knowledge
+  packages     /tmp/task-review
 ```
 
 **What each provider changes:**
