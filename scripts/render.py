@@ -52,6 +52,73 @@ def class_question(class_id: str) -> str:
     return t(f"class_question.{class_id}")
 
 
+# Items a route or a gate can carry that are neither a class, a finding nor a criterion:
+# mechanical facts the judge names in a single word. The keys on the left are DATA,
+# written by the judge; only the sentence a person reads is translated.
+MECHANICAL = {
+    "suite": "item_meaning.suite",
+    "delivery_untested": "item_meaning.delivery_untested",
+    "conflict": "item_meaning.conflict",
+    "mandatory_reading": "item_meaning.mandatory_reading",
+}
+
+# A criterion's text and a finding's claim are written to be read on their own line, not
+# inside a table cell. Past this many characters they are cut, because a cell that wraps
+# six times hides the three other routes under it.
+MEANING_CEILING = 90
+
+
+def meanings_for(classes: list[dict], criteria: list[dict],
+                 findings: list[dict]):
+    """Resolves a route's or a gate's item to what it MEANS, in the reader's language.
+
+    `A8`, `AC-3`, `SEC-01` are the harness talking to itself. The person reading the
+    report has never seen the class catalogue, did not choose the criterion ids and
+    cannot look either of them up from where they are standing — so an id on its own
+    says only that something is owed, never what. This is the rule the item comment has
+    followed since 2026-11-04 (`No class id travels alone`), applied to the REPORT,
+    which is the artefact a reviewer actually opens.
+
+    Returns `None` for an id nothing explains — an out-of-scope file path and a
+    repository name already say what they are, and inventing a gloss for them would be
+    worse than the bare string."""
+    del classes  # the question comes from the catalogue, not from the triaged state
+    by_criterion = {c["id"]: c.get("text") for c in criteria}
+    by_finding = {f["id"]: f.get("claim") for f in findings}
+
+    def meaning(item: str) -> str | None:
+        if item in CLASSES:
+            return class_question(item)
+        if item in MECHANICAL:
+            return t(MECHANICAL[item])
+        text = by_criterion.get(item) or by_finding.get(item)
+        if not text:
+            return None
+        text = " ".join(text.split())
+        return text if len(text) <= MEANING_CEILING else text[:MEANING_CEILING - 1] + "…"
+
+    return meaning
+
+
+def named(items: list[str], meaning) -> str:
+    """Every id with what it means beside it, and the bare id only when nothing explains
+    it. The separator is `;` and not `,` because a question carries its own commas."""
+    return "; ".join(
+        f"`{i}` ({m})" if (m := meaning(i)) else f"`{i}`" for i in items)
+
+
+def gate_of(verdict: dict, items: list[str]) -> str:
+    """Which of the five conditions these items close, named and not just numbered.
+
+    The judge records the gate per item, so the route does not have to carry it: a route
+    serves more than one gate — `author_fix` takes a finding (gate 1) and an unmet
+    criterion (gate 3) — and the number alone is one more code the reader never agreed
+    to learn."""
+    hit = [g for g in verdict.get("gates", [])
+           if not g["passed"] and set(g["items"]) & set(items)]
+    return ", ".join(f"**{g['number']}.** {t('gate_name.' + g['name'])}" for g in hit)
+
+
 def vocabulary() -> dict:
     """Both forms of every vocabulary word, so each catalogue can take the one its
     language needs: English takes the bare noun, Portuguese the one carrying the article.
@@ -76,23 +143,36 @@ def safe_html(fragment: str) -> str:
     return escaped
 
 
-def routes_table(verdict: dict, origin: str = "delivery") -> str:
+def routes_table(verdict: dict, origin: str = "delivery", meaning=None) -> str:
+    """One row per route. `meaning` resolves each item to what it asks, so the cell
+    reads as a sentence instead of as a code the reader has to decode elsewhere; the
+    gate column says WHICH of the five conditions the row closed, by name."""
+    meaning = meaning or (lambda _: None)
     rows = []
     target = [r for r in verdict["routes"] if r.get("origin", "delivery") == origin]
     for i, r in enumerate(target, 1):
-        items = ", ".join(f"`{x}`" for x in r["items"])
         detail = " ".join(r.get("details") or []) or r["closes_when"]
-        rows.append(f"| {i} | {t(ROUTE_READABLE[r['type']])} | {r['owner']} | "
-                    f"{items} — {detail} |")
-    return "\n".join(rows) or f"| — | — | — | {t('report.no_open_routes')} |"
+        # A project pending item closes no gate — that is the whole point of its
+        # origin — so that table has no gate column at all. An always-empty column
+        # reads as "nobody looked", which is the opposite of what it would mean.
+        gate = f" {gate_of(verdict, r['items'])} |" if origin == "delivery" else ""
+        rows.append(f"| {i} | {t(ROUTE_READABLE[r['type']])} |{gate} {r['owner']} | "
+                    f"{named(r['items'], meaning)} — {detail} |")
+    # One dash per column but the last, which carries the sentence. The delivery table
+    # has five columns, the project one four — a row that does not match its header
+    # renders as a broken table, not as a missing cell.
+    empty = "| — " * (4 if origin == "delivery" else 3)
+    return "\n".join(rows) or f"{empty}| {t('report.no_open_routes')} |"
 
 
-def routes_header() -> str:
-    return (f"| # | {t('report.col_route')} | {t('report.col_owner')} | "
-            f"{t('report.col_what')} |\n|---|---|---|---|\n")
+def routes_header(gate: bool = True) -> str:
+    gate_col = f" {t('report.col_gate')} |" if gate else ""
+    return (f"| # | {t('report.col_route')} |{gate_col} {t('report.col_owner')} | "
+            f"{t('report.col_what')} |"
+            "\n|---|---|" + ("---|" if gate else "") + "---|---|\n")
 
 
-def project_pending_table(verdict: dict) -> str:
+def project_pending_table(verdict: dict, meaning=None) -> str:
     """Debt of the repository and of the harness: always declared, always charged to
     whoever created it.
 
@@ -101,7 +181,8 @@ def project_pending_table(verdict: dict) -> str:
     if not any(r.get("origin") == "project" for r in verdict["routes"]):
         return t("report.project_pending_none")
     return (t("report.project_pending_note", **vocabulary()) + "\n\n"
-            + routes_header() + routes_table(verdict, origin="project"))
+            + routes_header(gate=False)
+            + routes_table(verdict, origin="project", meaning=meaning))
 
 
 def class_list(classes: list[dict], section: str, state: str) -> str:
@@ -122,6 +203,10 @@ def build_report(package: pathlib.Path) -> str:
     optional = lambda n, v: read_json(package / n) if (package / n).exists() else v
     criteria, findings = optional("criteria.json", []), optional("findings.json", [])
     observations = optional("observations.json", [])
+    # A route may point at a finding the `attributable` split moved out of `findings`,
+    # so the resolver reads both files — an id whose text sits in the other list would
+    # otherwise come out bare, which is the defect this resolver exists to remove.
+    meaning = meanings_for(classes, criteria, findings + observations)
 
     def sec_criteria():
         if not criteria:
@@ -206,11 +291,14 @@ def build_report(package: pathlib.Path) -> str:
 
     def sec_gates():
         """The rule, before any route. Five lines; all of them have to pass."""
-        rows = [f"| | {t('report.col_condition')} | |", "|---|---|---|"]
+        rows = [f"| | {t('report.col_condition')} | {t('report.col_what_closed_it')} |",
+                "|---|---|---|"]
         for gate in verd.get("gates", []):
             mark = "✅" if gate["passed"] else "❌"
-            detail = ("" if gate["passed"]
-                      else "  →  " + ", ".join(f"`{i}`" for i in gate["items"]))
+            # The id of whatever closed the gate, WITH the question it asks. A bare
+            # `A8` here is the one place a reader cannot skip, and it was the one place
+            # that printed a code and nothing else.
+            detail = "" if gate["passed"] else named(gate["items"], meaning)
             rows.append(f"| {mark} | **{gate['number']}.** {escape(gate['condition'])} "
                         f"| {detail} |")
         baseline = verd["summary"].get("repo_baseline")
@@ -226,7 +314,7 @@ def build_report(package: pathlib.Path) -> str:
         if verd["verdict"] == "APPROVED":
             return (t("report.nothing_open") + "\n\n"
                     + "> " + t("report.approve_not_merge", **vocabulary()))
-        return routes_header() + routes_table(verd)
+        return routes_header() + routes_table(verd, meaning=meaning)
 
     template = (DIR_TEMPLATES / "report.md").read_text(encoding="utf-8")
     return template.format(
@@ -253,7 +341,7 @@ def build_report(package: pathlib.Path) -> str:
         section_not_assessable=sec_not_assessable(), section_findings=sec_findings(),
         section_observations=sec_observations(),
         section_capabilities=sec_capabilities(), verdict=t(READABLE[verd["verdict"]]),
-        section_project_pending=project_pending_table(verd),
+        section_project_pending=project_pending_table(verd, meaning=meaning),
         verdict_detail=(t("report.verdict_clean") if verd["verdict"] == "APPROVED"
                         else t("report.verdict_routes",
                                n=len([r for r in verd["routes"]
@@ -310,6 +398,8 @@ def build_item_comment(package: pathlib.Path) -> str:
     summary = verd.get("summary", {})
     evidence, criteria = optional("evidence.json", {}), optional("criteria.json", [])
     findings, size = optional("findings.json", []), optional("size.json", {})
+    meaning = meanings_for(optional("classes.json", []), criteria,
+                           findings + optional("observations.json", []))
 
     # Class ids whose question this comment has already spelled out. A second mention
     # prints the bare id: the reader met it a few lines above.
@@ -370,8 +460,17 @@ def build_item_comment(package: pathlib.Path) -> str:
         lines = []
         for gate in verd.get("gates", []):
             mark = "✅" if gate["passed"] else "❌"
+            # The same rule the routes below follow: an id goes in with what it asks,
+            # unless `Measured` spelled it out a few lines above. This block used to be
+            # the one place in the comment that still printed `A8` and nothing else —
+            # and it is the line that states WHY the verdict is what it is.
+            fresh = [i for i in gate["items"] if i in CLASSES and i not in explained]
+            explained.update(fresh)
             detail = ("" if gate["passed"]
-                      else " → " + escape(", ".join(gate["items"])))
+                      else " → " + "; ".join(
+                          f"{escape(i)} ({escape(m)})"
+                          if (m := meaning(i)) and (i in fresh or i not in CLASSES)
+                          else escape(i) for i in gate["items"]))
             lines.append(f"<li>{mark} <strong>{gate['number']}.</strong> "
                          f"{escape(gate['condition'])}{detail}</li>")
         block = section("comment.the_rule", lines)

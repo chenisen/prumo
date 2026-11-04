@@ -171,6 +171,17 @@ evidence:
     — an allowed command chained to another one is a different command
   suite_line: '  suite: {state} — {reason}'
   timed_out: timed out after {seconds}s
+gate_name:
+  standards: standards and good practice
+  business_rules: business rule
+  item_covered: covers what the item asked for
+  no_manual: manual verification
+  measured: actually measured
+item_meaning:
+  suite: how the test suite ended
+  delivery_untested: what the delivery wrote has no test over it
+  conflict: the proposal does not merge with the base
+  mandatory_reading: the mandatory reading — item and proposal description — came back empty
 metrics:
   no_history: no history yet at {path} — the first run creates it
   precision_basis: '{judged} of {total} runs closed by a person'
@@ -237,8 +248,10 @@ report:
   col_record: Record
   col_role: Role
   col_route: Route
+  col_gate: Gate
   col_state: State
   col_what: What
+  col_what_closed_it: What closed it
   col_why_not_assessed: Why it was not assessed
   consequence: Consequence
   convention_read: read
@@ -293,7 +306,7 @@ report:
     the anchor, or record `not_applicable` with a reason, an approver and a date.'
   unresolved: (not resolved)
   verdict_clean: No condition for intervention applies.
-  verdict_routes: '{n} route(s) open against the delivery, listed in section 1.'
+  verdict_routes: '{n} route(s) open against the delivery, listed in section 2.'
   verdict_title: Verdict
   where: Where
 resolver:

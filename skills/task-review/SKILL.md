@@ -160,12 +160,19 @@ verdict is INTERVENTION, the **acceptance criteria each with its record**, the
 **project's pending items** with owners, and the line saying that approving does not
 merge.
 
-**No class id travels alone.** `A4, A7, A9` is the harness talking to itself: the person
-reading the item has never seen the class catalogue and cannot look it up from there.
-Every id goes in with the question it asks, resolved by `class_question()` in the
-reader's language — the questions live in the catalogues, not as literals in
-`common.py`, which is what used to print eighteen English sentences into a Portuguese
-report.
+**No id travels alone, in the comment OR in the report.** `A4, A7, A9` is the harness
+talking to itself: the person reading has never seen the class catalogue and cannot
+look it up from there — and the same holds for `AC-3` and `SEC-01`, ids this review
+invented an hour ago. Every id goes in with what it stands for, resolved by
+`meanings_for()` in the reader's language — a class's question, a criterion's text, a
+finding's claim, and a plain sentence for the mechanical items (`suite`, `conflict`,
+`delivery_untested`, `mandatory_reading`). The questions live in the catalogues, not as
+literals in `common.py`, which is what used to print eighteen English sentences into a
+Portuguese report. **A gate is named, not only numbered**, for the same reason: the
+route table says which of the five conditions a row closed, in words. Extended to the
+report on 2026-11-04, after a verdict held by a lone `A8` — the comment had been doing
+it for a day, and the report, which is the artefact a reviewer actually opens, had not.
+Pinned in `tests/test_render.py`.
 
 **It never names a file.** Until 2026-11-04 it closed by printing the report's path, and
 a path under the reports root is unreadable to everybody except whoever ran the review:

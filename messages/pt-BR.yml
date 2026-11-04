@@ -173,6 +173,17 @@ evidence:
     comando permitido encadeado com outro é outro comando
   suite_line: '  suíte: {state} — {reason}'
   timed_out: estourou {seconds}s
+gate_name:
+  standards: padrões e boas práticas
+  business_rules: regra de negócio
+  item_covered: cobre o que o item pediu
+  no_manual: verificação manual
+  measured: foi efetivamente medido
+item_meaning:
+  suite: como a suíte de testes terminou
+  delivery_untested: o que a entrega escreveu não tem teste sobre ele
+  conflict: a proposta não mescla com a base
+  mandatory_reading: a leitura obrigatória — item e descrição da proposta — veio vazia
 metrics:
   no_history: sem histórico ainda em {path} — a primeira execução o cria
   precision_basis: '{judged} de {total} execuções fechadas por pessoa'
@@ -238,8 +249,10 @@ report:
   col_record: Registro
   col_role: Papel
   col_route: Rota
+  col_gate: Portão
   col_state: Estado
   col_what: O quê
+  col_what_closed_it: O que fechou
   col_why_not_assessed: Por que não foi avaliada
   consequence: Consequência
   convention_read: lido
@@ -294,7 +307,7 @@ report:
     ou registrar `not_applicable` com motivo, aprovador e data.'
   unresolved: (não resolvido)
   verdict_clean: Nenhuma condição de intervenção vale.
-  verdict_routes: '{n} rota(s) aberta(s) contra a entrega, listadas na seção 1.'
+  verdict_routes: '{n} rota(s) aberta(s) contra a entrega, listadas na seção 2.'
   verdict_title: Veredito
   where: Onde
 resolver:
