@@ -329,6 +329,7 @@ review:
   findings_split: 'achados: {own} desta entrega · {project} do projeto, movidos para observations.json'
   help_item_file: 'o item normalizado (markdown). Leitura obrigatória: sem ele a revisão não começa
     — nenhum script alcança o rastreador.'
+  help_conventions: o que os revisores observaram do próprio repositório (JSON). Opcional
   help_proposal_file: a descrição da proposta (markdown). Exigida quando a origem é uma proposta
     e não há token no ambiente.
   help_release: remove um marcador vazado por queda no meio da revisão
@@ -344,6 +345,8 @@ review:
   reading_empty: '{path} está vazio — arquivo em branco não é leitura feita'
   reading_missing: '{path} não existe — a leitura obrigatória não se declara apontando para o
     vazio'
+  knowledge_at: 'conhecimento: {path} — {n} entradas ao longo de {reviews} revisão(ões)'
+  knowledge_failed: 'o acúmulo de conhecimento não rodou: {error} (a revisão não é afetada)'
   record_at: 'registro: {path}'
   rendered: 'render: {path}'
   report_at: 'relatório: {path}'

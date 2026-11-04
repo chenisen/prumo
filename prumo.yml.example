@@ -55,6 +55,15 @@ paths:
   # Where reports are written, plus `runs.jsonl` with one line per run.
   reports: ./reports
 
+  # OPTIONAL — defaults to `<reports>/_knowledge`.
+  # What the reviews learn about each repository, accrued across reviews and kept
+  # OUTSIDE it: one `<repo>.md` to read and one `<repo>.json` for the tooling. Same
+  # reason the profile lives outside — a fact about a project is not a file of that
+  # project, and nothing this method writes belongs in a proposal.
+  # It is the profile's UNCONFIRMED sibling: nothing in it closes a gate, and an entry
+  # earns authority only by a person graduating it into the profile.
+  # knowledge: ./knowledge
+
 # --- TRACKER ------------------------------------------------------------------------
 #
 # Where the item that asked for the delivery lives. The prumo NEVER reaches the tracker

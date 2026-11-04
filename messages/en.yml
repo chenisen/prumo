@@ -329,6 +329,7 @@ review:
   findings_split: 'findings: {own} from this delivery · {project} from the project, moved to observations.json'
   help_item_file: 'the normalised item (markdown). Mandatory reading: without it the review does
     not start — no script reaches the tracker.'
+  help_conventions: what the reviewers observed of the repository itself (JSON). Optional
   help_proposal_file: the proposal's description (markdown). Required when the origin is a proposal
     and there is no token in the environment.
   help_release: removes a marker leaked by a crash in the middle of a review
@@ -342,6 +343,8 @@ review:
   profile_status: 'profile: {status} v{version}'
   reading_empty: '{path} is empty — a blank file is not reading done'
   reading_missing: '{path} does not exist — mandatory reading is not declared by pointing at nothing'
+  knowledge_at: 'knowledge: {path} — {n} entries over {reviews} review(s)'
+  knowledge_failed: 'the knowledge accrual did not run: {error} (the review is unaffected)'
   record_at: 'record: {path}'
   rendered: 'render: {path}'
   report_at: 'report: {path}'

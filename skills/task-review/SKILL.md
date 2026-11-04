@@ -115,7 +115,8 @@ Workflow.
 review.py prepare --repo R [--proposal N | --branch B] --item C
                   --item-file ITEM.md [--proposal-file DESC.md]   # F0 F1 F2 F3
 Workflow({name: 'task-review', args: {...}})                      # F4 F5 F8
-review.py conclude --package P --findings A [--scripts-manual R]  # F7 F9 F11
+review.py conclude --package P --findings A [--scripts-manual R]
+                   [--conventions C]                              # F7 F9 F11 F12
 ```
 
 `prepare` prints the workflow invocation already assembled, with the activation plan.
@@ -132,6 +133,7 @@ review.py conclude --package P --findings A [--scripts-manual R]  # F7 F9 F11
 | **F7** judge | `judge.py` | `verdict.json` |
 | **F9** render | `render.py` | `report.md`, `item-comment.html` |
 | **F10** publication | `reference/publication.md` | three acts, each with its own yes |
+| **F12** knowledge | `knowledge.py` | `<knowledge>/<repo>.md` and `.json` — what the reviews keep learning about the REPOSITORY |
 | **F11** record | `review.py conclude` + `telemetry.py` | the report under `<reports>/<repo>/`, `telemetry.json` in the package, and one line in `runs.jsonl` **with the measured cost** |
 
 **The review judges what the delivery DID.** Two consequences, both of them in the harness:
@@ -245,6 +247,50 @@ expires in 4h, and `review.py release` removes it by hand.
 Across loops, `delta.py` decides the mode before F2 — **re-judgement** when only evidence
 arrived (no reviewer runs), **delta** when a push arrived, **full** the first time round.
 `closure.py` reads the item's comments and produces `resolutions.json`.
+
+## What the reviews learn about the repository
+
+A review is thrown away every time, and the reviewers rediscover the same repository in
+five separate contexts on every run. Measured over eleven reviews, that rediscovery is
+the single biggest line of the bill: `cache_read` is 82% of what is spent, and output is
+1%. The cost is not what the agents write — it is **requests × accumulated context**, and
+the context is accumulated by opening files somebody already opened last week.
+
+`knowledge.py` writes the other half. Per repository, outside it, under
+`<knowledge>/<repo>.md`: the conventions the code exhibits, the files the reviewers keep
+opening, the debt the repository has declared, and the defects no delivery caused. It is
+the **profile's unconfirmed sibling** — the profile is what a person signed, this is what
+the machine noticed.
+
+Four rules, and each one closes a hole the method has already paid for:
+
+- **Nothing here closes a gate.** The fifth gate measures whether the review actually
+  measured; a machine-accrued fact certifying itself is exactly the hole that gate exists
+  to cover. An entry's road into a verdict runs through a person — `derive_profile.py`
+  reads the file, somebody confirms it, it becomes an anchor.
+- **No sha, no proposal number, no item id — redacted in code, not asked for in a
+  prompt.** This file is read by EVERY later review, so an identifier that is
+  legitimately this review's own today is foreign tomorrow. The sanitiser is therefore
+  stricter than `provenance.check`: it redacts its own too, and counts what it redacted.
+  It redacts rather than drops, because a sentence stays useful once the sha is gone.
+- **One sighting is not a fact.** An entry is printed only once a SECOND review has seen
+  it; before that it is counted and held back, with the count stated. A single reviewer's
+  guess printed as "what this repository does" is indistinguishable from a corroborated
+  convention.
+- **Nothing is deleted because a review did not see it.** A delivery that touches another
+  corner of the repository says nothing about a convention it never went near. Staleness
+  is read from `last_seen` in the ledger, never from absence.
+
+The reviewers feed it through an OPTIONAL `conventions_observed` in their return — what
+is true of the repository rather than of this change. It never becomes a finding. A
+reviewer with nothing to say there says nothing, and the accrual is a **by-product**: it
+runs last, after the report is filed, and a failure in it never costs the review its
+report.
+
+**Written now, read later.** Nothing consumes the file yet. Handing it to the reviewers
+is the cut that attacks the ~60% spent on rediscovery, and it waits until the file has
+mass and the sanitiser has a review's worth of real text behind it — a shortcut that is
+wrong is worse than no shortcut, because the reviewer cannot tell.
 
 ## Profile
 

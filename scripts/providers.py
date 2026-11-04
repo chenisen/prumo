@@ -261,6 +261,12 @@ class Paths:
     repositories: pathlib.Path
     profiles: pathlib.Path
     reports: pathlib.Path
+    # What the reviews learned about a repository, accrued across reviews and kept
+    # OUTSIDE it — the same reason the profile lives outside: a fact about a project is
+    # not a file of that project, and nothing this method writes belongs in a proposal.
+    # Optional, because an installation that does not want the accrual should not have
+    # to declare a path to switch it off.
+    knowledge: pathlib.Path
 
     def repo(self, name: str) -> pathlib.Path:
         return self.repositories / name
@@ -435,6 +441,9 @@ def build(data: dict, source: pathlib.Path | None = None) -> Config:
         repositories=_resolve_path(_require(c, "repositories", "paths"), base),
         profiles=_resolve_path(_require(c, "profiles", "paths"), base),
         reports=_resolve_path(_require(c, "reports", "paths"), base),
+        knowledge=(_resolve_path(c["knowledge"], base) if c.get("knowledge")
+                   else _resolve_path(_require(c, "reports", "paths"), base)
+                   / "_knowledge"),
     )
 
     # --- forge
@@ -607,6 +616,9 @@ def main() -> int:
                     ("profiles", cfg.paths.profiles),
                     ("reports", cfg.paths.reports)):
         print(f"  {name:12} {p}{'' if p.exists() else '   ← DOES NOT EXIST'}")
+    # No "DOES NOT EXIST" on this one: it is written on the first `conclude` and its
+    # absence before that is the normal state, not a misconfiguration.
+    print(f"  {'knowledge':12} {cfg.paths.knowledge}")
     if cfg.legacy_keys:
         print("\n  legacy Portuguese keys, still accepted — run "
               "`scripts/migrate_config.py` to rewrite the file:")

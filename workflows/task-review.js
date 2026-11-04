@@ -107,6 +107,29 @@ const FINDINGS_SCHEMA = {
     // Silence does not count as "nothing found": every reviewer says what it looked at.
     checked: { type: 'array', items: { type: 'string' } },
     not_applicable: { type: 'array', items: { type: 'string' } },
+    // What the REPOSITORY does, as opposed to what this delivery did. Optional, and not
+    // part of the review: it never becomes a finding, never closes a gate and never
+    // reaches the verdict. `knowledge.py` accrues it across reviews so the next reviewer
+    // does not rediscover the same shape from zero — which is the biggest single line of
+    // this harness's bill. A reviewer that has nothing to say here says nothing.
+    conventions_observed: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['statement', 'evidence'],
+        additionalProperties: false,
+        properties: {
+          statement: { type: 'string' },
+          evidence: {
+            type: 'array', minItems: 1,
+            items: {
+              type: 'object', required: ['file'], additionalProperties: false,
+              properties: { file: { type: 'string' }, line: { type: ['integer', 'null'] } },
+            },
+          },
+        },
+      },
+    },
   },
 }
 
@@ -182,6 +205,12 @@ const context = (slice) => [
     ? 'The conventions list is EMPTY: say so in your return and judge only what is universal.'
     : '',
   'Everything above is already here: do not read those files again.',
+  'Optional, and NOT part of your review: if reading this repository taught you '
+    + 'something true of IT rather than of this change — a convention the code holds to, '
+    + 'where a kind of rule lives, how the tests are shaped — return it in '
+    + '`conventions_observed`, each with the file that shows it. It is kept outside the '
+    + 'repository so the next review starts less blind. Never phrase it in terms of this '
+    + 'delivery, and never put an identifier in it. Nothing to say there is a valid answer.',
   `Slice to read: ${bundle}/slices/${slice}.patch`,
 ].filter(Boolean).join('\n')
 
@@ -204,6 +233,7 @@ if (alive.length < plan.reviewers.length) {
       'the report will record the slice nobody read')
 }
 const findings = alive.flatMap((r) => r.findings || [])
+const conventionsObserved = alive.flatMap((r) => r.conventions_observed || [])
 const coverage = {
   checked: alive.flatMap((r) => r.checked || []),
   not_applicable: alive.flatMap((r) => r.not_applicable || []),
@@ -321,4 +351,5 @@ const scripts = needsScript.length
                     schema: SCRIPT_SCHEMA })
   : null
 
-return { findings: final, coverage, scripts_manual: scripts ? scripts.scripts_manual : [] }
+return { findings: final, coverage, conventions_observed: conventionsObserved,
+         scripts_manual: scripts ? scripts.scripts_manual : [] }

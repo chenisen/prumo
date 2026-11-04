@@ -7,6 +7,7 @@
         Leaves the package ready and PRINTS the workflow invocation.
 
     review.py conclude --package P [--findings F] [--scripts-manual S]
+                       [--conventions C]
         F7 judge · F9 render · F11 record.
 
 Splitting this in two is not cosmetic: a script does not invoke the Workflow — the model
@@ -313,7 +314,8 @@ def inline_payload(package: pathlib.Path) -> dict:
 def conclude(args) -> int:
     package = pathlib.Path(args.package)
     for name, source in (("findings.json", args.findings),
-                         ("scripts_manual.json", args.scripts_manual)):
+                         ("scripts_manual.json", args.scripts_manual),
+                         ("conventions_observed.json", args.conventions)):
         if source:
             write_json(package / name, read_json(pathlib.Path(source)))
 
@@ -325,7 +327,8 @@ def conclude(args) -> int:
     # produce. Checked here because this is the last gate before the judge reads them.
     import provenance
     contaminated = provenance.check(package, [package / "findings.json",
-                                              package / "scripts_manual.json"])
+                                              package / "scripts_manual.json",
+                                              package / "conventions_observed.json"])
     if contaminated:
         for line in contaminated:
             print(t("review.impediment", reason=line))
@@ -387,6 +390,17 @@ def conclude(args) -> int:
     tel = measure(str(package), None)
     write_json(package / "telemetry.json", tel)
     print("\n" + summarise(tel))
+
+    # What this review learned about the REPOSITORY, accrued outside it. A by-product,
+    # and deliberately the last thing that happens to a package: it decides nothing, so a
+    # failure here must never cost the review the report it already filed.
+    try:
+        from knowledge import accrue
+        learned = accrue(package, str(package / "conventions_observed.json"))
+        print(t("review.knowledge_at", path=learned["reading"],
+                n=learned["entries"], reviews=learned["reviews"]))
+    except Exception as e:                                  # noqa: BLE001 — see above
+        print(t("review.knowledge_failed", error=e))
 
     # F11: one line per run. It is the basis for precision, cost and coverage per
     # repository.
@@ -460,6 +474,7 @@ def main() -> int:
     b.add_argument("--package", required=True)
     b.add_argument("--findings")
     b.add_argument("--scripts-manual")
+    b.add_argument("--conventions", help=t("review.help_conventions"))
     b.add_argument("--advisory", action="store_true")
 
     sub.add_parser("release", help=t("review.help_release"))
