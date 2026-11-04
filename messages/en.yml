@@ -169,7 +169,9 @@ preflight:
     says so in the report'
   proof_registry_unresolved: '`{root}` does not resolve from {repo_dir}'
   proposal_not_read: the DESCRIPTION of the {proposal} was not read
-  proposal_remedy: export {tokens}, or pass the description in `--proposal-file`
+  proposal_remedy_mcp: 'read it through the {forge} connector the harness carries and hand it over in `--proposal-file` — no script here reaches a forge API, so the text always arrives as a file (reference/forge-connection.md)'
+  proposal_remedy_none: '`connection: none` is declared, so paste the description into a file and pass it in `--proposal-file` — to stop doing it by hand, connect {forge} (reference/forge-connection.md)'
+  proposal_remedy_token: 'fetch it with {tokens} and hand it over in `--proposal-file` — the token lets the HARNESS read; the gate opens on the text arriving, never on the variable being set (reference/forge-connection.md)'
   reading_gate: 'mandatory reading: {what} — {remedy}. The review does NOT start without it.'
   repo_missing: repository `{repo}` does not exist in {root}
   tool_for:
@@ -183,6 +185,7 @@ preflight:
   warn_convention_unresolved: 'convention pointed at that does not resolve: {path}'
   warn_draft_profile: 'profile is a `draft`: the review runs in full, but the judge opens the
     `missing_profile` route with origin `project` — declared in the report, OUTSIDE the verdict'
+  warn_mcp_publishing_manual: 'no token for {proposal} in the environment: the connector READS it, and only publishing stays manual'
   warn_no_token: 'no token for {proposal} in the environment: publishing stays manual'
   warn_unresolved_owner: 'the profile is `confirmed` but whoever signs is not in the environment:
     export `TASK_REVIEW_RESPONSAVEL`'

@@ -175,6 +175,7 @@ const context = (slice) => [
   embed('classes.json', 'Triaged classes'),
   embed('criteria.json', 'Criteria from the item'),
   embed('item.md', 'Normalised item (description + comments)'),
+  embed('proposal.md', "The proposal's own description, as its author wrote it"),
   embed('out-of-scope.json', 'Out of scope as declared by the item'),
   `Conventions to read BEFORE judging style or structure: ${JSON.stringify(plan.conventions)}`,
   plan.conventions.length === 0

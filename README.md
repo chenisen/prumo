@@ -47,7 +47,7 @@ what is judgement.
 |---|---|
 | **20 Python scripts** | Resolve the base, assemble the package, triage the risk, judge. No dependency beyond `yaml` and `jsonschema`. The judge is a pure function: same input, same verdict. |
 | **10 read-only agents** | One question each. Seven reviewers of one axis, a criteria extractor, a manual-verification planner, and a **sceptical verifier** that tries to *refute* every finding without having seen the reasoning behind it. |
-| **4 knowledge skills** | What the reviewers load to read a diff: five axes, OWASP/ASVS, personal data, black-box test design. Neutral of language, framework and project. |
+| **3 knowledge skills** | What the reviewers load to read a diff: five axes, OWASP/ASVS, personal data. Neutral of language, framework and project. |
 | **18 risk classes** | A guardrail has three states — `fired`, `did_not_fire`, `not_assessable`. |
 | **2 message catalogues** | 313 keys each. Everything a person reads, in the configured language. |
 
@@ -97,7 +97,6 @@ prumo/
 │   ├── five-axis-review/        correctness, readability, architecture, security, performance
 │   ├── owasp-asvs/              OWASP Top 10:2025 + API Top 10 against ASVS 5.0
 │   ├── personal-data/           what is personal data and which destinations are barred
-│   └── black-box/               equivalence partition, boundary value, decision table
 │
 ├── workflows/task-review.js     the reviewer fan-out, the verifier, the manual plan
 ├── hooks/
@@ -188,6 +187,13 @@ environment variable, never a token** — `providers.py` refuses a value that lo
 secret, and `scripts/hygiene.py` fails any secret, or any rule belonging to somebody's
 installation, that reaches a commit in this repository.
 
+**[`reference/forge-connection.md`](reference/forge-connection.md) has the steps**, per
+provider: which connector, from where, and what it needs to be allowed to do. The one
+invariant across all three routes is that **the text always arrives as a file** —
+`--proposal-file`. A connection does not remove that argument; it removes the copying and
+pasting that would otherwise produce it. A token sitting in your environment is not a
+reading, and does not open the gate.
+
 Answer it up front and it asks nothing:
 
 ```bash
@@ -232,7 +238,7 @@ python3 scripts/providers.py
 configuration: /my-workspace/prumo.yml
   language    en
   forge       gitlab · MR !123 · refs/merge-requests/123/head
-              connection: token · GITLAB_TOKEN set in this environment
+              connection: token · `GITLAB_TOKEN` set in this environment
   tracker     businessmap · item `card` · comment in html
   repositories /my-workspace/repositories
   profiles     /my-workspace/profiles

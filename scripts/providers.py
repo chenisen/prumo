@@ -591,8 +591,16 @@ def main() -> int:
         print("  owner       NOT SET — a profile's `${RESPONSAVEL}` will not resolve")
     print(f"  forge       {cfg.forge.type} · {cfg.forge.label(123)} · "
           f"{cfg.forge.proposal_ref(123)}")
+    # Declared beside measured, on one line, because the interesting case is the two
+    # disagreeing: `connection: token` with nothing in the shell is a configuration that
+    # has drifted, and the README has shown this line since before it existed.
     tok = cfg.forge.token_in_environment()
-    print(f"              token: {tok or 'none in the environment (' + ', '.join(cfg.forge.tokens) + ')'}")
+    measured = (f"`{tok}` set in this environment" if tok
+                else "no token in the environment ("
+                     + ", ".join(cfg.forge.tokens) + ")")
+    print(f"              connection: {cfg.forge.connection} · {measured}")
+    if cfg.forge.connection == "none":
+        print("              reviewing needs none; see reference/forge-connection.md")
     print(f"  tracker     {cfg.tracker.type} · item `{cfg.tracker.item}` · "
           f"comment in {cfg.tracker.format}")
     for name, p in (("repositories", cfg.paths.repositories),

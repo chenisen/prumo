@@ -170,7 +170,9 @@ preflight:
     diz isso no relatório'
   proof_registry_unresolved: '`{root}` não resolve a partir de {repo_dir}'
   proposal_not_read: a DESCRIÇÃO d{proposal_with_article} não foi lida
-  proposal_remedy: exporte {tokens}, ou passe a descrição em `--proposal-file`
+  proposal_remedy_mcp: 'leia-a pelo conector de {forge} que o harness carrega e entregue em `--proposal-file` — nenhum script daqui alcança API de forge, então o texto sempre chega como arquivo (reference/forge-connection.md)'
+  proposal_remedy_none: 'está declarado `connection: none`, então cole a descrição num arquivo e passe em `--proposal-file` — para parar de fazer isso à mão, conecte {forge} (reference/forge-connection.md)'
+  proposal_remedy_token: 'busque-a com {tokens} e entregue em `--proposal-file` — o token deixa o HARNESS ler; o portão abre com o texto chegando, nunca com a variável definida (reference/forge-connection.md)'
   reading_gate: 'leitura obrigatória: {what} — {remedy}. A revisão NÃO começa sem isso.'
   repo_missing: o repositório `{repo}` não existe em {root}
   tool_for:
@@ -184,6 +186,7 @@ preflight:
   warn_convention_unresolved: 'convenção apontada que não resolve: {path}'
   warn_draft_profile: 'perfil em `draft`: a revisão roda inteira, mas o juiz abre a rota `missing_profile`
     com origem `projeto` — declarada no relatório, FORA do veredito'
+  warn_mcp_publishing_manual: 'sem token d{proposal_with_article} no ambiente: o conector LÊ, e só a publicação fica manual'
   warn_no_token: 'sem token d{proposal_with_article} no ambiente: a publicação fica manual'
   warn_unresolved_owner: 'o perfil é `confirmado` mas quem assina não está no ambiente: exporte
     `TASK_REVIEW_RESPONSAVEL`'

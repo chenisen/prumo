@@ -120,6 +120,21 @@ def measure_local_reviewer(profile: dict, repo_dir: pathlib.Path) -> dict | None
 # produces a verdict that looks complete and is not. The cost of stopping is one
 # connection; the cost of carrying on is false confidence in a report.
 
+# The remedy names the route THIS installation declared, and the three routes differ in
+# how the harness gets the text — never in what it then does with it. Whatever fetches
+# the description, it is handed over as a file: no script here reaches a forge API.
+#
+# Printing the token route to someone whose `prumo.yml` says `connection: mcp` is how a
+# person ends up hunting for a personal access token they do not need, next to a
+# connector that already answers. A stop that names the wrong way out costs more than
+# the stop itself.
+PROPOSAL_REMEDY = {
+    "mcp": "preflight.proposal_remedy_mcp",
+    "token": "preflight.proposal_remedy_token",
+    "none": "preflight.proposal_remedy_none",
+}
+
+
 def requests(cfg):
     """The gate's wording speaks the installation's language: `card`/`MR` in one place,
     `issue`/`PR` in another. The gate is the same; the name of what is missing is not."""
@@ -128,11 +143,12 @@ def requests(cfg):
     proposal = {"proposal": cfg.forge.proposal,
                 "proposal_with_article": cfg.forge.with_article()}
     tokens = ", ".join(f"`{tk}`" for tk in cfg.forge.tokens)
+    key = PROPOSAL_REMEDY.get(cfg.forge.connection, PROPOSAL_REMEDY["none"])
     return {
         "item": (t("preflight.item_not_read", **item),
                  t("preflight.item_remedy", tracker=cfg.tracker.type, **item)),
         "proposal_description": (t("preflight.proposal_not_read", **proposal),
-                         t("preflight.proposal_remedy", tokens=tokens, **proposal)),
+                         t(key, tokens=tokens, forge=cfg.forge.type, **proposal)),
     }
 
 
@@ -188,6 +204,10 @@ def preflight(repo: str, origin: str | None = None, item_read: bool = False,
         "conventions": measure_conventions(profile, repo_dir),
         "local_reviewer": measure_local_reviewer(profile, repo_dir),
         "token_mr": bool(cfg.forge.token_in_environment()),
+        # What the installation DECLARED, beside what was measured. The two disagreeing
+        # is itself information: `connection: token` with no token in the environment is
+        # a configuration that has drifted from its shell.
+        "forge_connection": cfg.forge.connection,
         "leitura_obrigatoria": {
             "origin": origin,
             "item": item_read,
@@ -220,8 +240,14 @@ def preflight(repo: str, origin: str | None = None, item_read: bool = False,
         warnings.append(cap["proof_registry"]["reason"])
     if cap["local_reviewer"] and not cap["local_reviewer"]["resolve"]:
         warnings.append(cap["local_reviewer"]["reason"])
+    # Reading and publishing are two different capabilities, and one warning used to
+    # speak for both. With `connection: mcp` the connector reads the proposal perfectly
+    # well; it is only the WRITE that stays a human act. Saying "no token" flat told the
+    # reader their reading was broken when it was not.
     if not cap["token_mr"]:
-        warnings.append(t("preflight.warn_no_token", proposal=cfg.forge.proposal,
+        warn = ("preflight.warn_mcp_publishing_manual"
+                if cfg.forge.connection == "mcp" else "preflight.warn_no_token")
+        warnings.append(t(warn, proposal=cfg.forge.proposal,
                           proposal_with_article=cfg.forge.with_article()))
     cap["warnings"] = warnings
     return cap

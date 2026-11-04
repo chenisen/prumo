@@ -93,6 +93,12 @@ FORGE_CONNECTION_HINT = {
                   "description with `--proposal-file` and publish by hand."),
 }
 
+# Naming the capability is half the help; the other half is the command that gets it.
+# Whoever has just installed the prumo does not know which connector, from where, or
+# what it needs to be allowed to do — and "add an MCP connector" sends them to a search
+# engine at the exact moment they wanted to review something.
+FORGE_CONNECTION_DOC = "reference/forge-connection.md"
+
 
 def forge_reachable(cli: str, tokens: list[str]) -> tuple[str, str]:
     """Which connection this environment ALREADY has, measured rather than promised.
@@ -329,6 +335,16 @@ def main() -> int:
         print("  To translate an older Portuguese one: migrate_config.py prumo.yml --write")
         return 1
 
+    # A mistyped `--at` used to come out as a FileNotFoundError traceback from inside
+    # the measuring step — on the FIRST command anybody runs, which is the worst place
+    # to look like a crash. We do not create it either: scattering directories at a path
+    # somebody typed wrong is how a `prumo.yml` ends up somewhere nobody looks again.
+    if not workspace.is_dir():
+        print(f"`{workspace}` is not a directory.")
+        print("  --at takes the workspace to write `prumo.yml` into; create it first, "
+              "or point at an existing one.")
+        return 1
+
     print(f"prumo setup · {workspace}")
 
     # --- what we can measure
@@ -469,6 +485,8 @@ def main() -> int:
         print("      The prumo stores the NAME of the variable, never the token. A "
               "secret")
         print("      written into a configuration file is a secret published.")
+    print(f"      Step by step, per provider: {relative_if_inside(REPO_ROOT, workspace)}"
+          f"/{FORGE_CONNECTION_DOC}")
 
     print("\nCheck it any time with:  python3 scripts/providers.py")
     return 0

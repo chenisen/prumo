@@ -115,9 +115,24 @@ def copy_mandatory_reading(args, package: pathlib.Path) -> dict:
         shutil.copy2(source, package / destination)
         read_files[key] = True
 
-    # A token in the environment reads the proposal's description with no file at all.
-    if origin == "mr" and (os.environ.get("GITLAB_TOKEN") or os.environ.get("GLAB_TOKEN")):
-        read_files["proposal_description"] = True
+    # A token in the environment does NOT satisfy this gate, and the line that used to
+    # say it did was two bugs in three lines.
+    #
+    # It named `GITLAB_TOKEN` and `GLAB_TOKEN` as literals — the method knowing one
+    # provider by name, inside the gate, while `forge.tokens` exists for exactly this.
+    # On a GitHub installation the same environment did nothing, and the gate stayed shut
+    # with the credential sitting right there.
+    #
+    # The deeper one: it flipped the flag with no file and no fetch. Nothing in this
+    # repository reads a forge API, so `proposal.md` was never written, the preflight
+    # passed, and the review ran with the proposal's story missing from the one judgement
+    # that compares three stories. A gate that opens on the PRESENCE OF A VARIABLE
+    # instead of the arrival of the text produces the result this method calls its worst:
+    # a report shaped like a complete one and partial in content.
+    #
+    # What a connection buys is the HARNESS's ability to fetch that text. However it
+    # fetches it — a connector, a token, a CLI, a paste — it then hands it over here, as
+    # a file. See `reference/forge-connection.md`.
     return read_files
 
 
@@ -262,8 +277,12 @@ def prepare(args) -> int:
 # does not need it, which is the opposite of what the slices are for.
 INLINE_CEILING = 24_000   # bytes, per file: above this, pointing at it is cheaper
 
+# `proposal.md` belongs here for the same reason `item.md` does, and its absence was a
+# silent hole: the description was demanded at the gate, copied into the package, and
+# then read by nobody. `scope-coherence` is asked whether item, proposal and code tell
+# the SAME story, and it was being handed two of the three.
 INLINE_FILES = ("manifest.json", "capabilities.json", "profile.yml", "classes.json",
-                "criteria.json", "item.md", "out-of-scope.json")
+                "criteria.json", "item.md", "proposal.md", "out-of-scope.json")
 
 
 def inline_payload(package: pathlib.Path) -> dict:

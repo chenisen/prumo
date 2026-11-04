@@ -39,9 +39,12 @@ review.py prepare --repo R --proposal N --item C
 
 A file that is missing, or present and empty, **does not count as read** — the difference
 between "there is no criterion" and "I could not read it" is the whole point, and a blank
-file erases it. With no forge token in the environment and no `--proposal-file`, the
-preflight raises an impediment and `prepare` stops, naming the remedy: **ask for the
-connection, do not work around it.** Reviewing a diff without the item is guessing at what
+file erases it. With no way to read the description and no `--proposal-file`, the
+preflight raises an impediment and `prepare` stops, naming the remedy **for the route
+this installation declared** — `reference/forge-connection.md` has the steps per
+provider. **Ask for the connection, do not work around it.** A token in the environment
+is not a reading: it is how the harness FETCHES the text, which still arrives here as a
+file. Reviewing a diff without the item is guessing at what
 was asked for; judging the coherence of the three stories with two of them missing produces
 a report shaped like a complete one and partial in content — the worst result this method
 can give.
@@ -268,6 +271,7 @@ report and does not hold the proposal.
 - `reference/publication.md` — the three external acts and the tracker's HTML subset
 - `reference/playbooks.md` — manual verification scripts
 - `reference/ci-gitlab.md` — the job that runs this on `merge_request_event`
+- `reference/forge-connection.md` — connecting a forge so the description reads itself
 - `schemas/` — finding, triaged class, criterion, verdict, manual script
 - `schemas/profile.schema.yml` — the profile's contract
 
