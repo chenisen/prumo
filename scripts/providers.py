@@ -267,6 +267,13 @@ class Paths:
     # Optional, because an installation that does not want the accrual should not have
     # to declare a path to switch it off.
     knowledge: pathlib.Path
+    # Where a review's working package is assembled — the diff, the slices, the manifest,
+    # everything the agents read. Optional, and it defaults OUTSIDE the workspace
+    # (`$TMPDIR/task-review`) because a package is scratch, not a deliverable, and an
+    # installation that never says otherwise should not have its tree filled with patches.
+    # An installation that wants them kept — inspectable after the fact, surviving a /tmp
+    # sweep, in one place with the reports — points this somewhere of its own.
+    packages: pathlib.Path
 
     def repo(self, name: str) -> pathlib.Path:
         return self.repositories / name
@@ -441,6 +448,8 @@ def build(data: dict, source: pathlib.Path | None = None) -> Config:
         repositories=_resolve_path(_require(c, "repositories", "paths"), base),
         profiles=_resolve_path(_require(c, "profiles", "paths"), base),
         reports=_resolve_path(_require(c, "reports", "paths"), base),
+        packages=(_resolve_path(c["packages"], base) if c.get("packages")
+                  else pathlib.Path(os.environ.get("TMPDIR", "/tmp")) / "task-review"),
         knowledge=(_resolve_path(c["knowledge"], base) if c.get("knowledge")
                    else _resolve_path(_require(c, "reports", "paths"), base)
                    / "_knowledge"),
@@ -619,6 +628,7 @@ def main() -> int:
     # No "DOES NOT EXIST" on this one: it is written on the first `conclude` and its
     # absence before that is the normal state, not a misconfiguration.
     print(f"  {'knowledge':12} {cfg.paths.knowledge}")
+    print(f"  {'packages':12} {cfg.paths.packages}")
     if cfg.legacy_keys:
         print("\n  legacy Portuguese keys, still accepted — run "
               "`scripts/migrate_config.py` to rewrite the file:")

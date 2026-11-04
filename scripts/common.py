@@ -47,6 +47,10 @@ def dir_knowledge() -> pathlib.Path:
     return cfg().paths.knowledge
 
 
+def dir_packages() -> pathlib.Path:
+    return cfg().paths.packages
+
+
 def forge():
     """Vocabulary and refs of the proposal provider (GitLab, GitHub, Bitbucket…)."""
     return cfg().forge

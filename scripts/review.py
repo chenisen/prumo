@@ -29,12 +29,16 @@ import sys
 import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from common import (MissingConfiguration, InvalidConfiguration, dir_reports, forge, tracker, UsageError, profile_path, load_profile, write_json,
+from common import (MissingConfiguration, InvalidConfiguration, dir_packages, dir_reports, forge, tracker, UsageError, profile_path, load_profile, write_json,
                    today, read_json, slug)
 from i18n import t
 
 ROOT = pathlib.Path(__file__).resolve().parent
-DEFAULT_PACKAGE_ROOT = pathlib.Path(os.environ.get("TMPDIR", "/tmp")) / "task-review"
+# Where the package is assembled, when `--package` does not say. It is `paths.packages`
+# in `prumo.yml`, which DEFAULTS to `$TMPDIR/task-review` — a package is scratch, and an
+# installation that never asked should not find patches in its tree. One that points this
+# at its own workspace gets them kept: inspectable after the review, surviving a /tmp
+# sweep, and in one place with the reports they produced.
 
 
 def _vocabulary() -> dict:
@@ -181,7 +185,7 @@ def initial_evidence(package: pathlib.Path) -> dict:
 
 def prepare(args) -> int:
     package = pathlib.Path(args.package
-                           or (DEFAULT_PACKAGE_ROOT / f"{args.repo}-{int(time.time())}"))
+                           or (dir_packages() / f"{args.repo}-{int(time.time())}"))
     package.mkdir(parents=True, exist_ok=True)
     mark(package)
 

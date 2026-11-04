@@ -157,6 +157,23 @@ class TestPaths(unittest.TestCase):
                 c = load_config()
             self.assertEqual(c.paths.repositories, (base / "repos").resolve())
 
+    def test_the_package_root_defaults_outside_the_workspace(self):
+        """A package is scratch — the diff, the slices, every file the agents read. An
+        installation that never asked for them should not find patches in its tree."""
+        with mock.patch.dict("os.environ", {"TMPDIR": "/tmp/elsewhere"}):
+            c = build(MINIMO)
+        self.assertEqual(c.paths.packages, pathlib.Path("/tmp/elsewhere/task-review"))
+
+    def test_an_installation_can_keep_its_packages(self):
+        """Pointed at its own tree, the packages survive a /tmp sweep and stay readable
+        after the review that produced them."""
+        c = build({**MINIMO, "paths": {**MINIMO["paths"], "packages": "/tmp/r/.packages"}})
+        self.assertEqual(c.paths.packages, pathlib.Path("/tmp/r/.packages"))
+
+    def test_knowledge_defaults_beside_the_reports(self):
+        c = build(MINIMO)
+        self.assertEqual(c.paths.knowledge, pathlib.Path("/tmp/rel/_knowledge"))
+
     def test_repo_and_profile_derive_from_the_root(self):
         c = test_config()
         self.assertEqual(c.paths.repo("x").name, "x")

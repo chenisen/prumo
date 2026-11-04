@@ -64,6 +64,14 @@ paths:
   # earns authority only by a person graduating it into the profile.
   # knowledge: ./knowledge
 
+  # OPTIONAL — defaults to `$TMPDIR/task-review`, i.e. OUTSIDE this tree.
+  # Where a review's working package is assembled: the diff, the slices, the manifest,
+  # every file the agents read. It is scratch, so the default keeps it out of your way.
+  # Point it here to keep them — readable after the fact, surviving a /tmp sweep, and in
+  # one place with the reports they produced. They are large and they accumulate: one
+  # directory per run, never cleaned up by this method.
+  # packages: ./packages
+
 # --- TRACKER ------------------------------------------------------------------------
 #
 # Where the item that asked for the delivery lives. The prumo NEVER reaches the tracker
