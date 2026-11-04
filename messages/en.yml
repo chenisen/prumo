@@ -214,6 +214,9 @@ preflight:
   warn_unresolved_owner: 'the profile is `confirmed` but whoever signs is not in the environment:
     export `TASK_REVIEW_RESPONSAVEL`'
   warning: 'warning: {text}'
+provenance:
+  contaminated: '{file}: speaks about ANOTHER review — {refs}. A review relates only to its own item and its own proposal.'
+  remedy: 'Re-run the agent that produced it, naming this review''s manifest. Do not hand-edit the ids: whatever read the wrong review read it for a reason, and the next run would do it again.'
 report:
   all_assessed: _None. Every class was assessed._
   approve_not_merge: Approving is not merging. The merge and the {item}'s column stay with the

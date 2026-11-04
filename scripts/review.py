@@ -317,6 +317,21 @@ def conclude(args) -> int:
         if source:
             write_json(package / name, read_json(pathlib.Path(source)))
 
+    # A review relates to its own item and its own proposal, and to nothing else. The
+    # agents can read the whole workspace, the reports root is in it, and one of them
+    # really did anchor on a sibling review and return fifteen scripts about another
+    # delivery. This STOPS rather than warns: a report that mixes two deliveries is
+    # shaped exactly like a correct one, which makes it the worst thing this method can
+    # produce. Checked here because this is the last gate before the judge reads them.
+    import provenance
+    contaminated = provenance.check(package, [package / "findings.json",
+                                              package / "scripts_manual.json"])
+    if contaminated:
+        for line in contaminated:
+            print(t("review.impediment", reason=line))
+        print(t("provenance.remedy"))
+        return 1
+
     if args.advisory:
         print(t("review.advisory_mode"))
         _py("triage.py", "--package", str(package))

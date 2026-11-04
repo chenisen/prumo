@@ -204,6 +204,38 @@ belongs to the report.
 
 **An empty diff is a stop**, not a clean review: with no file there is nothing to review.
 
+## A review relates to its own item and its own proposal, and to nothing else
+
+A review done earlier must not bias a new one. The reviewers hold `Read`, `Grep` and
+`Glob` over the whole workspace, and the reports root is in that workspace — so a
+repository that already carries a sibling review carries a trap. It sprang on 2026-11-04:
+asked for a manual script per class, a planner anchored on the neighbouring report and
+returned fifteen scripts about the **previous** item, naming its SHAs and its proposal.
+Plausible line by line, and about the wrong delivery.
+
+The first attempt at a fix was a sentence in the prompt asking the agent not to do that.
+That is not a guarantee, and the method already knows it — the same rule that puts
+escaping in code puts this in code. **`provenance.py` decides it**, and `conclude` is the
+gate: before the judge reads anything, every file the agents produced is checked against
+this review's own identity, and a file that names another review's sha, another
+proposal, or an item its own item never mentions **stops the run**. It stops rather than
+warns because a report that mixes two deliveries is shaped exactly like a correct one.
+
+The three rules, and why each is shaped that way:
+
+- **a commit sha** — unambiguous, so it is the strong signal: eight to forty hex
+  characters with at least one letter, foreign unless it is a prefix of (or prefixed by)
+  this review's head, base or merge base;
+- **a proposal number** — read from the origin ref's own shape, so it follows whatever
+  forge the installation declared;
+- **an item id the review's own item never mentions** — the asymmetry is the point. An
+  item may legitimately name a sibling ("follows the test pattern of card X"), and
+  flagging that would make the check cry wolf on the item's own words.
+
+The remedy is never to hand-edit the ids: whatever read the wrong review had a reason,
+and the next run would do it again. Re-run that agent with this review's manifest named
+first.
+
 While the review runs, `review.py` creates `.claude/.task-review-ativo`, and the hook uses
 that marker to block push, commit and moving the item **only while the review is
 running** — outside it the workspace carries on as normal, and the skills that legitimately

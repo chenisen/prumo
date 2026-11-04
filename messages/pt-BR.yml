@@ -215,6 +215,9 @@ preflight:
   warn_unresolved_owner: 'o perfil é `confirmado` mas quem assina não está no ambiente: exporte
     `TASK_REVIEW_RESPONSAVEL`'
   warning: 'aviso: {text}'
+provenance:
+  contaminated: '{file}: fala de OUTRA revisão — {refs}. Uma revisão se relaciona só ao próprio item e à própria proposta.'
+  remedy: 'Rode de novo o agente que o produziu, nomeando o manifesto desta revisão. Não corrija os ids à mão: o que leu a revisão errada teve um motivo, e a próxima rodada faria igual.'
 report:
   all_assessed: _Nenhuma. Toda classe foi avaliada._
   approve_not_merge: Aprovar não é mergear. O merge e a coluna d{item_with_article} ficam com
