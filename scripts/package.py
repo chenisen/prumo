@@ -56,8 +56,26 @@ def build(package: pathlib.Path) -> dict:
     files = sorted(status)
     removed = [a for a, s in status.items() if s == "D"]
 
-    numstat = git(repo_dir, "diff", "--numstat", rev_range).splitlines()
-    lines = sum(int(x) for l in numstat for x in l.split("\t")[:2] if x.isdigit())
+    # Per FILE, not only the total: the effort dimension separates production lines from
+    # proof lines, and a single `lines_changed` cannot tell a 200-line test delivery from
+    # a 200-line migration. Binary files report `-` and count zero — a figure would be
+    # invented, and the file still shows up in `files`.
+    lines_by_file: dict[str, int] = {}
+    for l in git(repo_dir, "diff", "--numstat", rev_range).splitlines():
+        parts = l.split("\t")
+        if len(parts) < 3:
+            continue
+        added, deleted, path = parts[0], parts[1], "\t".join(parts[2:])
+        if " => " in path:
+            # A rename keeps the NEW name, the same one `--name-status` reports — two
+            # spellings of one file would make its lines invisible to whoever looks it
+            # up by the name in `files`.
+            m = re.match(r"^(.*)\{(.*) => (.*)\}(.*)$", path)
+            path = (m.group(1) + m.group(3) + m.group(4)).replace("//", "/") if m \
+                else path.split(" => ")[-1]
+        lines_by_file[path] = ((int(added) if added.isdigit() else 0)
+                               + (int(deleted) if deleted.isdigit() else 0))
+    lines = sum(lines_by_file.values())
 
     (package / "slices").mkdir(parents=True, exist_ok=True)
     (package / "slices" / "complete.patch").write_text(diff, encoding="utf-8")
@@ -71,6 +89,7 @@ def build(package: pathlib.Path) -> dict:
         "removed": removed,
         "added": [a for a, s in status.items() if s == "A"],
         "lines_changed": lines,
+        "lines_by_file": lines_by_file,
         # The diff is NOT embedded here. It used to be, and `change.json` weighed 77KB —
         # the whole patch, byte for byte, beside `diff.patch` holding the same thing. In
         # one measured review the reviewers read this file seven times between them,

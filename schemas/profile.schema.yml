@@ -98,6 +98,13 @@ properties:
       acceptable: {type: integer, minimum: 1}
       split: {type: integer, minimum: 1}
       file_ceiling: {type: integer, minimum: 1}
+      production_acceptable:
+        type: integer
+        minimum: 1
+        description: >
+          cap on PRODUCTION lines for the `standard` effort level — above it the review
+          is `full`. Optional; defaults to `acceptable`. A number this repository tunes,
+          never a name.
 
   local_reviewer:
     type: [object, "null"]

@@ -68,6 +68,62 @@ UNIVERSAL_PATTERNS = {
 # A8 also fires structurally when a test file disappears from the diff altogether.
 RE_TEST = re.compile(r"(^|/)(tests?|spec|__tests__|e2e)/|\.(test|spec)\.[tj]sx?$|Test\.php$")
 
+# What counts as configuration when classifying a change's NATURE. Universal formats,
+# never a project's paths — the same rule that governs `UNIVERSAL_PATTERNS`.
+CONFIG_EXTENSIONS = (".yml", ".yaml", ".json", ".env", ".toml", ".ini")
+
+
+def _is_config(path: str) -> bool:
+    name = path.rsplit("/", 1)[-1]
+    return path.lower().endswith(CONFIG_EXTENSIONS) or name.startswith(".env")
+
+
+def change_shape(change: dict) -> dict:
+    """Classifies the NATURE of the change — what the diff is made of, before any size.
+
+    A pure function over `change.json`: no LLM, no repository knowledge. The partition is
+    decided per file, in this order: a document is prose whatever its directory; anything
+    under a test path is proof, fixtures included — a `.json` under `tests/` serves the
+    tests, not the system; a config format outside a test path is configuration; the rest
+    is production.
+
+    The five shapes are exclusive and the cascade decides ties: touching production makes
+    the change `production` (or `mixed` when proof moved with it) no matter what rode
+    along; with no production, proof wins over config, config over docs — the heavier
+    nature names the change."""
+    files = change.get("files") or []
+    docs = [f for f in files if is_document(f)]
+    proof = [f for f in files if not is_document(f) and RE_TEST.search(f)]
+    config = [f for f in files
+              if not is_document(f) and not RE_TEST.search(f) and _is_config(f)]
+    production = [f for f in files
+                  if not is_document(f) and not RE_TEST.search(f) and not _is_config(f)]
+
+    if production:
+        shape = "mixed" if proof else "production"
+    elif proof:
+        shape = "proof_only"
+    elif config:
+        shape = "config_only"
+    else:
+        shape = "docs_only"
+
+    by_file = change.get("lines_by_file") or {}
+    lines_production = sum(by_file.get(f, 0) for f in production)
+    lines_proof = sum(by_file.get(f, 0) for f in proof)
+    if not by_file:
+        # A package from before the per-file measure. The one total is attributed to
+        # production whenever production was touched — conservative on purpose: a guess
+        # here may only RAISE the effort, never lower it.
+        total = int(change.get("lines_changed") or 0)
+        lines_production = total if production else 0
+        lines_proof = total if (proof and not production) else 0
+
+    return {"shape": shape,
+            "production_files": production, "proof_files": proof,
+            "config_files": config, "doc_files": docs,
+            "lines_production": lines_production, "lines_proof": lines_proof}
+
 
 def _added_and_removed_lines(diff: str) -> str:
     return "\n".join(l for l in diff.splitlines() if l[:1] in "+-")
@@ -102,8 +158,13 @@ def _blocks_for_files(diff: str, files: list[str]) -> str:
 
 
 def assess_class(class_id: str, meta: dict, profile: dict, change: dict,
-                 capabilities: dict) -> dict:
-    """Decides the state of ONE class. A pure function: same input, same state."""
+                 capabilities: dict, shape: dict | None = None) -> dict:
+    """Decides the state of ONE class. A pure function: same input, same state.
+
+    `shape` is the partition `change_shape` already made; computed here only when the
+    caller did not pass one, so eighteen classes share one classification instead of
+    each cutting the file list again."""
+    shape = shape or change_shape(change)
     anchor = (profile.get("anchors") or {}).get(class_id)
     # `change.json` calls this `files`. It was `arquivos` until the method was written
     # in English, and the rename missed here — which made `files` silently EMPTY, so no
@@ -159,9 +220,10 @@ def assess_class(class_id: str, meta: dict, profile: dict, change: dict,
             # This class asks what the system DOES, and proof does nothing: adding a test
             # changes no business rule and inverts no dependency. Matching an enum's name
             # inside a test file is a false positive, and a false positive in a §A class
-            # costs a human decision nobody needed to make.
-            production = [a for a in code if not RE_TEST.search(a)]
-            proof_only = bool(code) and not production
+            # costs a human decision nobody needed to make. The partition comes from the
+            # shape — config stays IN: a pattern can live in a `.yml` as well as in code.
+            production = shape["production_files"] + shape["config_files"]
+            proof_only = bool(shape["proof_files"]) and not production
             code = production
         target = _blocks_for_files(diff, code) if code else ""
     else:
@@ -218,8 +280,10 @@ def with_diff(change: dict, package: pathlib.Path) -> dict:
     return {**change, "diff": patch.read_text(encoding="utf-8") if patch.exists() else ""}
 
 
-def triage_classes(profile: dict, change: dict, capabilities: dict) -> list[dict]:
-    return [assess_class(c, meta, profile, change, capabilities)
+def triage_classes(profile: dict, change: dict, capabilities: dict,
+                   shape: dict | None = None) -> list[dict]:
+    shape = shape or change_shape(change)
+    return [assess_class(c, meta, profile, change, capabilities, shape)
             for c, meta in sorted(CLASSES.items(), key=lambda kv: (kv[1]["section"], int(kv[0][1:])))]
 
 
@@ -233,6 +297,72 @@ def size_band(profile: dict, change: dict) -> dict:
     else:
         band, topology = "ideal", t("triage.topology_ideal")
     return {"lines": n, "band": band, "topology": topology, "limiares": thresholds}
+
+
+# The classes whose firing makes a delivery FULL effort whatever its size: they read the
+# system's contract with the outside (A1/A2/A4), its authorisation (A3), its business
+# rules (A5) or its data (B6). Method constants, like `UNIVERSAL_PATTERNS` — the profile
+# tunes the anchors that make them fire, never this list.
+FULL_EFFORT_CLASSES = ("A1", "A2", "A3", "A4", "A5", "B6")
+
+# The shapes that carry no production code. What they still have to catch — a removed
+# test, a secret in a config — is caught by the CLASSES, which run whatever the effort;
+# a §A firing takes the delivery out of this level.
+MINIMAL_SHAPES = ("proof_only", "docs_only", "config_only")
+
+
+def effort_level(shape: dict, size: dict, classes: list[dict],
+                 change: dict | None = None) -> dict:
+    """Decides how much review this delivery buys: `minimal`, `standard` or `full`.
+
+    A pure function, derived with no LLM, and it decides WHO READS, never what is
+    declared: the 18 classes are always triaged, gate 5 keeps saying what was and was
+    not measured, and a skipped reviewer leaves a named trail in the plan. Every verdict
+    input stays untouched — `judge.py` never sees this.
+
+    The cascade, worst first:
+    - `full` when a contract/authorisation/rule/data class fired, production lines are
+      above the acceptable threshold, the band is `split`, or a file is over the ceiling;
+    - `minimal` when the change carries no production code AND no §A class fired — a
+      removed test (A8) or a secret (A9) is exactly what a cheap level must not absorb;
+    - `standard` for everything in between.
+
+    The thresholds come from the profile's `size` (optional `production_acceptable`,
+    defaulting to `acceptable`): repository-tuned numbers, never repository names."""
+    fired = {c["id"] for c in classes if c["state"] == "fired"}
+    sensitive = sorted(f for f in fired if f in FULL_EFFORT_CLASSES)
+    section_a = sorted(f for f in fired if f.startswith("A"))
+    thresholds = size.get("limiares") or {}
+    acceptable = thresholds.get("production_acceptable") or thresholds.get("acceptable", 300)
+    over_ceiling = (change or {}).get("over_ceiling") or []
+
+    reasons = []
+    if sensitive:
+        reasons.append(t("triage.effort_full_class", classes=", ".join(sensitive)))
+    if shape["lines_production"] > acceptable:
+        reasons.append(t("triage.effort_full_production",
+                         lines=shape["lines_production"], limit=acceptable))
+    if size["band"] == "split":
+        reasons.append(t("triage.effort_full_split"))
+    if over_ceiling:
+        reasons.append(t("triage.effort_full_ceiling", n=len(over_ceiling)))
+    if reasons:
+        level = "full"
+    elif shape["shape"] in MINIMAL_SHAPES:
+        if section_a:
+            level = "standard"
+            reasons.append(t("triage.effort_not_minimal_class",
+                             shape=shape["shape"], classes=", ".join(section_a)))
+        else:
+            level = "minimal"
+            reasons.append(t("triage.effort_minimal", shape=shape["shape"]))
+    else:
+        level = "standard"
+        reasons.append(t("triage.effort_standard", limit=acceptable))
+
+    return {"effort": level, "reasons": reasons, "shape": shape,
+            "thresholds": {"production_acceptable": acceptable,
+                           "split": thresholds.get("split", 1000)}}
 
 
 # Who runs, and over which slice. A reviewer is only activated if the diff touches its
@@ -325,12 +455,15 @@ def main() -> int:
     capabilities = read_json(package / "capabilities.json")
     change = with_diff(read_json(package / "change.json"), package)
 
-    classes = triage_classes(profile, change, capabilities)
+    shape = change_shape(change)
+    classes = triage_classes(profile, change, capabilities, shape)
     size = size_band(profile, change)
+    effort = effort_level(shape, size, classes, change)
     plan = activation_plan(profile, change, classes, size)
 
     write_json(out / "classes.json", classes)
     write_json(out / "size.json", size)
+    write_json(out / "effort.json", effort)
     write_json(out / "plan.json", plan)
 
     count = {e: sum(1 for c in classes if c["state"] == e)
@@ -338,6 +471,8 @@ def main() -> int:
     print(t("triage.summary", fired=count["fired"], quiet=count["did_not_fire"],
             unknown=count["not_assessable"], band=size["band"], lines=size["lines"],
             reviewers=len(plan["reviewers"])))
+    print(t("triage.effort_summary", level=effort["effort"], shape=shape["shape"],
+            reasons="; ".join(effort["reasons"])))
     for c in classes:
         if c["state"] != "did_not_fire":
             print(f"  {c['state']:14} {c['id']:4} {c['reason'][:90]}")

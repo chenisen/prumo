@@ -407,6 +407,17 @@ triage:
   by_anchor_path: anchor path
   by_removed_test: test file removed
   check_not_declared: not declared in the profile
+  effort_full_ceiling: '{n} file(s) over the size ceiling'
+  effort_full_class: 'a class that reads the system''s contract, authorisation, rules or data
+    fired: {classes}'
+  effort_full_production: production lines ({lines}) above the acceptable threshold ({limit})
+  effort_full_split: the change is above the split threshold
+  effort_minimal: the whole change is {shape} and no §A class fired
+  effort_not_minimal_class: 'the change is {shape}, but {classes} fired — a fired §A class is
+    exactly what a cheap level must not absorb'
+  effort_standard: production touched within {limit} lines and no contract, authorisation, rule
+    or data class fired
+  effort_summary: 'effort: {level} · shape {shape} — {reasons}'
   no_anchor: the profile for `{repo}` declares no anchor for this class — provide the anchor,
     or record `not_applicable` with a reason and an approver
   no_tool: 'the `{check}` check has no tool in this environment: {reason}'

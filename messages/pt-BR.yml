@@ -410,6 +410,17 @@ triage:
   by_anchor_path: caminho da âncora
   by_removed_test: arquivo de teste removido
   check_not_declared: não declarada no perfil
+  effort_full_ceiling: '{n} arquivo(s) acima do teto de tamanho'
+  effort_full_class: 'disparou classe que lê o contrato, a autorização, as regras ou os dados
+    do sistema: {classes}'
+  effort_full_production: linhas de produção ({lines}) acima do limiar aceitável ({limit})
+  effort_full_split: a mudança está acima do limiar de divisão
+  effort_minimal: a mudança inteira é {shape} e nenhuma classe §A disparou
+  effort_not_minimal_class: 'a mudança é {shape}, mas {classes} disparou — classe §A disparada
+    é exatamente o que um nível barato não pode absorver'
+  effort_standard: produção tocada dentro de {limit} linhas e nenhuma classe de contrato, autorização,
+    regra ou dado disparou
+  effort_summary: 'esforço: {level} · natureza {shape} — {reasons}'
   no_anchor: o perfil de `{repo}` não declara âncora para esta classe — prover a âncora, ou registrar
     `not_applicable` com motivo e aprovador
   no_tool: 'a checagem `{check}` não tem ferramenta neste ambiente: {reason}'

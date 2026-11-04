@@ -302,8 +302,8 @@ class TestThePackageKeysTriageReads(unittest.TestCase):
     def test_no_reader_asks_for_a_key_the_package_does_not_write(self):
         """The general form of the same defect, so the next rename is caught here."""
         import re
-        written = {"files", "removed", "added", "lines_changed", "diff", "slices",
-                   "over_ceiling"}  # exactly what package.py writes
+        written = {"files", "removed", "added", "lines_changed", "lines_by_file", "diff",
+                   "slices", "over_ceiling"}  # exactly what package.py writes
         source = pathlib.Path(__file__).resolve().parent.parent / "triage.py"
         asked = set(re.findall(r'change\.get\("([a-z_]+)"\)', source.read_text(encoding="utf-8")))
         self.assertEqual(set(), asked - written, f"triage.py reads keys change.json never writes")
