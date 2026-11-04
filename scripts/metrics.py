@@ -44,6 +44,20 @@ def aggregate(runs: list[dict]) -> dict:
                     if isinstance(r.get("tokens"), (int, float))
                     and isinstance(r.get("lines_changed"), (int, float))
                     and r["lines_changed"] > 0]
+        # The same ratio, BY EFFORT LEVEL. The global median mixes a docs-only delivery
+        # with a migration, so it cannot say whether proportional effort worked: the
+        # claim under test is "minimal costs less per line than full", and only this
+        # breakdown can confirm or refute it. Runs from before the effort dimension
+        # carry no level and land under `(no effort)` — absence stays visible, it does
+        # not contaminate a level.
+        per_line_by_effort = collections.defaultdict(list)
+        shapes = collections.Counter(r["shape"] for r in rs if r.get("shape"))
+        for r in rs:
+            if (isinstance(r.get("tokens"), (int, float))
+                    and isinstance(r.get("lines_changed"), (int, float))
+                    and r["lines_changed"] > 0):
+                per_line_by_effort[r.get("effort") or "(no effort)"].append(
+                    r["tokens"] / r["lines_changed"])
         # Who spends, agent by agent, across the history. It is the list that says where
         # to cut.
         spend = collections.defaultdict(list)
@@ -71,6 +85,10 @@ def aggregate(runs: list[dict]) -> dict:
             "disagreements": sum(1 for r in rs if r.get("verdict_contested")),
             "tokens_median": round(statistics.median(tokens)) if tokens else None,
             "tokens_per_line_median": round(statistics.median(per_line), 1) if per_line else None,
+            "tokens_per_line_median_by_effort": {
+                e: round(statistics.median(v), 1)
+                for e, v in sorted(per_line_by_effort.items())},
+            "shapes": dict(shapes),
             "runs_without_measurement": unmeasured,
             "cost_per_agent": agent_cost,
             "minutes_median": round(statistics.median(minutes), 1) if minutes else None,

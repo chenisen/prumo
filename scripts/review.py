@@ -358,6 +358,17 @@ def colliding_ids(findings: list[dict]) -> dict[str, int]:
     return {fid: n for fid, n in counts.items() if n > 1}
 
 
+def _agent_tokens(cost_per_agent: dict, suffix: str):
+    """What ONE agent type cost in a run, read from the telemetry aggregate.
+
+    The keys carry the installation's prefix (`prumo:finding-verifier`), so the match is
+    by suffix. Absence stays `None`, never zero: a run with no verifier is cheaper than a
+    run whose verifier was not measured, and a zero would make the two identical."""
+    rows = [v["billable"] if isinstance(v, dict) else v
+            for k, v in (cost_per_agent or {}).items() if k.endswith(suffix)]
+    return sum(rows) if rows else None
+
+
 def conclude(args) -> int:
     package = pathlib.Path(args.package)
     for name, source in (("findings.json", args.findings),
@@ -481,6 +492,15 @@ def conclude(args) -> int:
     blocking = [f["id"] for f in findings
                 if f.get("severity") in ("critical", "required")
                 and f.get("status") != "refuted" and f.get("attributable", True)]
+    # The effort dimension travels with the run so that cost can be aggregated BY LEVEL:
+    # a global tokens-per-line median mixes a docs-only delivery with a migration and
+    # answers nothing about either. `effort.json` is written by the triage; a package
+    # from before it exists simply records `null`, which is "not measured", not "minimal".
+    effort = read_json(package / "effort.json") \
+        if (package / "effort.json").exists() else {}
+    plan = read_json(package / "plan.json") \
+        if (package / "plan.json").exists() else {}
+    cost_per_agent = tel.get("cost_per_agent") or {}
     line = {
         "date": today(), "repo": man["repo"], "origin": man["origin"], "item": item,
         "head_sha": man["head_sha"], "verdict": ver["verdict"],
@@ -492,6 +512,9 @@ def conclude(args) -> int:
         # for being big. The size travels with them so that cost PER LINE is measurable,
         # which is the only way to know whether a cut in the harness worked.
         "lines_changed": read_json(package / "change.json").get("lines_changed"),
+        "shape": (effort.get("shape") or {}).get("shape"),
+        "effort": effort.get("effort"),
+        "reviewers_activated": [r["agent"] for r in plan.get("reviewers") or []],
         "published_findings": len(findings),
         "open_blocking_findings": blocking,
         "relatorio": str(target.relative_to(dir_reports().parent.parent)),
@@ -501,7 +524,12 @@ def conclude(args) -> int:
         "tokens_not_measured_because": tel.get("reason"),
         "run_id": tel.get("run_id"),
         "agents": tel.get("agents"),
-        "cost_per_agent": tel.get("cost_per_agent") or {},
+        "cost_per_agent": cost_per_agent,
+        # The two agents whose cost scales with something other than the diff: the
+        # verifier with the number of blocking findings, the planner with the number of
+        # unassessable classes. Broken out so a change to either lever is measurable.
+        "verifier_tokens": _agent_tokens(cost_per_agent, "finding-verifier"),
+        "planner_tokens": _agent_tokens(cost_per_agent, "manual-verification-planner"),
     }
     runs = dir_reports() / "runs.jsonl"
     runs.parent.mkdir(parents=True, exist_ok=True)
