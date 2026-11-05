@@ -110,3 +110,29 @@ class TestTheFileLevelCheck(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheDeliverysOwnHexIsNotForeign(unittest.TestCase):
+    """A finding quotes the diff as its evidence, and a diff legitimately carries hex
+    that is nobody's commit — a fixture secret in a test, an example hash. Flagging it
+    stopped a real conclude on 2026-11-05: the finding was about this very delivery,
+    quoting the one text it is required to quote."""
+
+    FIXTURE = "0123456789abcdef0123456789abcdef"
+
+    def test_hex_quoted_from_the_diff_is_this_reviews_own_text(self):
+        d = package()
+        (d / "diff.patch").write_text(
+            f"+    private const SECRET = '{self.FIXTURE}';\n", encoding="utf-8")
+        refs = foreign_references(f"the test hardcodes `{self.FIXTURE}` as key material", d)
+        self.assertEqual([], [r for r in refs if r["kind"] == "sha"])
+
+    def test_a_sibling_sha_is_still_caught_even_with_a_diff_present(self):
+        d = package()
+        (d / "diff.patch").write_text("+ nothing hex here\n", encoding="utf-8")
+        refs = foreign_references("verified at 99998888777766665555444433332222111100ff", d)
+        self.assertEqual("sha", refs[0]["kind"])
+
+    def test_a_package_with_no_diff_keeps_the_old_rule(self):
+        refs = foreign_references(f"mentions {self.FIXTURE}", package())
+        self.assertEqual("sha", refs[0]["kind"])

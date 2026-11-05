@@ -60,6 +60,21 @@ def _is_own(sha: str, own: set[str]) -> bool:
     return any(o.startswith(sha) or sha.startswith(o) for o in own)
 
 
+def _delivery_hex(package: pathlib.Path) -> set[str]:
+    """Hex runs the delivery's own diff carries.
+
+    A finding QUOTES the diff as its evidence, and a diff legitimately contains hex that
+    is nobody's commit: a fixture secret (`'0123456789abcdef…'` in a test), an example
+    hash, an id in seeded data. Flagging those as another review's sha stopped a real
+    conclude on 2026-11-05 — the finding was about this very delivery, quoting the one
+    text it is required to quote. Anything the diff itself says is this review's own
+    text; a sibling review's sha, by definition, is not in this diff."""
+    patch = package / "diff.patch"
+    if not patch.exists():
+        return set()
+    return set(RE_SHA.findall(patch.read_text(encoding="utf-8", errors="ignore")))
+
+
 def _proposal_number(origin: str) -> str | None:
     """The number inside the origin ref, whatever shape this forge publishes it in.
 
@@ -84,10 +99,11 @@ def foreign_references(text: str, package: pathlib.Path) -> list[dict]:
     about this one."""
     manifest = read_json(package / "manifest.json")
     own = _own_shas(manifest)
+    delivery = _delivery_hex(package)
     out: list[dict] = []
 
     for sha in dict.fromkeys(RE_SHA.findall(text)):
-        if not _is_own(sha, own):
+        if not _is_own(sha, own) and sha not in delivery:
             out.append({"kind": "sha", "value": sha})
 
     origin = manifest.get("origin") or ""
