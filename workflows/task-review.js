@@ -330,19 +330,36 @@ if (preExistingSevere.length) {
       preExistingSevere.map((f) => f.id).join(', '))
 }
 
+// The verifier's reading is proportional too. In `full` it keeps its widest mandate —
+// opus (the frontmatter's choice), the complete patch and the working repository —
+// because that is the level where a wrong finding costs the most. Below it, the sceptic
+// reads the SLICE the finding came from, on sonnet: the reviewer that raised it never
+// saw more than that slice, so neither does whoever refutes it — and three of four
+// verifier runs on one measured review were spent re-reading a repository to conclude
+// what the slice already showed. "When in doubt, `uncertain`" holds at every level.
+//
+// `pipeline` here is NOT sequential: the harness runs every item concurrently through
+// the stage, capped by its own scheduler — so `full` already verifies in parallel with
+// a concurrency limit, and a `parallel()` barrier would change nothing but the name.
+const sliceOf = new Map(plan.reviewers.map((r) => [r.agent, r.slice]))
 const verified = await pipeline(blocking, (f) =>
   agent([
     'Try to REFUTE this finding. You have not seen the reasoning of whoever raised it.',
     `Claim: ${f.claim}`,
     `Alleged consequence: ${f.consequence}`,
     `Evidence pointed at: ${JSON.stringify(f.evidence)}`,
-    `Read the code at: ${bundle}/slices/complete.patch and in the working repository.`,
+    EFFORT === 'full'
+      ? `Read the code at: ${bundle}/slices/complete.patch and in the working repository.`
+      : `Read the code at: ${bundle}/slices/${sliceOf.get(f.reviewer) ?? 'complete'}.patch ` +
+        '— the slice the finding came from. Do not read beyond it: open the repository ' +
+        'only if that slice alone cannot decide, and say so in your reason if you did.',
     'When in doubt, return `uncertain` — never `confirmed`.',
   ].join('\n'), {
     agentType: agentFor('finding-verifier'),
     label: `verify:${f.id}`,
     phase: 'Verification',
     schema: VERIFICATION_SCHEMA,
+    ...(EFFORT === 'full' ? {} : { model: 'sonnet' }),
   }).then((v) => ({ ...f, status: v ? v.verdict : 'uncertain',
                     attributable: v ? v.attributable : f.attributable,
                     verifier_reason: v ? v.reason : 'the verifier did not return' })))
@@ -405,7 +422,23 @@ if (candidates.length !== needsScript.length) {
 // workspace to read: on a repository that already holds a report from a SIBLING review,
 // it anchored on that one and wrote fifteen scripts for the previous item's SHAs. Every
 // line of them was plausible and none of them was about the delivery under review.
-const scripts = needsScript.length
+// In a minimal delivery whose whole manual plan is `no_anchor`/`no_tool` groups, the
+// honest answer is one sentence the triage already rendered, translated, in
+// `plan.manual_fallback` — "version the anchors" — and paying a planner context to
+// write it cost 64k tokens on a review whose delivery was tests. A §B class that FIRED
+// has no fallback entry: that is a real finding about this change, and it keeps the
+// agent.
+const fallback = plan.manual_fallback ?? {}
+const templatable = EFFORT === 'minimal' && needsScript.length > 0
+  && needsScript.every((c) => c.cause && fallback[c.cause])
+if (templatable) {
+  log('manual plan rendered from the triage template — no planner context paid: '
+      + [...new Set(needsScript.map((c) => c.cause))].join(', '))
+}
+const scripts = templatable
+  ? { scripts_manual: [...new Set(needsScript.map((c) => c.cause))]
+        .map((cause) => fallback[cause]) }
+  : needsScript.length
   ? await agent([
       'Write a manual verification script for each item below.',
       `THE DELIVERY UNDER REVIEW, and no other: ${bundle}/manifest.json — it names the`,
