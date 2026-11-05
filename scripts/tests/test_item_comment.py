@@ -288,5 +288,25 @@ class TestIntervention(unittest.TestCase):
         self.assertIn(t("comment.measured"), h)
 
 
+class TestResolvedFindingInTheCount(unittest.TestCase):
+    """The comment's Measured count must agree with the verdict beside it: a finding a
+    resolution closed no longer holds the proposal in the judge, so counting it as
+    blocking would print a contradiction into the record the item keeps."""
+
+    FINDING = {"id": "F-1", "severity": "required", "status": "confirmed",
+               "attributable": True, "claim": "c", "evidence": [{"file": "t.php"}],
+               "consequence": "q"}
+
+    def test_a_resolved_blocking_finding_is_not_counted(self):
+        h = approved(findings=[self.FINDING],
+                     resolutions=[{"type": "decision", "item": "F-1", "text": "t",
+                                   "decided_by": "who"}])
+        self.assertIn(t("comment.findings_none_blocking", total=1), h)
+
+    def test_an_unresolved_blocking_finding_still_counts(self):
+        h = approved(findings=[self.FINDING])
+        self.assertIn(t("comment.findings_value", total=1, blocking=1, ids="F-1"), h)
+
+
 if __name__ == "__main__":
     unittest.main()

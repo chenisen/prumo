@@ -194,3 +194,65 @@ class TestReportShowsTheEffort(unittest.TestCase):
         from i18n import t
         report = build_report(self.package())
         self.assertIn(t("report.effort_unmeasured"), report)
+
+
+class TestResolvedFindingInTheReport(unittest.TestCase):
+    """Replay of the incident: a person's decision resolved the one required finding, the
+    judge approved — and the report went on showing a blocking severity under five green
+    gates, with the decision nowhere. A reader could not tell a decision from negligence.
+    The report reads the SAME resolutions the judge read, never a second source."""
+
+    MANIFEST = {"repo": "repo-x", "origin": "refs/merge-requests/411/head",
+                "merge_base": "8c75e543bed3549a", "head_sha": "12ebb32366c0b30b",
+                "item": {"id": "12345"}, "base": {"ref": "origin/main",
+                "sha": "8c75e543bed3549a", "source": "profile"}}
+    FINDING = {"id": "F-1", "reviewer": "security-privacy", "severity": "required",
+               "class": None, "claim": "the tests pin the unmasked value as expected",
+               "evidence": [{"file": "tests/T.php", "line": 40}],
+               "consequence": "a future fix reads as a regression",
+               "form": None, "diff_verifiable": True, "status": "confirmed",
+               "attributable": True}
+
+    def package(self, **files):
+        d = pathlib.Path(tempfile.mkdtemp())
+        base = dict(
+            manifest=self.MANIFEST,
+            verdict={"verdict": "APPROVED", "routes": [],
+                     "gates": [{"number": 1, "name": "standards", "condition": "c",
+                                "passed": True, "items": []}],
+                     "summary": {"profile_coverage": "18/18",
+                                 "classes_not_assessable": []}},
+            classes=[],
+            capabilities={"checks": {}, "proof_registry": {"type": "absent"},
+                          "conventions": [], "warnings": []},
+            size={"lines": 217, "band": "acceptable"},
+        )
+        base.update(files)
+        for name, data in base.items():
+            (d / f"{name}.json").write_text(json.dumps(data), encoding="utf-8")
+        return d
+
+    def test_the_decision_appears_beside_the_finding_it_resolved(self):
+        from i18n import t
+        report = build_report(self.package(
+            findings=[self.FINDING],
+            resolutions=[{"type": "decision", "item": "F-1",
+                          "text": "the leak predates this delivery",
+                          "decided_by": "the person responsible"}]))
+        self.assertIn(t("report.finding_resolved_mark"), report)
+        self.assertIn("the person responsible", report)
+        self.assertIn("the leak predates this delivery", report)
+
+    def test_an_unresolved_finding_carries_no_resolution_line(self):
+        from i18n import t
+        report = build_report(self.package(findings=[self.FINDING]))
+        self.assertNotIn(t("report.finding_resolved_mark"), report)
+
+    def test_a_waiver_out_of_force_resolves_nothing(self):
+        from i18n import t
+        report = build_report(self.package(
+            findings=[self.FINDING],
+            resolutions=[{"type": "waiver", "item": "F-1", "text": "expired",
+                          "waiver": {"reason": "r", "approver": "a",
+                                     "expires": "2000-01-01"}}]))
+        self.assertNotIn(t("report.finding_resolved_mark"), report)

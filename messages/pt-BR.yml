@@ -273,6 +273,8 @@ report:
   does_not_resolve: '**não resolve**'
   evidence: Evidência
   finding_from_project: _(do projeto, não desta entrega)_
+  finding_resolved: 'Resolvido por decisão de {who}: {text}'
+  finding_resolved_mark: _(resolvido por decisão)_
   findings: Achados
   form_not_proposed: 'Forma: _não proposta — a classe é de §A, e a decisão é de uma pessoa._'
   ledger_1: Livro-razão 1 — o que {item_with_article} pediu

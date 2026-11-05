@@ -272,6 +272,8 @@ report:
   does_not_resolve: '**does not resolve**'
   evidence: Evidence
   finding_from_project: _(from the project, not from this delivery)_
+  finding_resolved: 'Resolved by a decision of {who}: {text}'
+  finding_resolved_mark: _(resolved by decision)_
   findings: Findings
   form_not_proposed: 'Form: _not proposed — the class belongs to §A, and the decision is a person''s._'
   ledger_1: Ledger 1 — what the {item} asked for

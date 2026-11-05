@@ -18,7 +18,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from common import (CLASSES, PRUMO_ROOT, BLOCKING_SEVERITIES, SEVERITY_ORDER, dir_reports, load_profile, forge, tracker,
-                   today, read_json, slug)
+                   today, read_json, slug, waiver_in_force)
 from i18n import t
 
 VERSION = "2.0"
@@ -205,6 +205,12 @@ def build_report(package: pathlib.Path) -> str:
     effort, plan = optional("effort.json", {}), optional("plan.json", {})
     criteria, findings = optional("criteria.json", []), optional("findings.json", [])
     observations = optional("observations.json", [])
+    # A resolution removes a finding from the judge's routes; the report must say so
+    # BESIDE the finding, or the reader meets a blocking severity under five green gates
+    # and cannot tell a decision from negligence. Same filter the judge applies — a
+    # waiver out of force resolves nothing — and the same file, never a second source.
+    resolved = {r["item"]: r for r in optional("resolutions.json", [])
+                if r.get("type") != "waiver" or waiver_in_force(r.get("waiver"))}
     # A route may point at a finding the `attributable` split moved out of `findings`,
     # so the resolver reads both files — an id whose text sits in the other list would
     # otherwise come out bare, which is the defect this resolver exists to remove.
@@ -257,12 +263,17 @@ def build_report(package: pathlib.Path) -> str:
         for a in sorted(findings, key=lambda x: SEVERITY_ORDER.index(x["severity"])):
             ev = "; ".join(f"`{e['file']}`:{e.get('line') or '?'}" for e in a["evidence"])
             mark = "" if a.get("attributable", True) else "  " + t("report.finding_from_project")
+            res = resolved.get(a["id"])
+            if res:
+                mark += "  " + t("report.finding_resolved_mark")
             parts.append(
                 f"### {a['id']} — `{a['severity']}`{mark}\n\n"
                 f"{escape(a['claim'])}\n\n"
                 f"- {t('report.evidence')}: {ev}\n"
                 f"- {t('report.consequence')}: {escape(a['consequence'])}\n"
                 f"- {t('report.status')}: `{a['status']}`\n"
+                + (f"- {t('report.finding_resolved', who=escape(res.get('decided_by') or res.get('waiver', {}).get('approver') or '?'), text=escape(res.get('text') or ''))}\n"
+                   if res else "")
                 + (f"- {t('report.suggested_form')}: {escape(a['form'])}\n" if a.get("form")
                    else f"- {t('report.form_not_proposed')}\n"))
         return "\n".join(parts)
@@ -469,9 +480,14 @@ def build_item_comment(package: pathlib.Path) -> str:
         measured.append(f"<li><strong>{t('comment.label_size')}</strong> "
                         + t("comment.size_value", lines=size["lines"],
                             band=escape(str(size.get("band", "?")))) + "</li>")
+    # The comment's count must agree with the verdict beside it: a finding a resolution
+    # closed no longer holds the proposal in the judge, so it is not blocking here either.
+    resolved_ids = {r["item"] for r in optional("resolutions.json", [])
+                    if r.get("type") != "waiver" or waiver_in_force(r.get("waiver"))}
     blocking = [a["id"] for a in findings
                 if a.get("severity") in BLOCKING_SEVERITIES
-                and a.get("status") != "refuted" and a.get("attributable", True)]
+                and a.get("status") != "refuted" and a.get("attributable", True)
+                and a["id"] not in resolved_ids]
     measured.append(
         f"<li><strong>{t('comment.label_findings')}</strong> "
         + (t("comment.findings_value", total=len(findings), blocking=len(blocking),
