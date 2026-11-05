@@ -315,6 +315,14 @@ INLINE_CEILING = 24_000   # bytes, per file: above this, pointing at it is cheap
 # silent hole: the description was demanded at the gate, copied into the package, and
 # then read by nobody. `scope-coherence` is asked whether item, proposal and code tell
 # the SAME story, and it was being handed two of the three.
+#
+# The set is deliberately THE SAME for every reviewer, even though `proposal.md` and
+# `out-of-scope.json` serve mostly scope-coherence (measured on 2026-11-04, when
+# proportional effort asked whether anything here is single-reader): the workflow builds
+# one invariant prefix so the cache carries across agents, and excluding a file per
+# reviewer would split that prefix into variants — re-paying cache creation per agent to
+# save at most `INLINE_CEILING` bytes carried once. The ceiling is what bounds the cost;
+# a file too big to share is already pointed at, not carried.
 INLINE_FILES = ("manifest.json", "capabilities.json", "profile.yml", "classes.json",
                 "criteria.json", "item.md", "proposal.md", "out-of-scope.json")
 
