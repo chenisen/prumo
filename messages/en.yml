@@ -425,8 +425,32 @@ triage:
   nothing_matched_anchor: nothing in the diff matched a profile anchor
   nothing_matched_universal: nothing in the diff matched the class's universal patterns
   production_only: the class asks about production and the delivery only touches proof files
+  manual_fallback_acceptance: on the next run, triage reports these classes as assessed
+    (fired or did not fire), never as not assessable
+  manual_fallback_environment: the review profile of `{repo}`, versioned in the profiles
+    directory
+  manual_fallback_evidence: the profile's diff, versioned, with the new anchors or commands
+  manual_fallback_expected: the next review of this repository triages these classes instead
+    of declaring them not assessable
+  manual_fallback_goal_no_anchor: 'version the anchors: one act closes every class above —
+    declare in the profile where each one lives in this repository, or record `not_applicable`
+    with a reason and an approver'
+  manual_fallback_goal_no_tool: 'give the check a tool: declare the command in the profile,
+    or record a waiver with a reason, an approver and an expiry'
+  manual_fallback_steps_no_anchor: 'edit the profile and declare `paths`/`patterns` (or
+    `not_applicable`) for: {ids}'
+  manual_fallback_steps_no_tool: 'edit the profile''s `checks` and declare the command (or a
+    waiver) for the checks behind: {ids}'
+  manual_fallback_trigger: '{ids} — not assessable: {cause}'
   reviewer_not_triggered: triage did not trigger this reviewer's ground
-  reviewer_skipped_ideal: 'ideal band: the fixed cost of spawning agents dominates'
+  reviewer_skipped_effort: 'effort {level}: a change of this nature does not buy this reviewer
+    — the skip is declared here, never silent'
+  skip_minimal_correctness: 'minimal effort: the change carries no proof to read — nothing but
+    documents or configuration'
+  skip_minimal_security: 'minimal effort: runs only when a secret (A9) or an authorisation
+    clause (A3) fired'
+  skip_standard_architecture: 'standard effort: reads only a change that introduces a layer or
+    boundary (A6 fired)'
   summary: 'triage: {fired} fired, {quiet} did not fire, {unknown} NOT ASSESSABLE · band {band}
     ({lines} lines) · {reviewers} reviewers'
   topology_acceptable: only the reviewers triage activated, plus the verifier

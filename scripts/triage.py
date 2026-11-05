@@ -365,28 +365,65 @@ def effort_level(shape: dict, size: dict, classes: list[dict],
                            "split": thresholds.get("split", 1000)}}
 
 
-# Who runs, and over which slice. A reviewer is only activated if the diff touches its
-# ground.
+def _fired(classes: list[dict], *ids: str) -> bool:
+    return any(c["id"] in ids and c["state"] == "fired" for c in classes)
+
+
+# Who runs, over which slice, with which model and turn budget, PER EFFORT LEVEL.
 #
-# The slice is the harness's single biggest cost lever: it is the input payload of a fresh
-# context, and four reviewers reading `completo` paid for the changelog and the lockfile
-# four times over. Only `scope-coherence` reads the whole diff, because its question is
-# precisely whether the item, the proposal and the code tell the same story — and prose is
-# part of the story.
+# This table replaced two implicit rules: `bool(files)` — which activated correctness,
+# security and architecture for ANY non-empty diff above the ideal band, making a
+# coverage delivery pay the same fan-out as a migration — and `band == ideal` skipping
+# everything non-always, which read only size and never nature. Measured before the
+# change: the three `bool(files)` reviewers were 78% of the bill.
+#
+# The slice is the harness's single biggest cost lever: it is the input payload of a
+# fresh context, and four reviewers reading `completo` paid for the changelog and the
+# lockfile four times over. Only `scope-coherence` reads the whole diff, because its
+# question is precisely whether the item, the proposal and the code tell the same story —
+# and prose is part of the story.
+#
+# Two kinds of entry. A LEVELLED reviewer declares, per effort level it runs at, its
+# slice, model and turn budget; a level it does not declare is a skip with a named
+# reason, and a level may carry its own `when` gate (correctness in minimal reads only a
+# proof-only change; security in minimal only answers a fired A9/A3 — unreachable today,
+# since those classes raise the effort, and kept as defence in depth should the cascade
+# ever change). A CLASS-TRIGGERED reviewer carries a single `when`: the fired class
+# decides, at any level, because its ground is already a named risk — and A1/A2/A4/A5
+# force `full` anyway, so only performance-ops ever runs below it.
+#
+# `model` here is the method's choice per level; `profile.models` still wins. `max_turns`
+# travels in the plan for the record — the harness does not take a per-call turn cap
+# (verified against the Workflow agent() options), so the hard ceiling stays the agent
+# frontmatter's and the per-level budget is enforced as reasoning effort instead.
 REVIEWERS = [
-    dict(agent="scope-coherence-reviewer", slice="complete", always=True),
-    dict(agent="correctness-proof-reviewer", slice="code-and-tests", always=False,
-         when=lambda m, c: bool(m.get("files"))),
-    dict(agent="security-privacy-reviewer", slice="code-and-config", always=False,
-         when=lambda m, c: bool(m.get("files"))),
-    dict(agent="architecture-reviewer", slice="code-and-tests", always=False,
-         when=lambda m, c: bool(m.get("files"))),
-    dict(agent="contract-compat-reviewer", slice="contract", always=False,
-         when=lambda m, c: any(x["id"] in ("A1", "A2", "A4") and x["state"] == "fired" for x in c)),
-    dict(agent="domain-rules-reviewer", slice="code-and-tests", always=False,
-         when=lambda m, c: any(x["id"] == "A5" and x["state"] == "fired" for x in c)),
-    dict(agent="performance-ops-reviewer", slice="code-and-config", always=False,
-         when=lambda m, c: any(x["id"] in ("A10", "B7") and x["state"] == "fired" for x in c)),
+    dict(agent="scope-coherence-reviewer",
+         levels={"minimal":  dict(slice="complete", model="sonnet", max_turns=12),
+                 "standard": dict(slice="complete", model="sonnet", max_turns=20),
+                 "full":     dict(slice="complete", model="sonnet", max_turns=25)}),
+    dict(agent="correctness-proof-reviewer",
+         levels={"minimal":  dict(slice="tests", model="sonnet", max_turns=15,
+                                  when=lambda shape, classes: shape["shape"] == "proof_only",
+                                  skip_key="triage.skip_minimal_correctness"),
+                 "standard": dict(slice="code-and-tests", model="sonnet", max_turns=25),
+                 "full":     dict(slice="code-and-tests", model="sonnet", max_turns=30)}),
+    dict(agent="security-privacy-reviewer",
+         levels={"minimal":  dict(slice="code-and-config", model="sonnet", max_turns=15,
+                                  when=lambda shape, classes: _fired(classes, "A9", "A3"),
+                                  skip_key="triage.skip_minimal_security"),
+                 "standard": dict(slice="code-and-config", model="sonnet", max_turns=20),
+                 "full":     dict(slice="code-and-config", model="opus", max_turns=30)}),
+    dict(agent="architecture-reviewer",
+         levels={"standard": dict(slice="code-and-tests", model="sonnet", max_turns=20,
+                                  when=lambda shape, classes: _fired(classes, "A6"),
+                                  skip_key="triage.skip_standard_architecture"),
+                 "full":     dict(slice="code-and-tests", model="sonnet", max_turns=24)}),
+    dict(agent="contract-compat-reviewer", slice="contract",
+         when=lambda shape, classes: _fired(classes, "A1", "A2", "A4")),
+    dict(agent="domain-rules-reviewer", slice="code-and-tests",
+         when=lambda shape, classes: _fired(classes, "A5")),
+    dict(agent="performance-ops-reviewer", slice="code-and-config",
+         when=lambda shape, classes: _fired(classes, "A10", "B7")),
 ]
 
 
@@ -417,23 +454,79 @@ def agent_prefix() -> str:
     return "prumo:" if os.environ.get("CLAUDE_PLUGIN_ROOT") else ""
 
 
-def activation_plan(profile: dict, change: dict, classes: list[dict], size: dict) -> dict:
+def manual_fallback(profile: dict, classes: list[dict]) -> dict:
+    """Pre-rendered manual scripts for the causes whose honest answer never varies.
+
+    Nine classes unassessable for want of an anchor are ONE act — version the anchors —
+    and paying a planner context to write that sentence cost 64k tokens on a review whose
+    whole delivery was tests. The workflow already groups by `cause`; what was missing
+    was not paying an agent to state the obvious. Rendered HERE, not in the workflow,
+    because the sentence a person reads is translated and the catalogue lives with the
+    scripts."""
+    out = {}
+    for cause in ("no_anchor", "no_tool"):
+        members = [c for c in classes if c["state"] == "not_assessable"
+                   and c.get("cause") == cause and not c.get("not_applicable")]
+        if not members:
+            continue
+        ids = ", ".join(c["id"] for c in members)
+        out[cause] = {
+            "trigger": t("triage.manual_fallback_trigger", ids=ids,
+                         cause=members[0]["reason"]),
+            "goal": t(f"triage.manual_fallback_goal_{cause}"),
+            "environment": t("triage.manual_fallback_environment",
+                             repo=profile.get("profile")),
+            "data": [],
+            "steps": [t(f"triage.manual_fallback_steps_{cause}", ids=ids)],
+            "expected_result": t("triage.manual_fallback_expected"),
+            "evidence_to_collect": t("triage.manual_fallback_evidence"),
+            "acceptance": t("triage.manual_fallback_acceptance"),
+        }
+    return out
+
+
+def activation_plan(profile: dict, change: dict, classes: list[dict], size: dict,
+                    effort: dict | None = None) -> dict:
+    """Who reads this delivery, decided by the effort table — never by band alone.
+
+    Skipping is NEVER silent: every reviewer that does not run lands in `skipped` with a
+    translated reason, and the report prints the list. And nothing here reaches the
+    verdict — a smaller effort reduces what is read, not what is declared."""
+    effort = effort or effort_level(change_shape(change), size, classes, change)
+    level, shape = effort["effort"], effort["shape"]
     active, skipped = [], []
     for r in REVIEWERS:
-        activate = r["always"] or r["when"](change, classes)
-        if activate and size["band"] == "ideal" and not r["always"]:
-            activate, reason = False, t("triage.reviewer_skipped_ideal")
-        elif not activate:
-            reason = t("triage.reviewer_not_triggered")
-        if activate:
-            agent = r["agent"]
-            if agent == "architecture-reviewer" and profile.get("local_reviewer"):
-                agent = profile["local_reviewer"]["name"]
-            active.append({"agent": agent, "slice": r["slice"],
-                           "model": (profile.get("models") or {}).get(r["agent"])})
+        if "when" in r:
+            # Class-triggered: the fired class decides, at any level.
+            if not r["when"](shape, classes):
+                skipped.append({"agent": r["agent"],
+                                "reason": t("triage.reviewer_not_triggered")})
+                continue
+            chosen = dict(slice=r["slice"], model=None, max_turns=None)
         else:
-            skipped.append({"agent": r["agent"], "reason": reason})
+            cfg_level = r["levels"].get(level)
+            if cfg_level is None:
+                skipped.append({"agent": r["agent"],
+                                "reason": t("triage.reviewer_skipped_effort", level=level)})
+                continue
+            gate = cfg_level.get("when")
+            if gate and not gate(shape, classes):
+                skipped.append({"agent": r["agent"], "reason": t(cfg_level["skip_key"])})
+                continue
+            chosen = cfg_level
+        agent = r["agent"]
+        if agent == "architecture-reviewer" and profile.get("local_reviewer"):
+            agent = profile["local_reviewer"]["name"]
+        active.append({"agent": agent, "slice": chosen["slice"],
+                       # The profile's override wins over the level's choice, as it
+                       # always won over the frontmatter's.
+                       "model": (profile.get("models") or {}).get(r["agent"])
+                                or chosen["model"],
+                       "max_turns": chosen["max_turns"]})
     return {"reviewers": active, "skipped": skipped,
+            "effort": level,
+            "effort_reasons": effort["reasons"],
+            "manual_fallback": manual_fallback(profile, classes),
             "conventions": profile.get("conventions") or [],
             # How the agents are addressed in this harness. Installed as a plugin they
             # come with the plugin's name in front; loose in `.claude/agents/`, with
@@ -459,7 +552,7 @@ def main() -> int:
     classes = triage_classes(profile, change, capabilities, shape)
     size = size_band(profile, change)
     effort = effort_level(shape, size, classes, change)
-    plan = activation_plan(profile, change, classes, size)
+    plan = activation_plan(profile, change, classes, size, effort)
 
     write_json(out / "classes.json", classes)
     write_json(out / "size.json", size)

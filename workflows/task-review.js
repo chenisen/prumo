@@ -236,6 +236,11 @@ const RAN_OUT = [
 // tokens spent reading and never answering, while the run carried on as though three
 // reviewers had been the plan all along. One retry, and it is `coverage` that records
 // whether the retry worked — silence is never allowed to pass as "nothing to find".
+// How much review this delivery bought, decided by the triage and carried in the plan.
+// A plan from before the effort dimension carries no level and is treated as `full` —
+// the behaviour it was built under.
+const EFFORT = plan.effort ?? 'full'
+
 const review = async (r) => {
   const opts = {
     agentType: agentFor(r.agent),
@@ -243,6 +248,12 @@ const review = async (r) => {
     phase: 'Review',
     schema: FINDINGS_SCHEMA,
     ...(r.model ? { model: r.model } : {}),
+    // `max_turns` travels in the plan for the record, but the harness takes no per-call
+    // turn cap (agent() accepts label/phase/schema/model/effort/isolation/agentType, and
+    // nothing else) — so the hard ceiling stays the agent frontmatter's, and the
+    // per-level budget is enforced as REASONING effort: a minimal delivery buys a low
+    // gear, not a shorter leash.
+    ...(EFFORT === 'minimal' ? { effort: 'low' } : {}),
   }
   const first = await agent(context(r.slice), opts)
   if (first) return first

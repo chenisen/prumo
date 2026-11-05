@@ -114,13 +114,31 @@ class TestSizeAndTopology(unittest.TestCase):
         for lines, band in ((50, "ideal"), (250, "acceptable"), (1500, "split")):
             self.assertEqual(size_band(p, change(lines=lines))["band"], band)
 
-    def test_the_ideal_band_does_not_pay_for_fan_out(self):
+    def test_a_minimal_delivery_does_not_pay_for_fan_out(self):
+        """The rule the ideal band used to approximate, now decided by NATURE: a change
+        with no production code buys scope and, when there is proof, correctness over
+        the `tests` slice — and nothing else."""
+        p = minimal_profile()
+        m = change(["tests/Feature/XTest.php"], lines=20)
+        cl = triage_classes(p, m, CAP_ALL)
+        plan = activation_plan(p, m, cl, size_band(p, m))
+        agents = [r["agent"] for r in plan["reviewers"]]
+        self.assertEqual(agents, ["scope-coherence-reviewer", "correctness-proof-reviewer"])
+        self.assertTrue(plan["skipped"])
+
+    def test_a_small_production_change_pays_three_reviewers(self):
+        """Production within the acceptable threshold and no sensitive class: scope,
+        correctness and security — architecture only reads a change that introduces a
+        boundary (A6)."""
         p = minimal_profile()
         m = change(["app/x.php"], lines=20)
         cl = triage_classes(p, m, CAP_ALL)
         plan = activation_plan(p, m, cl, size_band(p, m))
-        self.assertEqual(len(plan["reviewers"]), 1)
-        self.assertTrue(plan["skipped"])
+        agents = [r["agent"] for r in plan["reviewers"]]
+        self.assertEqual(agents, ["scope-coherence-reviewer", "correctness-proof-reviewer",
+                                  "security-privacy-reviewer"])
+        skipped = {s["agent"] for s in plan["skipped"]}
+        self.assertIn("architecture-reviewer", skipped)
 
     def test_the_contract_reviewer_runs_only_when_a_contract_class_fired(self):
         p = minimal_profile(anchors={"A2": {"paths": ["routes/**"]}})
@@ -254,7 +272,9 @@ def test_every_reviewer_slice_is_written_by_the_package():
     import triage
 
     declared = {"complete", *package.SLICES}
-    used = {r["slice"] for r in triage.REVIEWERS}
+    used = {r["slice"] for r in triage.REVIEWERS if "slice" in r}
+    used |= {lvl["slice"] for r in triage.REVIEWERS
+             for lvl in (r.get("levels") or {}).values()}
     assert used <= declared, (
         f"slice with no matching file: {sorted(used - declared)} — "
         f"package.py writes {sorted(declared)}")
@@ -290,14 +310,19 @@ class TestThePackageKeysTriageReads(unittest.TestCase):
         state = assess_class("A8", CLASSES["A8"], profile, change, CAP_ALL)
         self.assertEqual("did_not_fire", state["state"])
 
-    def test_the_always_on_reviewers_activate_when_the_change_has_files(self):
-        from triage import REVIEWERS
-        change = {"files": ["tests/Module/XTest.php"], "diff": ""}
-        always_on = [r["agent"] for r in REVIEWERS
-                     if not r.get("always") and r["when"](change, [])]
-        for agent in ("correctness-proof-reviewer", "security-privacy-reviewer",
-                      "architecture-reviewer"):
-            self.assertIn(agent, always_on)
+    def test_a_change_with_files_still_reaches_a_reviewer_beyond_scope(self):
+        """The general fact the `arquivos`/`files` rename broke: a change whose `files`
+        list is populated must activate more than the always-on scope reviewer. Under
+        the defect `files` came back empty, every shape collapsed, and scope reviewed
+        alone. The effort table decides WHICH ones; this test holds only that the key
+        is read at all."""
+        profile = {"profile": "repo-x", "anchors": {}}
+        m = {"files": ["tests/Module/XTest.php"], "diff": "", "removed": [],
+             "lines_changed": 150}
+        cl = triage_classes(profile, m, CAP_ALL)
+        plan = activation_plan(profile, m, cl, size_band(profile, m))
+        agents = [r["agent"] for r in plan["reviewers"]]
+        self.assertIn("correctness-proof-reviewer", agents)
 
     def test_no_reader_asks_for_a_key_the_package_does_not_write(self):
         """The general form of the same defect, so the next rename is caught here."""

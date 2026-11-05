@@ -428,8 +428,31 @@ triage:
   nothing_matched_anchor: nada no diff casou com âncora do perfil
   nothing_matched_universal: nada no diff casou com padrões universais da classe
   production_only: a classe pergunta sobre produção e a entrega só toca arquivo de prova
+  manual_fallback_acceptance: na próxima execução, a triagem reporta essas classes como avaliadas
+    (disparou ou não disparou), nunca como não avaliáveis
+  manual_fallback_environment: o perfil de revisão de `{repo}`, versionado no diretório de perfis
+  manual_fallback_evidence: o diff do perfil, versionado, com as novas âncoras ou comandos
+  manual_fallback_expected: a próxima revisão deste repositório tria essas classes em vez de
+    declará-las não avaliáveis
+  manual_fallback_goal_no_anchor: 'versione as âncoras: um ato só fecha todas as classes acima —
+    declare no perfil onde cada uma vive neste repositório, ou registre `not_applicable` com
+    motivo e aprovador'
+  manual_fallback_goal_no_tool: 'dê ferramenta à checagem: declare o comando no perfil, ou
+    registre um waiver com motivo, aprovador e validade'
+  manual_fallback_steps_no_anchor: 'edite o perfil e declare `paths`/`patterns` (ou
+    `not_applicable`) para: {ids}'
+  manual_fallback_steps_no_tool: 'edite os `checks` do perfil e declare o comando (ou um waiver)
+    das checagens por trás de: {ids}'
+  manual_fallback_trigger: '{ids} — não avaliáveis: {cause}'
   reviewer_not_triggered: a triagem não acionou o terreno deste revisor
-  reviewer_skipped_ideal: 'faixa ideal: o custo fixo de abrir agentes domina'
+  reviewer_skipped_effort: 'esforço {level}: mudança desta natureza não compra este revisor —
+    o pulo fica declarado aqui, nunca silencioso'
+  skip_minimal_correctness: 'esforço minimal: a mudança não traz prova para ler — só documentos
+    ou configuração'
+  skip_minimal_security: 'esforço minimal: só roda quando segredo (A9) ou cláusula de autorização
+    (A3) disparou'
+  skip_standard_architecture: 'esforço standard: só lê mudança que introduz camada ou fronteira
+    (A6 disparada)'
   summary: 'triagem: {fired} disparou, {quiet} não disparou, {unknown} NÃO AVALIÁVEL · faixa {band}
     ({lines} linhas) · {reviewers} revisores'
   topology_acceptable: só os revisores ativados pela triagem, mais o verificador
