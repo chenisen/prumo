@@ -202,6 +202,7 @@ def build_report(package: pathlib.Path) -> str:
     size = read_json(package / "size.json")
     profile = load_profile(man["repo"])
     optional = lambda n, v: read_json(package / n) if (package / n).exists() else v
+    effort, plan = optional("effort.json", {}), optional("plan.json", {})
     criteria, findings = optional("criteria.json", []), optional("findings.json", [])
     observations = optional("observations.json", [])
     # A route may point at a finding the `attributable` split moved out of `findings`,
@@ -311,6 +312,34 @@ def build_report(package: pathlib.Path) -> str:
             footer += "\n>\n> " + escape(stale)
         return "\n".join(rows) + footer
 
+    def effort_line():
+        """The level WITH its reasons on the same row: `minimal` alone would be a code
+        the reader never agreed to learn — the same rule every id in this report obeys."""
+        if not effort:
+            return t("report.effort_unmeasured")
+        reasons = "; ".join(effort.get("reasons") or [])
+        shape = (effort.get("shape") or {}).get("shape", "?")
+        return f"`{effort.get('effort')}` · {shape} — {reasons}"
+
+    def sec_reviewers():
+        """Who the triage activated, over what, and who it skipped, WITH the reason.
+        Gate 5 claims the review was measured; this section is where a reader checks what
+        'measured' meant — a skipped reviewer declared here is a reduced reading, and a
+        skipped reviewer absent from here would be a silent one."""
+        if not plan:
+            return t("report.effort_unmeasured")
+        rows = [f"| {t('report.col_reviewer')} | {t('report.col_slice')} | "
+                f"{t('report.col_model')} | {t('report.col_turns')} |", "|---|---|---|---|"]
+        for r in plan.get("reviewers") or []:
+            rows.append(f"| `{r['agent']}` | `{r['slice']}` | {r.get('model') or '—'} | "
+                        f"{r.get('max_turns') or '—'} |")
+        body = "\n".join(rows)
+        skipped = plan.get("skipped") or []
+        if skipped:
+            body += ("\n\n" + t("report.skipped_note") + "\n\n"
+                     + "\n".join(f"- `{s['agent']}` — {s['reason']}" for s in skipped))
+        return body
+
     def sec_routes():
         if verd["verdict"] == "APPROVED":
             return (t("report.nothing_open") + "\n\n"
@@ -326,7 +355,7 @@ def build_report(package: pathlib.Path) -> str:
         base_ref=man["base"]["ref"], base_sha_short=man["base"]["sha"][:12],
         base_source=man["base"]["source"], sha_initial=man["merge_base"][:12],
         sha_final=man["head_sha"][:12], lines=size["lines"], band=size["band"],
-        date=today(), version=VERSION,
+        effort_line=effort_line(), date=today(), version=VERSION,
         # The tracker's vocabulary runs through the template: `card`, `issue`, `ticket`.
         # It lives here and not in the template because a report on disk has to say the
         # name THAT installation uses, and there is one template for all of them.
@@ -341,7 +370,8 @@ def build_report(package: pathlib.Path) -> str:
                   + "\n\n" + class_list(classes, "B", "did_not_fire"),
         section_not_assessable=sec_not_assessable(), section_findings=sec_findings(),
         section_observations=sec_observations(),
-        section_capabilities=sec_capabilities(), verdict=t(READABLE[verd["verdict"]]),
+        section_capabilities=sec_capabilities(), section_reviewers=sec_reviewers(),
+        verdict=t(READABLE[verd["verdict"]]),
         section_project_pending=project_pending_table(verd, meaning=meaning),
         verdict_detail=(t("report.verdict_clean") if verd["verdict"] == "APPROVED"
                         else t("report.verdict_routes",

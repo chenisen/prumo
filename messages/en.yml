@@ -244,6 +244,13 @@ report:
   col_available: Available
   col_class: Class
   col_command: Command
+  col_model: Model
+  col_reviewer: Reviewer
+  col_slice: Slice
+  col_turns: Turn budget
+  effort_unmeasured: not measured — package from before the effort dimension
+  skipped_note: 'Skipped by the triage, each with its reason — a reduced reading is declared,
+    never silent:'
   col_condition: Condition
   col_criterion: Criterion
   col_note: Note

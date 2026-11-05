@@ -1,7 +1,7 @@
-import pathlib, sys, unittest
+import json, pathlib, sys, tempfile, unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
-from render import (class_question, escape, gate_of, meanings_for, named,
+from render import (build_report, class_question, escape, gate_of, meanings_for, named,
                     routes_header, routes_table, safe_html)
 
 
@@ -136,3 +136,61 @@ class TestRouteTableShape(unittest.TestCase):
     def test_the_project_table_has_no_gate_column(self):
         self.assertLess(self.columns(routes_header(gate=False).splitlines()[0]),
                         self.columns(routes_header().splitlines()[0]))
+
+
+class TestReportShowsTheEffort(unittest.TestCase):
+    """Gate 5 claims the review was measured; the report is where a reader checks what
+    'measured' meant. The effort level travels with its reasons, and every reviewer the
+    triage skipped appears WITH its motive — a reduced reading is declared, never
+    silent. A package from before the dimension says 'not measured', never 'minimal'."""
+
+    MANIFEST = {"repo": "repo-x", "origin": "refs/merge-requests/411/head",
+                "merge_base": "8c75e543bed3549a", "head_sha": "12ebb32366c0b30b",
+                "item": {"id": "12345"}, "base": {"ref": "origin/main",
+                "sha": "8c75e543bed3549a", "source": "profile"}}
+
+    def package(self, **files):
+        d = pathlib.Path(tempfile.mkdtemp())
+        base = dict(
+            manifest=self.MANIFEST,
+            verdict={"verdict": "APPROVED", "routes": [],
+                     "gates": [{"number": 1, "name": "standards", "condition": "c",
+                                "passed": True, "items": []}],
+                     "summary": {"profile_coverage": "18/18",
+                                 "classes_not_assessable": []}},
+            classes=[],
+            capabilities={"checks": {}, "proof_registry": {"type": "absent"},
+                          "conventions": [], "warnings": []},
+            size={"lines": 217, "band": "acceptable"},
+        )
+        base.update(files)
+        for name, data in base.items():
+            (d / f"{name}.json").write_text(json.dumps(data), encoding="utf-8")
+        return d
+
+    EFFORT = {"effort": "minimal", "reasons": ["the whole change is proof_only"],
+              "shape": {"shape": "proof_only"}}
+    PLAN = {"reviewers": [{"agent": "scope-coherence-reviewer", "slice": "complete",
+                           "model": "sonnet", "max_turns": 12}],
+            "skipped": [{"agent": "architecture-reviewer",
+                         "reason": "effort minimal: a change of this nature does not buy this reviewer"}]}
+
+    def test_the_effort_appears_with_its_reason(self):
+        report = build_report(self.package(effort=self.EFFORT, plan=self.PLAN))
+        self.assertIn("`minimal`", report)
+        self.assertIn("the whole change is proof_only", report)
+
+    def test_every_skipped_reviewer_appears_with_its_motive(self):
+        report = build_report(self.package(effort=self.EFFORT, plan=self.PLAN))
+        self.assertIn("architecture-reviewer", report)
+        self.assertIn("does not buy this reviewer", report)
+
+    def test_who_read_appears_with_slice_and_model(self):
+        report = build_report(self.package(effort=self.EFFORT, plan=self.PLAN))
+        self.assertIn("scope-coherence-reviewer", report)
+        self.assertIn("`complete`", report)
+
+    def test_a_package_from_before_the_dimension_says_not_measured(self):
+        from i18n import t
+        report = build_report(self.package())
+        self.assertIn(t("report.effort_unmeasured"), report)

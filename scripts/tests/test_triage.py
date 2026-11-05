@@ -378,6 +378,120 @@ class TestA8DoesNotFireOnProse(unittest.TestCase):
         self.assertTrue(self.fires("-    it('does the thing', () => {"))
 
 
+class TestShapeAndEffort(unittest.TestCase):
+    """The effort dimension: deterministic, computed at triage, deciding WHO READS and
+    never what is declared. Each case here is one row of the approved activation table,
+    and the first is the delivery that motivated the work: 217 lines of tests paying
+    scope + correctness + security (opus) + architecture."""
+
+    def plan_for(self, m, profile=None):
+        p = profile or minimal_profile()
+        from triage import change_shape, effort_level
+        shape = change_shape(m)
+        cl = triage_classes(p, m, CAP_ALL, shape)
+        size = size_band(p, m)
+        effort = effort_level(shape, size, cl, m)
+        return effort, activation_plan(p, m, cl, size, effort)
+
+    def test_a_217_line_proof_delivery_is_minimal_and_pays_two_contexts_no_opus(self):
+        m = change(["tests/Feature/ATest.php", "tests/Feature/BTest.php"],
+                   "+ $this->assertSame(1, 1);\n", lines=217)
+        m["lines_by_file"] = {"tests/Feature/ATest.php": 100, "tests/Feature/BTest.php": 117}
+        effort, plan = self.plan_for(m)
+        self.assertEqual(effort["effort"], "minimal")
+        self.assertEqual(effort["shape"]["shape"], "proof_only")
+        agents = [(r["agent"], r["slice"]) for r in plan["reviewers"]]
+        self.assertEqual(agents, [("scope-coherence-reviewer", "complete"),
+                                  ("correctness-proof-reviewer", "tests")])
+        self.assertNotIn("opus", [r["model"] for r in plan["reviewers"]])
+
+    def test_docs_only_is_minimal_and_only_scope_reads(self):
+        m = change(["docs/guide.md", "README.md"], "+ words\n", lines=60)
+        effort, plan = self.plan_for(m)
+        self.assertEqual(effort["effort"], "minimal")
+        self.assertEqual([r["agent"] for r in plan["reviewers"]],
+                         ["scope-coherence-reviewer"])
+
+    def test_a_secret_in_config_raises_the_level_and_security_reads(self):
+        m = change(["config/services.yml"],
+                   "+ api_key: 'abcdefghijklmnopqrst'\n", lines=12)
+        effort, plan = self.plan_for(m)
+        self.assertEqual(effort["shape"]["shape"], "config_only")
+        self.assertNotEqual(effort["effort"], "minimal")
+        self.assertIn("security-privacy-reviewer",
+                      [r["agent"] for r in plan["reviewers"]])
+
+    def test_small_production_without_a_sensitive_class_is_standard(self):
+        m = change(["app/Service.php"], "+ return 2;\n", lines=80)
+        m["lines_by_file"] = {"app/Service.php": 80}
+        effort, plan = self.plan_for(m)
+        self.assertEqual(effort["effort"], "standard")
+        self.assertLessEqual(len(plan["reviewers"]), 3)
+
+    def test_a_migration_is_full(self):
+        p = minimal_profile(anchors={"A1": {"paths": ["database/migrations/**"]}})
+        m = change(["database/migrations/2026_01_01_alter.php"], "+ drop\n", lines=30)
+        m["lines_by_file"] = {"database/migrations/2026_01_01_alter.php": 30}
+        effort, plan = self.plan_for(m, profile=p)
+        self.assertEqual(effort["effort"], "full")
+        self.assertIn("architecture-reviewer", [r["agent"] for r in plan["reviewers"]])
+
+    def test_a_removed_test_takes_proof_only_out_of_minimal(self):
+        m = change(["tests/Feature/ATest.php"], "+ ok\n", lines=50,
+                   removed=["tests/Feature/OldTest.php"])
+        effort, _ = self.plan_for(m)
+        self.assertEqual(effort["shape"]["shape"], "proof_only")
+        self.assertNotEqual(effort["effort"], "minimal")
+
+    def test_production_lines_decide_not_the_total(self):
+        """217 lines of tests beside 20 of production: the TOTAL is over nothing, the
+        production is small, and the level reads the production figure the per-file
+        numstat made separable."""
+        m = change(["app/S.php", "tests/STest.php"], "+ x\n", lines=237)
+        m["lines_by_file"] = {"app/S.php": 20, "tests/STest.php": 217}
+        effort, _ = self.plan_for(m)
+        self.assertEqual(effort["effort"], "standard")
+        self.assertEqual(effort["shape"]["lines_production"], 20)
+
+    def test_every_skip_carries_a_translated_reason(self):
+        m = change(["tests/Feature/ATest.php"], "+ ok\n", lines=20)
+        _, plan = self.plan_for(m)
+        self.assertTrue(plan["skipped"])
+        for s in plan["skipped"]:
+            self.assertTrue(s["reason"], s["agent"])
+
+    def test_no_package_that_a_fired_class_sent_to_full_may_drop_a_level(self):
+        """The replay invariant: whatever else the effort dimension cheapens, a fired
+        contract/authorisation/rule/data class holds the review at full."""
+        from triage import effort_level, change_shape, FULL_EFFORT_CLASSES
+        for class_id in FULL_EFFORT_CLASSES:
+            with self.subTest(class_id=class_id):
+                m = change(["app/x.php"], "+ x\n", lines=50)
+                shape = change_shape(m)
+                cl = [{"id": class_id, "section": class_id[0], "state": "fired"}]
+                size = size_band(minimal_profile(), m)
+                self.assertEqual(effort_level(shape, size, cl, m)["effort"], "full")
+
+    def test_the_plan_carries_the_effort_and_its_reasons(self):
+        m = change(["docs/guide.md"], "+ words\n", lines=10)
+        _, plan = self.plan_for(m)
+        self.assertEqual(plan["effort"], "minimal")
+        self.assertTrue(plan["effort_reasons"])
+
+    def test_the_manual_fallback_covers_the_no_anchor_group(self):
+        """One act answers every class unassessable for want of an anchor, and the
+        sentence is rendered at triage time so the workflow never pays an agent for it."""
+        m = change(["app/x.php"], "+ x\n", lines=50)
+        p = minimal_profile()
+        cl = triage_classes(p, m, CAP_ALL)
+        plan = activation_plan(p, m, cl, size_band(p, m))
+        self.assertIn("no_anchor", plan["manual_fallback"])
+        entry = plan["manual_fallback"]["no_anchor"]
+        for field in ("trigger", "goal", "environment", "data", "steps",
+                      "expected_result", "evidence_to_collect", "acceptance"):
+            self.assertIn(field, entry)
+
+
 class TestAgentPrefix(unittest.TestCase):
     """How the harness addresses the agents, and in which order the three sources speak.
 

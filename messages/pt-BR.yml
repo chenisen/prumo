@@ -245,6 +245,13 @@ report:
   col_available: Disponível
   col_class: Classe
   col_command: Comando
+  col_model: Modelo
+  col_reviewer: Revisor
+  col_slice: Slice
+  col_turns: Orçamento de turns
+  effort_unmeasured: não medido — pacote anterior à dimensão de esforço
+  skipped_note: 'Pulados pela triagem, cada um com seu motivo — leitura reduzida é declarada,
+    nunca silenciosa:'
   col_condition: Condição
   col_criterion: Critério
   col_note: Observação

@@ -11,6 +11,7 @@
 | **Base** | `{base_ref}` @ `{base_sha_short}` ({base_source}) |
 | **Commits reviewed** | `{sha_initial}`..`{sha_final}` |
 | **Size** | {lines} lines, band `{band}` |
+| **Effort** | {effort_line} |
 | **Generated on** | {date} · harness {version} |
 
 ## 1. The rule
@@ -60,6 +61,10 @@
 ## 10. This environment's capabilities
 
 {section_capabilities}
+
+## 10b. Who read this delivery — and who did not
+
+{section_reviewers}
 
 ## 11. Verdict
 
