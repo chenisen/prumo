@@ -85,7 +85,8 @@ Scripts under `${CLAUDE_PLUGIN_ROOT}/scripts/`. Two commands, with the workflow 
 deliver.py prepare  --repo R --item C --item-file ITEM.md (--type T | --shape S) [--kind K] [--branch B]
     F0 preflight    git, the suite's tool, the profile's delivery block
     F1 resolve      the shape, the kind it allows, the base (a hotfix: `delivery.hotfix_base`)
-    F4 branch       <branch_format> from the base — a worktree, or the checkout if clean
+    F4 branch       <branch_format> from the base — a worktree (`delivery.worktree`), set up by
+                    `worktree_setup`, or the checkout if clean; a branch that exists is never reset
     F3 baseline     the suite on the branch while it still IS the base; reds by name
     marker on
 Workflow({name: 'deliver', args: {...workflow-args.json, stage: 'measure'}})
@@ -104,6 +105,8 @@ deliver.py conclude --package P --measure P/measure.json --written P/written.jso
     F8 judge        delivered | blocked | unsupported                 (pure function)
     F9 record       delivery.json, the short report, the commit, the next command
     marker off
+deliver.py release --package P
+    the worktree goes, the branch stays — after the review read it, or after a blocked tree was read
 ```
 
 The three agents travel with the plugin and answer by `<prefix><name>`. A checkout that is
@@ -120,8 +123,15 @@ not finish on the base. `conclude` commits only a delivery that stands; a blocke
 left as it is, for a person to read.
 
 **Who executes is the script**, through the profile's allowlist (`checks.suite.command`,
-`delivery.mutation.command`). An agent runs nothing. A wrapper can swallow an exit code,
-so the result is read from the output (`failure_pattern`, `red_name_pattern`).
+`delivery.mutation.command`, `delivery.worktree_setup`). An agent runs nothing. A wrapper
+can swallow an exit code, so the result is read from the output (`failure_pattern`,
+`red_name_pattern`).
+
+**Where it runs is the profile's.** With `delivery.worktree: true` the delivery lives in
+`.worktrees/<branch>` inside the repository and the person's checkout is never touched;
+`{workdir}` in a check's command names that tree as the executor sees it, through
+`delivery.path_map` when the suite runs in a container; what git does not hold arrives by
+`worktree_setup`, one plain command per line, nothing chained.
 
 ## The record
 

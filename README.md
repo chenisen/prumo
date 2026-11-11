@@ -474,6 +474,18 @@ suite it measured stands as evidence, and the reviewers read each criterion of t
 against it, returning a record that states the fact. Measured on the second real run:
 without it, five criteria the delivery had already proven came back as "verify by hand".
 
+**A delivery is written beside the checkout, never in it.** With `delivery.worktree: true`
+the branch is cut in `.worktrees/<branch>` inside the repository, and the person's
+checkout keeps its branch and its pending work. What git does not hold — a dependency
+tree, a cache directory a framework wants writable — arrives by the profile's
+`worktree_setup`, one plain command per line, run by the script and never composed. A
+suite that runs somewhere else — a container, a runner — reaches the worktree through
+`{workdir}` in the check's command, translated by `delivery.path_map`; the allowlist
+judges the template, and the substitution comes after. `deliver.py release --package P`
+removes the worktree and keeps the branch. Measured on the third real run: the suite ran
+over the worktree inside the container, every test executed, the same reds by name as
+the base, and the checkout never moved.
+
 **Who writes does not approve.** `deliver` ends where `task-review` begins, and the two
 never share a context. The writer has no shell; the suite, the mutation and the baseline
 are run by a script through the profile's allowlist; a sceptic that never saw the writer

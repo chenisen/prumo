@@ -575,9 +575,9 @@ class InAWorktree(Fixture):
         self.assertEqual(evidence.mapped_workdir(profile, self.repo), "/var/www/html")
         self.assertEqual(evidence.mapped_workdir(profile, self.repo / ".worktrees" / "b"),
                          "/var/www/html/.worktrees/b")
-        self.assertEqual(evidence.resolve("docker exec -w {workdir} c phpunit", profile,
+        self.assertEqual(evidence.resolve("docker exec -w {workdir} c runner", profile,
                                           self.repo / ".worktrees" / "b"),
-                         "docker exec -w /var/www/html/.worktrees/b c phpunit")
+                         "docker exec -w /var/www/html/.worktrees/b c runner")
         self.assertEqual(evidence.mapped_workdir({"delivery": {}}, self.repo / "x"),
                          str(self.repo / "x"))
         with self.assertRaises(common.UsageError):
