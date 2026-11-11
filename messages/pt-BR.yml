@@ -432,6 +432,14 @@ review:
   workflow_args_at: "Os argumentos do workflow estão em {path} — {files} arquivos do pacote,\n    {kb}KB, já embutidos para que os revisores não os leiam um a um. Leia e passe o\n    objeto inteiro."
   then_conclude: 'Depois: review.py conclude --package {path} --findings <arquivo>'
   three_acts: 'Três atos externos, cada um com o SEU sim — nenhum acontece sozinho:'
+run:
+  ask_empty: '{path} está vazio — um pedido em branco não é palavra de ninguém'
+  ask_missing: 'sem pedido em disco — a rota inteira só roda com as palavras da própria pessoa, escritas em arquivo'
+  bound: 'pacote de {kind} ligado: {path}'
+  next: 'próximo: {text}'
+  started: 'execução de {item} em {repo}: {path}'
+  stop: 'parada: {klass} — {fact}'
+  then: 'depois: run.py next --package {path}'
 route_label:
   review_incomplete: Revisão incompleta
   author_fix: Ajuste do autor
@@ -448,6 +456,7 @@ suite:
   red_delivery: vermelha, e os vermelhos são desta entrega
 telemetry:
   agent_row: '    {agent} {billable}  {messages} msgs  {model}'
+  every_run_help: soma toda execução de workflow sobre o pacote — uma entrega são duas
   components: '  componentes: saída {output} · cache_creation {cache_creation} · cache_read {cache_read}'
   harness_total: '  totalTokens do harness: {harness} (contagem própria dele)'
   need_target: informe --package ou --run-id

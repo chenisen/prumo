@@ -119,3 +119,15 @@ class TestMetrics(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestMetricsByCapability(unittest.TestCase):
+    """A delivery's tokens per line and a review's are two questions; one median over
+    both answers neither. A line with no `capability` is a review."""
+
+    def test_a_delivery_line_lands_in_its_own_bucket(self):
+        runs = [{"repo": "r", "tokens": 100, "lines_changed": 10},
+                {"repo": "r", "capability": "deliver", "tokens": 1000, "lines_changed": 10}]
+        out = aggregate(runs)
+        self.assertEqual(out["r"]["tokens_per_line_median"], 10.0)
+        self.assertEqual(out["r [deliver]"]["tokens_per_line_median"], 100.0)

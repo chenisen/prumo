@@ -50,6 +50,25 @@ def workflow_records() -> list[pathlib.Path]:
             glob.glob(str(projects_root() / "*" / "*" / "workflows" / "*.json"))]
 
 
+def find_runs(package: str | None, run_id: str | None) -> list[dict]:
+    """Every run over this package, oldest first. A delivery is two workflow runs —
+    measure, then write — and a cost that reads only the last one reads half."""
+    candidates = []
+    for path in workflow_records():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if run_id and data.get("runId") != run_id:
+            continue
+        if package and not any(
+                package in str(data.get(field) or "") for field in ("args", "script")):
+            continue
+        data["_path"] = path
+        candidates.append(data)
+    return sorted(candidates, key=lambda d: d.get("timestamp") or "")
+
+
 def find_run(package: str | None, run_id: str | None) -> dict | None:
     """The run that reviewed THIS package.
 
@@ -149,22 +168,28 @@ def usage_per_agent(session: pathlib.Path, run_id: str) -> list[dict]:
     return sorted(out, key=lambda a: -a["billable"])
 
 
-def measure(package: str | None, run_id: str | None) -> dict:
-    run = find_run(package, run_id)
-    if run is None:
+def measure(package: str | None, run_id: str | None, every_run: bool = False) -> dict:
+    """One run — the most recent, which is the one whose findings a review judges — or,
+    with `every_run`, all of them summed: a delivery spends across two workflow runs."""
+    runs = find_runs(package, run_id) if every_run else [find_run(package, run_id)]
+    runs = [r for r in runs if r]
+    if not runs:
         target = run_id or package
         return {"tokens": None, "minutes": None,
                 "reason": t("telemetry.no_record", target=target,
                             root=projects_root())}
 
+    run = runs[-1]
     session = run["_path"].parent.parent
-    agents = usage_per_agent(session, run["runId"])
+    agents = []
+    for r in runs:
+        agents += usage_per_agent(r["_path"].parent.parent, r["runId"])
     total = collections.Counter()
     for a in agents:
         for k in COMPONENTS:
             total[k] += a[k]
     billable = sum(total[k] for k in COMPONENTS)
-    ms = run.get("durationMs") or 0
+    ms = sum((r.get("durationMs") or 0) for r in runs)
 
     # Aggregated by agent TYPE, summing the instances. One workflow opens N
     # `finding-verifier` agents — one per blocking finding — and a dictionary keyed by
@@ -180,18 +205,19 @@ def measure(package: str | None, run_id: str | None) -> dict:
 
     return {
         "run_id": run["runId"],
+        "runs": [r["runId"] for r in runs],
         "session": session.name,
         "scope": t("telemetry.scope"),
         "tokens": billable,
         "billable_tokens": billable,
-        "harness_tokens": run.get("totalTokens"),
+        "harness_tokens": sum((r.get("totalTokens") or 0) for r in runs),
         "components": {k: total[k] for k in COMPONENTS},
         "minutes": round(ms / 60000, 2),
         # Still spelled in Portuguese because `review.py` reads it to write `runs.jsonl`:
         # renaming it here alone would turn the field into a silent `null` in the record.
         "agents": len(agents),
         "declared_agents": run.get("agentCount"),
-        "tool_calls": run.get("totalToolCalls"),
+        "tool_calls": sum((r.get("totalToolCalls") or 0) for r in runs),
         "default_model": run.get("defaultModel"),
         "status": run.get("status"),
         "per_agent": agents,
@@ -226,11 +252,12 @@ def main() -> int:
     p.add_argument("--package")
     p.add_argument("--run-id")
     p.add_argument("--output", help=t("telemetry.output_help"))
+    p.add_argument("--every-run", action="store_true", help=t("telemetry.every_run_help"))
     args = p.parse_args()
     if not (args.package or args.run_id):
         p.error(t("telemetry.need_target"))
 
-    m = measure(args.package, args.run_id)
+    m = measure(args.package, args.run_id, every_run=args.every_run)
     destination = pathlib.Path(args.output) if args.output else (
         pathlib.Path(args.package) / "telemetry.json" if args.package else None)
     if destination:

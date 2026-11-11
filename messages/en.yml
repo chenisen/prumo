@@ -430,6 +430,14 @@ review:
   workflow_args_at: "The workflow arguments are in {path} — {files} package files, {kb}KB,\n    already inlined so the reviewers do not read them one by one. Read it and pass the\n    object whole."
   then_conclude: 'Then: review.py conclude --package {path} --findings <file>'
   three_acts: 'Three external acts, each with its OWN yes — none happens on its own:'
+run:
+  ask_empty: '{path} is empty — a blank ask is nobody''s words'
+  ask_missing: 'no ask on disk — the whole route runs only on the person''s own words, written to a file'
+  bound: '{kind} package bound: {path}'
+  next: 'next: {text}'
+  started: 'run of {item} on {repo}: {path}'
+  stop: 'stop: {klass} — {fact}'
+  then: 'then: run.py next --package {path}'
 route_label:
   review_incomplete: Review incomplete
   author_fix: Author fix
@@ -446,6 +454,7 @@ suite:
   red_delivery: red, and the reds belong to this delivery
 telemetry:
   agent_row: '    {agent} {billable}  {messages} msgs  {model}'
+  every_run_help: sum every workflow run over the package — a delivery is two
   components: '  components: output {output} · cache_creation {cache_creation} · cache_read {cache_read}'
   harness_total: '  harness totalTokens: {harness} (its own count)'
   need_target: pass --package or --run-id

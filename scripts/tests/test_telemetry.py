@@ -192,3 +192,30 @@ class TestTelemetry(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestEveryRunOverAPackage(TestTelemetry):
+    """A delivery is two workflow runs over one package — measure, then write — and a
+    cost that reads only the most recent reads half of it."""
+
+    def test_every_run_sums_both_runs_and_names_them(self):
+        usage = [{"input_tokens": 1, "output_tokens": 1,
+                  "cache_creation_input_tokens": 1, "cache_read_input_tokens": 1}]
+        _session(self.root, run_id="wf_first", agents=[("a", usage)], package="/tmp/pkg-d", total=10)
+        session = self.root / "projects" / "-workspaces" / "sess1"
+        (session / "workflows" / "wf_second.json").write_text(json.dumps({
+            "runId": "wf_second", "timestamp": "2026-10-29T14:00:00.000Z",
+            "args": {"package": "/tmp/pkg-d"}, "totalTokens": 20, "durationMs": 60000,
+            "agentCount": 1, "totalToolCalls": 3, "status": "completed"}), encoding="utf-8")
+        agents_dir = session / "subagents" / "workflows" / "wf_second"
+        agents_dir.mkdir(parents=True)
+        (agents_dir / "agent-0.meta.json").write_text(json.dumps({"agentType": "b", "spawnDepth": 1}))
+        (agents_dir / "agent-0.jsonl").write_text(json.dumps(
+            {"type": "assistant", "message": {"model": "m", "usage": usage[0]}}) + "\n")
+        one = telemetry.measure("/tmp/pkg-d", None)
+        both = telemetry.measure("/tmp/pkg-d", None, every_run=True)
+        self.assertEqual(one["tokens"], 4)
+        self.assertEqual(both["tokens"], 8)
+        self.assertEqual(both["runs"], ["wf_first", "wf_second"])
+        self.assertEqual(both["minutes"], 3.0)
+        self.assertEqual(both["harness_tokens"], 30)

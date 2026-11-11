@@ -476,7 +476,45 @@ def conclude(args) -> int:
     unmark()
     print(report)
     print(t("review.report_at", path=destination / f"deliver-{today()}.md"))
+
+    # What this delivery cost, read from the harness's transcripts — every workflow run
+    # over the package, because a delivery is two. A by-product: a failure here never
+    # costs the delivery its record, and an unmeasured run is `null`, never zero.
+    try:
+        from telemetry import measure, summarise
+        tel = measure(str(package), None, every_run=True)
+        write_json(package / "telemetry.json", tel)
+        print("\n" + summarise(tel))
+        record_run(package, record, tel)
+    except Exception as e:                                   # noqa: BLE001 — see above
+        print(t("review.knowledge_failed", error=e))
     return 0 if record["state"] == DELIVERED else 1
+
+
+def record_run(package: pathlib.Path, record: dict, tel: dict) -> None:
+    """One line in `runs.jsonl`, beside the reviews', with the capability named so that
+    `metrics.py` never mixes a delivery's cost per line into a review's median."""
+    mutations = record["proof"].get("mutations") or []
+    line = {
+        "date": today(), "capability": "deliver", "repo": record["repo"],
+        "item": record["item"]["id"], "kind": record["item"]["kind"],
+        "state": record["state"], "owner": record.get("owner"),
+        "branch": record["branch"]["name"], "head_sha": record["branch"]["sha"],
+        "files": len(record["diff"]["files"]),
+        "lines_changed": record["diff"]["added"] + record["diff"]["removed"],
+        "mutations_red": sum(1 for m in mutations if m["result"] == "red"),
+        "mutations_total": len(mutations),
+        "new_reds": len(record["baseline"].get("new_reds") or []),
+        "premises_failed": sum(1 for p in record["premises"] if p["state"] == "fails"),
+        "skipped": len(record["skipped"]),
+        "tokens": tel.get("tokens"), "minutes": tel.get("minutes"),
+        "agents": tel.get("agents"), "runs": tel.get("runs"),
+        "cost_per_agent": tel.get("cost_per_agent") or {},
+    }
+    runs = dir_reports() / "runs.jsonl"
+    runs.parent.mkdir(parents=True, exist_ok=True)
+    with runs.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(line, ensure_ascii=False) + "\n")
 
 
 SYMBOL = {"holds": "✔", "fails": "✘", "not_assessable": "?", "red": "✔", "green": "✘",

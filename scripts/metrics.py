@@ -21,9 +21,16 @@ from i18n import t
 
 
 def aggregate(runs: list[dict]) -> dict:
+    # One bucket per repository AND capability: a delivery's tokens per line and a
+    # review's are two different questions, and a median over both answers neither. A
+    # line from before the second capability existed carries no `capability` and is a
+    # review — the only thing the record could be then.
     by_repo = collections.defaultdict(list)
     for r in runs:
-        by_repo[r.get("repo", "(no repo)")].append(r)
+        capability = r.get("capability") or "task-review"
+        repo = r.get("repo", "(no repo)")
+        key = repo if capability == "task-review" else f"{repo} [{capability}]"
+        by_repo[key].append(r)
 
     out = {}
     for repo, rs in sorted(by_repo.items()):
