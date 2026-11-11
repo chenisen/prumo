@@ -315,6 +315,11 @@ class Config:
     # item-id shapes of THIS company, which must not leak into the method. Optional —
     # without the section, only the universal ones apply.
     agnosticism: tuple = ()
+    # Repository names under `paths.repositories` that are ALSO ordinary words — a repo
+    # called `documentation`, say — which rule 1 of `agnosticism_check.py` would otherwise
+    # flag in every sentence that uses the word. Naming one here is a fact about the
+    # installation, not a licence: the universal patterns still apply to the method.
+    tolerated_repo_names: tuple = ()
     # Markers `derive_profile.py` looks for to discover a repository's proof registry.
     # Adds to the public ones; does not replace them.
     proof_registries: tuple = DEFAULT_REGISTRIES
@@ -539,6 +544,9 @@ def build(data: dict, source: pathlib.Path | None = None) -> Config:
             raise InvalidConfiguration(
                 f"`agnosticism.forbidden[{i}].pattern` is not a valid regex: {e}") from e
         extras.append({"label": entry["label"], "pattern": entry["pattern"]})
+    tolerated = ag.get("tolerated_repo_names") or []
+    if not isinstance(tolerated, list) or not all(isinstance(n, str) and n for n in tolerated):
+        raise InvalidConfiguration("`agnosticism.tolerated_repo_names` must be a list of names")
 
     # --- agents (optional)
     ag_cfg = data.get("agents") or {}
@@ -564,6 +572,7 @@ def build(data: dict, source: pathlib.Path | None = None) -> Config:
 
     return Config(forge=forge, tracker=tracker, paths=paths, source=source,
                   language=language, owner=owner.strip(), agnosticism=tuple(extras),
+                  tolerated_repo_names=tuple(tolerated),
                   proof_registries=tuple(registries), agent_prefix=agent_prefix,
                   legacy_keys=tuple(legacy))
 

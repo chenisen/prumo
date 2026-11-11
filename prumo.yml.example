@@ -162,6 +162,13 @@ forge:
 #       pattern: "\\b(my_table|my_collection)\\b"
 #     - label: "item id"
 #       pattern: "(?<![\\w.])(4[5-9]\\d{3}|50\\d{3})(?![\\w.])"
+#
+# Rule 1 also reads every git checkout under `paths.repositories` as a name the method
+# must not carry. A repository called by an ordinary word — `documentation` — would then
+# fail the rule in every sentence that uses the word. Name it here to be read as a word;
+# the universal patterns still apply.
+#
+#   tolerated_repo_names: [documentation]
 
 # --- DETECTION (optional) -----------------------------------------------------------
 #

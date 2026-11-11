@@ -358,3 +358,19 @@ deteccao:
             for old, new in mapping.items():
                 self.assertNotEqual(old, new,
                                     f"`{section}.{old}` maps to itself — swept by a rename")
+
+
+class TestToleratedRepoNames(unittest.TestCase):
+    """A repository named by an ordinary word is the installation's fact to declare;
+    the method's rule 1 reads it as a word and nothing else changes."""
+
+    def test_the_list_is_read_and_defaults_to_empty(self):
+        from providers import test_config
+        self.assertEqual(test_config().tolerated_repo_names, ())
+        cfg = test_config(agnosticism={"tolerated_repo_names": ["documentation"]})
+        self.assertEqual(cfg.tolerated_repo_names, ("documentation",))
+
+    def test_anything_but_a_list_of_names_is_refused(self):
+        from providers import test_config, InvalidConfiguration
+        with self.assertRaises(InvalidConfiguration):
+            test_config(agnosticism={"tolerated_repo_names": "documentation"})

@@ -70,6 +70,16 @@ def installation_forbidden():
 def forbidden():
     return UNIVERSAL_FORBIDDEN + installation_forbidden()
 
+
+# A repository whose name is an ordinary word — `documentation` — is a fact about the
+# installation, and rule 1 cannot tell the word from the name. The installation says
+# which names to read as words; the universal patterns are untouched by it.
+def tolerated_repo_names() -> set[str]:
+    try:
+        return set(cfg().tolerated_repo_names)
+    except Exception:
+        return set()
+
 # Justified exceptions. Each entry is a deliberate decision and carries its why: an
 # exemption with no written reason is coupling waiting to come back.
 # "repo" exempts a repository name; the other labels come from forbidden().
@@ -111,7 +121,8 @@ def rule_1_no_repository_name() -> list[str]:
     # not a repository, and its name is not a coupling: until 2026-11-11 one such folder
     # made every mention of itself in the method fail this rule, in silence about why.
     repos = sorted((d.name for d in dir_repositories().iterdir()
-                    if d.is_dir() and (d / ".git").exists()), key=len, reverse=True)
+                    if d.is_dir() and (d / ".git").exists()
+                    and d.name not in tolerated_repo_names()), key=len, reverse=True)
     failures = []
     for p in method_files():
         text = p.read_text(encoding="utf-8", errors="ignore")
