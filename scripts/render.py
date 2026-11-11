@@ -223,8 +223,9 @@ def build_report(package: pathlib.Path) -> str:
         rows = [f"| {t('report.col_criterion')} | {t('report.col_state')} | "
                 f"{t('report.col_record')} |", "|---|---|---|"]
         for c in criteria:
-            rows.append(f"| {escape(c.get('text', c['id']))[:90]} | `{c['state']}` | "
-                        f"{c.get('record') or '—'} |")
+            record = c.get("record") or (
+                f"— _{t('report.criterion_note')}: {escape(c['note'])}_" if c.get("note") else "—")
+            rows.append(f"| {escape(c.get('text', c['id']))[:90]} | `{c['state']}` | {record} |")
         return "\n".join(rows)
 
     def sec_proof():

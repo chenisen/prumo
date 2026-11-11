@@ -355,6 +355,7 @@ report:
   col_why_not_assessed: Por que não foi avaliada
   consequence: Consequência
   convention_read: lido
+  criterion_note: nota do revisor, não registro
   criteria_none: _Não vieram critérios legíveis d{item_with_article}, ou a leitura obrigatória
     veio vazia._
   did_not_fire: '**Não dispararam — nomeados:**'
@@ -477,6 +478,7 @@ review:
   telemetry_unmeasured: 'telemetria: NÃO MEDIDA — nenhum registro de workflow encontrado para
     `{package}` em {root}; o custo desta execução NÃO foi medido'
   workflow_args_at: "Os argumentos do workflow estão em {path} — {files} arquivos do pacote,\n    {kb}KB, já embutidos para que os revisores não os leiam um a um. Leia e passe o\n    objeto inteiro."
+  criteria_unmatched: '{n} leitura(s) de critério nomearam id que a lista do item não tem e foram descartadas: {ids}. Os revisores respondem com os ids do extrator, ao pé da letra'
   then_conclude: 'Depois: review.py conclude --package {path} --findings <arquivo>'
   three_acts: 'Três atos externos, cada um com o SEU sim — nenhum acontece sozinho:'
 run:

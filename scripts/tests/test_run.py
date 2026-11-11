@@ -369,6 +369,33 @@ class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
             out = decide({"repo": "r", "item": "I", "deliver_package": str(d), "review_package": str(root / "r")}, root)
             self.assertIn(f"--delivery {d}", out["text"])
 
+    def test_a_reviewer_s_reason_is_a_note_and_an_unknown_id_is_reported(self):
+        """Four criteria once passed gate 3 on "a person has to confirm them" sitting in
+        `record`; and a whole reading once fell on the floor because the reviewers
+        numbered the criteria their own way. Neither happens in silence now."""
+        import review
+        current = [{"id": "AC-1", "text": "five tests", "state": "not_verifiable", "record": None},
+                   {"id": "AC-2", "text": "mutants", "state": "not_verifiable", "record": None},
+                   {"id": "AC-3", "text": "lint", "state": "not_verifiable", "record": "qa, 2026-11-10"}]
+        merged, unmatched = review.merge_criteria(current, [
+            {"id": "AC-1", "state": "met", "record": "lines 37, 47, 58, 69 and 81"},
+            {"id": "AC-2", "state": "not_verifiable", "record": "a person has to confirm them"},
+            {"id": "AC-3", "state": "not_verifiable", "record": "pint not shown"},
+            {"id": "c4-format", "state": "met", "record": "ok"},
+            {"id": "AC-9", "state": "met", "record": None}])
+        self.assertEqual((merged[0]["state"], merged[0]["record"]), ("met", "lines 37, 47, 58, 69 and 81"))
+        self.assertEqual((merged[1]["state"], merged[1]["record"], merged[1]["note"]),
+                         ("not_verifiable", None, "a person has to confirm them"))
+        # a person's record already there is never overwritten by a reviewer's reason
+        self.assertEqual((merged[2]["record"], merged[2]["note"]), ("qa, 2026-11-10", "pint not shown"))
+        self.assertEqual(unmatched, ["AC-9", "c4-format"])
+        import judge
+        v = judge.judge_delivery({"status": "confirmed", "anchors": {}}, [], [], merged,
+                                 {"suite": "green"}, {}, {})
+        self.assertEqual(v["verdict"], "INTERVENTION_REQUIRED")
+        self.assertIn("AC-2", v["gates"][2]["items"])
+        self.assertNotIn("AC-3", v["gates"][2]["items"])
+
     def test_the_runs_the_delivery_captured_travel_with_its_record(self):
         """A verifier once confirmed "the record contradicts itself on whether the
         mutants ran" while the mutant's run sat one directory away. The runs now come

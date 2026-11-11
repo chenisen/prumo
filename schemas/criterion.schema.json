@@ -29,10 +29,24 @@
         "string",
         "null"
       ],
-      "description": "onde a evidência humana ficou; null com nao_verificavel bloqueia"
+      "description": "where a PERSON's evidence sits; null with not_verifiable blocks. A reviewer's reason never lands here: it goes to `note`"
     },
     "evidence": {
       "type": "array"
+    },
+    "note": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "what a reviewer said about a criterion it could not decide — a reason, not a record; it never passes gate 3"
+    },
+    "decided_by": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "`suite` when only the suite decides the criterion: it then follows the suite's state, never the absence of a record"
     }
   }
 }

@@ -205,6 +205,33 @@ def copy_delivery(source: pathlib.Path, package: pathlib.Path) -> list[str]:
     return runs
 
 
+def merge_criteria(current: list[dict], readings: list[dict]) -> tuple[list[dict], list[str]]:
+    """The reviewers' reading of each criterion over the extractor's list.
+
+    `met` and `not_met` travel with their record. `not_verifiable` travels as a NOTE:
+    the reviewer's reason is kept for the reader, and `record` stays empty, because a
+    record is where a PERSON's evidence sits. A review once approved four criteria the
+    reviewer had marked "a person has to confirm" — the sentence sat in `record`, the
+    judge saw a record, and gate 3 passed on a reviewer's shrug.
+
+    An id the extractor never gave is returned, not dropped in silence: the reviewers
+    once answered `c1-five-tests` to an extractor that said `AC-1`, every reading fell
+    on the floor, and the review came out with eight criteria nobody had read."""
+    verdicts = {c["id"]: c for c in readings or [] if isinstance(c, dict) and c.get("id")}
+    known = {c["id"] for c in current}
+    for c in current:
+        v = verdicts.get(c["id"])
+        if not v or v.get("state") not in ("met", "not_met", "not_verifiable"):
+            continue
+        if v["state"] == "not_verifiable":
+            c["state"] = "not_verifiable"
+            if v.get("record"):
+                c["note"] = v["record"]
+        elif v.get("record"):
+            c["state"], c["record"] = v["state"], v["record"]
+    return current, sorted(set(verdicts) - known)
+
+
 def delivery_record_for(package: pathlib.Path, head_sha: str) -> dict | None:
     """The record a delivery left, when it is about THIS head. A record about another
     commit is somebody else's proof: it is kept in the package for the reader and
@@ -447,17 +474,13 @@ def conclude(args) -> int:
     # The reviewers' reading of each criterion, with its record, over the extractor's
     # list: a state travels only with a record, and an id the item never had is dropped.
     if getattr(args, "criteria", None):
-        verdicts = {c["id"]: c for c in read_json(pathlib.Path(args.criteria)) or []
-                    if isinstance(c, dict) and c.get("id")}
         path = package / "criteria.json"
         current = read_json(path) if path.exists() else []
         if isinstance(current, dict):
             current = current.get("criteria") or []
-        for c in current:
-            v = verdicts.get(c["id"])
-            if v and v.get("state") in ("met", "not_met", "not_verifiable") and (
-                    v.get("record") or v["state"] == "not_verifiable"):
-                c["state"], c["record"] = v["state"], v.get("record")
+        current, unmatched = merge_criteria(current, read_json(pathlib.Path(args.criteria)) or [])
+        if unmatched:
+            print(t("review.criteria_unmatched", n=len(unmatched), ids=", ".join(unmatched)))
         write_json(path, current)
 
     # A review relates to its own item and its own proposal, and to nothing else. The

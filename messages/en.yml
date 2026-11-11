@@ -354,6 +354,7 @@ report:
   col_why_not_assessed: Why it was not assessed
   consequence: Consequence
   convention_read: read
+  criterion_note: "reviewer's note, not a record"
   criteria_none: _No readable criteria came from the {item}, or the mandatory reading came back
     empty._
   did_not_fire: '**Did not fire — named:**'
@@ -475,6 +476,7 @@ review:
   telemetry_unmeasured: 'telemetry: NOT MEASURED — no workflow record found for `{package}` in
     {root}; this run''s cost was NOT measured'
   workflow_args_at: "The workflow arguments are in {path} — {files} package files, {kb}KB,\n    already inlined so the reviewers do not read them one by one. Read it and pass the\n    object whole."
+  criteria_unmatched: "{n} criterion reading(s) named an id the item's list never had and were dropped: {ids}. The reviewers must answer with the extractor's ids, verbatim"
   then_conclude: 'Then: review.py conclude --package {path} --findings <file>'
   three_acts: 'Three external acts, each with its OWN yes — none happens on its own:'
 run:
