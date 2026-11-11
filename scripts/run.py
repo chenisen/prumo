@@ -92,13 +92,9 @@ def bind(root: pathlib.Path, kind: str, target: str, task: str | None = None) ->
 
 def _wf(name: str) -> str:
     """A plugin's workflow answers by the plugin's name in front — the same prefix its
-    agents carry, declared in `prumo.yml`. A loose checkout declares none."""
-    try:
-        from common import cfg
-        prefix = cfg().agent_prefix or ""
-    except Exception:
-        prefix = ""
-    return f"{prefix}{name}"
+    agents carry, read by `triage.workflow_name` from the same three sources."""
+    from triage import workflow_name
+    return workflow_name(name)
 
 
 def _exists(base: str | None, name: str) -> bool:

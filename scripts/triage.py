@@ -454,6 +454,15 @@ def agent_prefix() -> str:
     return "prumo:" if os.environ.get("CLAUDE_PLUGIN_ROOT") else ""
 
 
+def workflow_name(name: str) -> str:
+    """A plugin's workflow answers by the plugin's name in front — `prumo:task-review`,
+    `prumo:deliver` — the same prefix its agents carry, from the same three sources.
+    One function, because three scripts printed it three ways: the review printed the
+    bare name and the harness answered "not found"; the delivery read a field the
+    configuration never had and printed the bare name too."""
+    return f"{agent_prefix()}{name}"
+
+
 def manual_fallback(profile: dict, classes: list[dict]) -> dict:
     """Pre-rendered manual scripts for the causes whose honest answer never varies.
 

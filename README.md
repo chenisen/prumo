@@ -397,7 +397,7 @@ script cannot invoke it:
 ```
 review.py prepare --repo R [--proposal N | --branch B] --item C
                   --item-file ITEM.md [--proposal-file PROPOSAL.md]
-Workflow({name: 'task-review', args: {...}})          # prepare prints this, filled in
+Workflow({name: 'prumo:task-review', args: {...}})    # prepare prints this, filled in, with the plugin's prefix
 review.py conclude --package P --findings A [--scripts-manual S]
 ```
 

@@ -90,13 +90,13 @@ deliver.py prepare  --repo R --item C --item-file ITEM.md (--type T | --shape S)
                     `worktree_setup`, or the checkout if clean; a branch that exists is never reset
     F3 baseline     the suite on the branch while it still IS the base; reds by name
     marker on
-Workflow({name: 'deliver', args: {...workflow-args.json, stage: 'measure'}})
+Workflow({name: 'prumo:deliver', args: {...workflow-args.json, stage: 'measure'}})
     F2 measure      premises, the files, the mutation           [agent: premise-surveyor]
 deliver.py plan --package P --measure <the measure it returned>
     F2b plan        measure.json, plan.md, plan.json — the hook reads the files from there
     a shape with a gate stops here: /prumo:approve P, by a person
     a central premise that fails: skip the write stage; go to conclude
-Workflow({name: 'deliver', args: {...workflow-args.json, stage: 'write', measure: {...}}})
+Workflow({name: 'prumo:deliver', args: {...workflow-args.json, stage: 'write', measure: {...}}})
     F5 write        the test (and, by kind, the code) inside the named files [agent: change-writer]
     F7 refute       tries to knock the proof down                       [agent: proof-skeptic]
 → write `written` to <package>/written.json and `refutation` to <package>/refutation.json

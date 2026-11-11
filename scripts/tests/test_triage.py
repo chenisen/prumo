@@ -528,6 +528,19 @@ class TestAgentPrefix(unittest.TestCase):
         with self._with_config("prumo:"):
             self.assertEqual(self.triage.agent_prefix(), "prumo:")
 
+    def test_the_workflow_answers_by_the_same_prefix_as_the_agents(self):
+        # `prepare` printed `Workflow({name: 'task-review'})` while the harness knew the
+        # workflow as `prumo:task-review`; the delivery read a field the configuration
+        # never had. One function now, and every script prints what it returns.
+        import review, deliver, run
+        with self._with_config("prumo:"):
+            self.assertEqual(self.triage.workflow_name("task-review"), "prumo:task-review")
+        with self._with_config(""):
+            self.assertEqual(self.triage.workflow_name("deliver"), "deliver")
+        for module in (review, deliver, run):
+            source = pathlib.Path(module.__file__).read_text(encoding="utf-8")
+            self.assertNotRegex(source, r"name: '(task-review|deliver)'", module.__name__)
+
     def test_an_empty_string_in_the_configuration_is_an_answer_not_a_silence(self):
         # agents loose in `.claude/agents/` answer to the bare name, and declaring that
         # must not fall through to the detection

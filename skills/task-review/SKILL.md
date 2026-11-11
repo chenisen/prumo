@@ -116,7 +116,7 @@ Workflow.
 ```
 review.py prepare --repo R [--proposal N | --branch B] --item C
                   --item-file ITEM.md [--proposal-file DESC.md]   # F0 F1 F2 F3
-Workflow({name: 'task-review', args: {...}})                      # F4 F5 F8
+Workflow({name: 'prumo:task-review', args: {...}})                # F4 F5 F8 — the name carries the agents' prefix
 review.py conclude --package P --findings A [--scripts-manual R]
                    [--conventions C]                              # F7 F9 F11 F12
 ```

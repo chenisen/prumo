@@ -346,7 +346,8 @@ def prepare(args) -> int:
     inline_kb = sum(len(v.encode("utf-8")) for v in workflow_args["inline"].values()) // 1024
     print(t("review.workflow_args_at", path=package / "workflow-args.json",
             files=len(workflow_args["inline"]), kb=inline_kb))
-    print("\nWorkflow({name: 'task-review', args: <the object in that file>})")
+    from triage import workflow_name
+    print("\nWorkflow({name: '" + workflow_name("task-review") + "', args: <the object in that file>})")
     print("\n" + t("review.then_conclude", path=package))
     return 0
 

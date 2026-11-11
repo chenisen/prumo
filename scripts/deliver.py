@@ -509,7 +509,7 @@ def prepare(args) -> int:
             "agent_prefix": _agent_prefix(),
             "inline": {"item.md": (package / "item.md").read_text(encoding="utf-8")}})
         print("\n" + t("review.package_ready", path=package))
-        print("Workflow({name: '" + _agent_prefix() + "deliver', args: <the object in " + str(package / "workflow-args.json") + "> + stage: 'design'})")
+        print("Workflow({name: '" + _workflow_name("deliver") + "', args: <the object in " + str(package / "workflow-args.json") + "> + stage: 'design'})")
         print(f"deliver.py plan --package {package} --design <the design it returned>")
         return 0
     kind = args.kind or (rules["kinds"][0] if rules["kinds"] else "coverage-gap")
@@ -603,7 +603,7 @@ def prepare(args) -> int:
     print(t("deliver.cli.baseline", reds=len(base_reads["base_reds"] or []),
             executed=base_reads["executed"], predicted=base_reads["predicted"]))
     print("\n" + t("review.invoke_workflow") + "\n")
-    print("Workflow({name: '" + _agent_prefix() + "deliver', args: <the object in " + str(package / "workflow-args.json") + "> + stage: 'measure'})")
+    print("Workflow({name: '" + _workflow_name("deliver") + "', args: <the object in " + str(package / "workflow-args.json") + "> + stage: 'measure'})")
     print(f"deliver.py plan --package {package} --measure <the measure it returned>")
     print("\n" + t("deliver.cli.then_conclude", path=package))
     return 0
@@ -775,10 +775,13 @@ def approval_of(package: pathlib.Path) -> str | None:
 
 
 def _agent_prefix() -> str:
-    try:
-        return cfg().agents.prefix
-    except Exception:
-        return ""
+    from triage import agent_prefix
+    return agent_prefix()
+
+
+def _workflow_name(name: str) -> str:
+    from triage import workflow_name
+    return workflow_name(name)
 
 
 # --- F6 F8 F9: conclude ------------------------------------------------------------------
