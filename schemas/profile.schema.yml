@@ -140,6 +140,28 @@ properties:
       worktree:
         type: boolean
         description: deliver in an isolated worktree inside the repository, never in the checkout
+      worktree_setup:
+        type: array
+        items: {type: string, minLength: 1}
+        description: >
+          Commands the script runs INSIDE a fresh worktree, one at a time, by `shlex`,
+          with no shell composition — the same rule as `checks`. `{repo}` is the main
+          checkout and `{worktree}` the worktree. Nothing runs that is not declared here:
+          a dependency tree a build left outside git, a cache directory a framework
+          wants writable, are facts of THIS repository, and they are written here.
+      path_map:
+        type: [object, "null"]
+        additionalProperties: false
+        required: [host, container]
+        properties:
+          host: {type: string, minLength: 1}
+          container: {type: string, minLength: 1}
+        description: >
+          How the executor sees the checkout: `host` is the checkout's path here, and
+          `container` the path the same directory is mounted at where the commands run.
+          It is what lets `{workdir}` in `checks.suite`, `checks.lint` and
+          `delivery.mutation` name a worktree the executor can reach — the worktree's
+          path relative to `host`, under `container`. Absent, `{workdir}` is the host path.
       budget:
         type: object
         additionalProperties: false
@@ -164,7 +186,9 @@ properties:
         properties:
           command:
             type: [string, "null"]
-            description: null means by hand — the script edits the named line, runs the suite, reverts
+            description: >
+              null means by hand — the script edits the named line, runs the suite,
+              reverts. `{workdir}` is accepted here the way `checks` accept it.
           note: {type: [string, "null"]}
       hotfix_base:
         type: [string, "null"]
@@ -222,7 +246,11 @@ $defs:
     properties:
       command:
         type: [string, "null"]
-        description: null means the role has no tool in this repo — it becomes an absent capability
+        description: >
+          null means the role has no tool in this repo — it becomes an absent capability.
+          `{workdir}` names the tree the command runs over — the delivery's worktree, or
+          the checkout — translated through `delivery.path_map`; the allowlist checks the
+          template, and the substitution happens after, before the run.
       required: {type: boolean}
       preexisting_reds:
         type: [string, "null"]
