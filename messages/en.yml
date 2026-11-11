@@ -412,6 +412,10 @@ resolver:
   source_commit_subject: commit subject
   summary: repo {repo} · origin {origin} · base {base} ({source})
 review:
+  help_delivery: 'the package of the delivery that produced this branch: its record is evidence for the suite and the criteria'
+  help_criteria: 'the reviewers'' reading of each criterion, with its record (JSON list of {{id, state, record}})'
+  suite_from_delivery: 'measured by the delivery on this very head: {executed} executed, {reds} red on the base, none new by name'
+  suite_from_delivery_red: 'measured by the delivery on this very head: new red by name — {names}'
   help_coverage: what each reviewer looked at and how many never answered (JSON). Optional, but without it a slice nobody read goes unnoticed
   act_approve: 3. Approve the {proposal}
   act_item: 1. comment on the {item}

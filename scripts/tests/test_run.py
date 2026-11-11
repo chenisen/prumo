@@ -333,3 +333,42 @@ class TestAStoryAndAnEpicAreRouted(unittest.TestCase):
         out = self.decide()
         self.assertEqual((out["kind"], out["class"]), ("stop", "decomposed"))
         self.assertIn("plan.md", out["text"])
+
+
+class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
+    """The branch the prumo delivered carries its proof; a review that does not read it
+    asks a person for what the run already measured."""
+
+    def test_the_route_hands_the_delivery_package_to_the_review(self):
+        import json, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp); (root / "item.md").write_text("# x")
+            d = root / "d"; d.mkdir()
+            (d / "deliver-manifest.json").write_text("{}")
+            (d / "delivery.json").write_text(json.dumps({"state": "delivered", "branch": {"name": "b"}}))
+            from run import decide
+            out = decide({"repo": "r", "item": "I", "deliver_package": str(d), "review_package": str(root / "r")}, root)
+            self.assertIn(f"--delivery {d}", out["text"])
+
+    def test_the_suite_the_delivery_measured_on_this_head_is_evidence(self):
+        import json, tempfile
+        import review
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = pathlib.Path(tmp)
+            (pkg / "manifest.json").write_text(json.dumps({"head_sha": "abc", "behind_base": False}))
+            (pkg / "capabilities.json").write_text(json.dumps({"checks": {"suite": {"available": True}}}))
+            (pkg / "delivery-record.json").write_text(json.dumps({
+                "branch": {"sha": "abc"}, "lint": {"state": "green", "reason": "ok"},
+                "baseline": {"base_reds": ["t_old"], "branch_reds": ["t_old"], "new_reds": [],
+                             "vanished_reds": [], "predicted": 10, "executed": 10}}))
+            ev = review.initial_evidence(pkg)
+            self.assertEqual(ev["suite"], "green")
+            self.assertEqual(ev["checks"]["lint"]["state"], "green")
+            # another head: the record is somebody else's proof
+            (pkg / "manifest.json").write_text(json.dumps({"head_sha": "zzz", "behind_base": False}))
+            self.assertEqual(review.initial_evidence(pkg)["suite"], "not_run")
+            # a new red by name on this head holds the proposal
+            (pkg / "manifest.json").write_text(json.dumps({"head_sha": "abc", "behind_base": False}))
+            rec = json.loads((pkg / "delivery-record.json").read_text()); rec["baseline"]["new_reds"] = ["t_new"]
+            (pkg / "delivery-record.json").write_text(json.dumps(rec))
+            self.assertEqual(review.initial_evidence(pkg)["suite"], "red_attributable")

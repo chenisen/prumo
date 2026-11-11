@@ -184,15 +184,47 @@ def item_scope(package: pathlib.Path) -> dict:
             "source": "criteria.json"}
 
 
+def delivery_record_for(package: pathlib.Path, head_sha: str) -> dict | None:
+    """The record a delivery left, when it is about THIS head. A record about another
+    commit is somebody else's proof: it is kept in the package for the reader and
+    counts for nothing here."""
+    path = package / "delivery-record.json"
+    if not path.exists():
+        return None
+    record = read_json(path)
+    return record if (record.get("branch") or {}).get("sha") == head_sha else None
+
+
+def suite_from_record(record: dict) -> tuple[str, str] | None:
+    """The suite as the delivery measured it on this head: green when it finished and
+    turned nothing red by name; red when it did. A record that did not read the names
+    says nothing, and the gate goes on waiting for a run of its own."""
+    b = record.get("baseline") or {}
+    if b.get("new_reds") is None or b.get("executed") is None:
+        return None
+    if b.get("predicted") is not None and b["executed"] < b["predicted"]:
+        return None
+    if b["new_reds"]:
+        return "red_attributable", t("review.suite_from_delivery_red", names=", ".join(b["new_reds"]))
+    return "green", t("review.suite_from_delivery", executed=b["executed"],
+                      reds=len(b.get("base_reds") or []))
+
+
 def initial_evidence(package: pathlib.Path) -> dict:
     """What the gate needs and does not have yet. Phase F6 may fill it; without F6 it
-    stays like this."""
+    stays like this — unless a delivery already measured this very head."""
     man = read_json(package / "manifest.json")
     cap = read_json(package / "capabilities.json")
     suite = cap["checks"].get("suite") or {}
+    record = delivery_record_for(package, man["head_sha"])
+    measured = suite_from_record(record) if record else None
+    lint = (record or {}).get("lint") or {}
     return {
-        "suite": "not_run" if not suite.get("available") else "not_run",
-        "suite_reason": suite.get("reason") or t("review.suite_not_run"),
+        "suite": measured[0] if measured else "not_run",
+        "suite_reason": measured[1] if measured else (suite.get("reason") or t("review.suite_not_run")),
+        "delivery_record": bool(record),
+        **({"checks": {"lint": {"state": lint["state"], "reason": lint.get("reason", "")}}}
+           if lint.get("state") in ("green", "red") else {}),
         "behind_base": man.get("behind_base", False),
         "commits_behind_base": man.get("commits_behind_base", 0),
         # Three states on purpose: True conflicts, False merges cleanly, None was not
@@ -214,6 +246,13 @@ def prepare(args) -> int:
     # The mandatory reading is copied into the package BEFORE the preflight, because it is
     # the file's existence — not the caller's intention — that counts as read.
     reading = copy_mandatory_reading(args, package)
+    # A delivery's record, when the branch was delivered by the prumo: the proof its
+    # own run measured — mutations, the suite by name, lint — travels with the review.
+    if getattr(args, "delivery", None):
+        source = pathlib.Path(args.delivery) / "delivery.json"
+        if not source.is_file():
+            raise UsageError(t("review.reading_missing", path=source))
+        shutil.copy2(source, package / "delivery-record.json")
 
     pre = ["--repo", args.repo, "--package", str(package), "--origin", reading["origin"]]
     if reading["item"]:
@@ -324,7 +363,8 @@ INLINE_CEILING = 24_000   # bytes, per file: above this, pointing at it is cheap
 # save at most `INLINE_CEILING` bytes carried once. The ceiling is what bounds the cost;
 # a file too big to share is already pointed at, not carried.
 INLINE_FILES = ("manifest.json", "capabilities.json", "profile.yml", "classes.json",
-                "criteria.json", "item.md", "proposal.md", "out-of-scope.json")
+                "criteria.json", "item.md", "proposal.md", "out-of-scope.json",
+                "delivery-record.json")
 
 
 def inline_payload(package: pathlib.Path) -> dict:
@@ -385,6 +425,21 @@ def conclude(args) -> int:
                          ("coverage.json", args.coverage)):
         if source:
             write_json(package / name, read_json(pathlib.Path(source)))
+    # The reviewers' reading of each criterion, with its record, over the extractor's
+    # list: a state travels only with a record, and an id the item never had is dropped.
+    if getattr(args, "criteria", None):
+        verdicts = {c["id"]: c for c in read_json(pathlib.Path(args.criteria)) or []
+                    if isinstance(c, dict) and c.get("id")}
+        path = package / "criteria.json"
+        current = read_json(path) if path.exists() else []
+        if isinstance(current, dict):
+            current = current.get("criteria") or []
+        for c in current:
+            v = verdicts.get(c["id"])
+            if v and v.get("state") in ("met", "not_met", "not_verifiable") and (
+                    v.get("record") or v["state"] == "not_verifiable"):
+                c["state"], c["record"] = v["state"], v.get("record")
+        write_json(path, current)
 
     # A review relates to its own item and its own proposal, and to nothing else. The
     # agents can read the whole workspace, the reports root is in it, and one of them
@@ -577,6 +632,7 @@ def main() -> int:
     a.add_argument("--proposal-file", help=t("review.help_proposal_file"))
     a.add_argument("--package")
     a.add_argument("--advisory", action="store_true")
+    a.add_argument("--delivery", help=t("review.help_delivery"))
 
     b = sub.add_parser("conclude")
     b.add_argument("--package", required=True)
@@ -584,6 +640,7 @@ def main() -> int:
     b.add_argument("--scripts-manual")
     b.add_argument("--conventions", help=t("review.help_conventions"))
     b.add_argument("--coverage", help=t("review.help_coverage"))
+    b.add_argument("--criteria", help=t("review.help_criteria"))
     b.add_argument("--advisory", action="store_true")
 
     sub.add_parser("release", help=t("review.help_release"))

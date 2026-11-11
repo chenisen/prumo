@@ -51,7 +51,7 @@ what is judgement.
 | **14 agents** | One question each. Ten read-only for the review — seven reviewers of one axis, a criteria extractor, a manual-verification planner, and a **sceptical verifier** that tries to *refute* every finding without having seen the reasoning behind it. Four for the delivery — a surveyor that measures, a writer with no shell, a **sceptic** that never saw the writer, and a planner that cuts a story into tasks. |
 | **3 knowledge skills** | What the reviewers load to read a diff: five axes, OWASP/ASVS, personal data. Neutral of language, framework and project. |
 | **18 risk classes** | A guardrail has three states — `fired`, `did_not_fire`, `not_assessable`. |
-| **2 message catalogues** | 468 keys each. Everything a person reads, in the configured language. |
+| **2 message catalogues** | 472 keys each. Everything a person reads, in the configured language. |
 
 Three rules govern everything, and each has a test that fails when it is broken:
 
@@ -94,7 +94,7 @@ prumo/
 │   ├── agnosticism_check.py     fails the method when it names a technology
 │   ├── hygiene.py               fails a secret, or a rule that is not the prumo's own
 │   ├── setup.py                 writes a prumo.yml: asks five things, measures the rest
-│   └── tests/                   541 tests
+│   └── tests/                   546 tests
 │
 ├── agents/                      THE LEAVES — 14 prompts: 10 read-only reviewers, a surveyor,
 │                                a writer with no shell, a sceptic, a planner
@@ -466,6 +466,13 @@ builds on — the person approves the plan, and each task is a delivery of its o
 story's branch, its base the branch's head; the story's record sums them inside the
 shape's budget and the branch is reviewed once. An epic's plan holds the stories it
 decomposes into, for a person to open; nothing is delivered from it.
+
+**A branch the prumo delivered carries its proof into its review.** The delivery's
+record — mutations by hand with what went red and what stayed green, the suite by name
+on that very head, lint, the diff — travels with `review.py prepare --delivery`; the
+suite it measured stands as evidence, and the reviewers read each criterion of the item
+against it, returning a record that states the fact. Measured on the second real run:
+without it, five criteria the delivery had already proven came back as "verify by hand".
 
 **Who writes does not approve.** `deliver` ends where `task-review` begins, and the two
 never share a context. The writer has no shell; the suite, the mutation and the baseline

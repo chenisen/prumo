@@ -104,6 +104,17 @@ const FINDINGS_SCHEMA = {
         },
       },
     },
+    // The reading of each criterion the item states, with its record — a fact, never a
+    // finding id. Optional: a reviewer that read no criterion returns none. Decided
+    // against the delivery's record when one travels with the package.
+    criteria: {
+      type: 'array',
+      items: {
+        type: 'object', required: ['id', 'state', 'record'], additionalProperties: false,
+        properties: { id: { type: 'string' }, state: { enum: ['met', 'not_met', 'not_verifiable'] },
+                      record: { type: ['string', 'null'] } },
+      },
+    },
     // Silence does not count as "nothing found": every reviewer says what it looked at.
     checked: { type: 'array', items: { type: 'string' } },
     not_applicable: { type: 'array', items: { type: 'string' } },
@@ -200,6 +211,15 @@ const context = (slice) => [
   embed('item.md', 'Normalised item (description + comments)'),
   embed('proposal.md', "The proposal's own description, as its author wrote it"),
   embed('out-of-scope.json', 'Out of scope as declared by the item'),
+  inlined['delivery-record.json']
+    ? embed('delivery-record.json', "The delivery's own record — what its run MEASURED on this very head: "
+        + 'premises with an address, mutations by hand with what went red and what stayed green, '
+        + 'the suite by name against the base, lint, the diff and what the writer skipped. It is '
+        + 'evidence, not a claim: decide each criterion of the item against it and return '
+        + '`criteria` with a record that states the fact (never a finding id). A criterion the '
+        + 'record does not reach stays `not_verifiable`.')
+    : '',
+
   `Conventions to read BEFORE judging style or structure: ${JSON.stringify(plan.conventions)}`,
   plan.conventions.length === 0
     ? 'The conventions list is EMPTY: say so in your return and judge only what is universal.'
@@ -303,6 +323,19 @@ const findings = plan.reviewers.flatMap((r, i) =>
   (reviews[i]?.findings || []).map((f, n) => ({ ...f, reviewer: r.agent,
                                                 id: `${tags[i]}-${n + 1}` })))
 const conventionsObserved = alive.flatMap((r) => r.conventions_observed || [])
+// One reading per criterion: `not_met` from anyone wins, then `met` with a record,
+// else what the extractor said. A `met` with no record is a claim and is dropped.
+const criteriaVerdicts = (() => {
+  const byId = new Map()
+  for (const r of alive) for (const c of (r.criteria || [])) {
+    const have = byId.get(c.id)
+    if (c.state === 'not_met') byId.set(c.id, c)
+    else if (c.state === 'met' && c.record && (!have || have.state !== 'not_met')) byId.set(c.id, c)
+    else if (!have && c.state === 'not_verifiable') byId.set(c.id, c)
+  }
+  return [...byId.values()]
+})()
+if (criteriaVerdicts.length) log(`${criteriaVerdicts.length} criteria read against the record`)
 const coverage = {
   checked: alive.flatMap((r) => r.checked || []),
   not_applicable: alive.flatMap((r) => r.not_applicable || []),
@@ -455,4 +488,5 @@ const scripts = templatable
   : null
 
 return { findings: final, coverage, conventions_observed: conventionsObserved,
+         criteria: criteriaVerdicts,
          scripts_manual: scripts ? scripts.scripts_manual : [] }

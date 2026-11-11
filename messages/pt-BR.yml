@@ -412,6 +412,10 @@ resolver:
   source_commit_subject: assunto de commit
   summary: repo {repo} · origem {origin} · base {base} ({source})
 review:
+  help_delivery: 'o pacote da entrega que produziu esta branch: o registro dela é evidência para a suíte e os critérios'
+  help_criteria: 'a leitura dos revisores de cada critério, com o registro (lista JSON de {{id, state, record}})'
+  suite_from_delivery: 'medida pela entrega nesta mesma cabeça: {executed} executados, {reds} vermelhos na base, nenhum novo por nome'
+  suite_from_delivery_red: 'medida pela entrega nesta mesma cabeça: vermelho novo por nome — {names}'
   help_coverage: o que cada revisor olhou e quantos não responderam (JSON). Opcional, mas sem ele uma fatia por ler passa despercebida
   act_approve: 3. Approve d{proposal_with_article}
   act_item: 1. comentário n{item_with_article}

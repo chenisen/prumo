@@ -90,6 +90,17 @@ def bind(root: pathlib.Path, kind: str, target: str, task: str | None = None) ->
     log(root, t("run.bound", kind=f"{kind} {task}" if task else kind, path=target))
 
 
+def _wf(name: str) -> str:
+    """A plugin's workflow answers by the plugin's name in front — the same prefix its
+    agents carry, declared in `prumo.yml`. A loose checkout declares none."""
+    try:
+        from common import cfg
+        prefix = cfg().agent_prefix or ""
+    except Exception:
+        prefix = ""
+    return f"{prefix}{name}"
+
+
 def _exists(base: str | None, name: str) -> bool:
     return bool(base) and (pathlib.Path(base) / name).is_file()
 
@@ -119,7 +130,7 @@ def decide(run: dict, root: pathlib.Path) -> dict:
             return stop(rec.get("state", "blocked"), rec.get("reason", "?"))
         branch = rec["branch"]["name"]
     elif not _exists(d, "measure.json"):
-        return invoke(f"Workflow({{name: 'deliver', args: <{d}/workflow-args.json + stage: 'measure'>}})")
+        return invoke(f"Workflow({{name: '{_wf('deliver')}', args: <{d}/workflow-args.json + stage: 'measure'>}})")
     else:
         measure = read_json(pathlib.Path(d) / "measure.json")
         central_failed = any(p.get("central") and p.get("state") == "fails"
@@ -135,7 +146,7 @@ def decide(run: dict, root: pathlib.Path) -> dict:
                 return stop("plan", t("run.plan_stop", path=f"{d}/plan.md",
                                       command=f"/prumo:approve {d}"))
         if not central_failed and not _exists(d, "written.json"):
-            return invoke(f"Workflow({{name: 'deliver', args: <{d}/workflow-args.json + stage: 'write', measure>}})")
+            return invoke(f"Workflow({{name: '{_wf('deliver')}', args: <{d}/workflow-args.json + stage: 'write', measure>}})")
         return invoke(f"deliver.py conclude --package {d} --measure {d}/measure.json"
                       + (f" --written {d}/written.json" if _exists(d, "written.json") else "")
                       + (f" --refutation {d}/refutation.json" if _exists(d, "refutation.json") else ""))
@@ -144,7 +155,7 @@ def decide(run: dict, root: pathlib.Path) -> dict:
     # fix is a new delivery on the person's own ask, and the invocation is what the
     # person pastes.
     if not _exists(r, "manifest.json"):
-        return invoke(f"review.py prepare --repo {repo} --branch {branch} --item {item} --item-file {item_file}")
+        return invoke(f"review.py prepare --repo {repo} --branch {branch} --item {item} --item-file {item_file} --delivery {d}")
     return _review_step(run, r, repo, stop, invoke)
 
 
@@ -155,7 +166,7 @@ def decide_decomposed(run: dict, root: pathlib.Path, d: str, man: dict, invoke, 
     repo, item = run["repo"], run["item"]
     if not _exists(d, "design.json"):
         if not _exists(d, "plan.json"):
-            return invoke(f"Workflow({{name: 'deliver', args: <{d}/workflow-args.json + stage: 'design'>}})")
+            return invoke(f"Workflow({{name: '{_wf('deliver')}', args: <{d}/workflow-args.json + stage: 'design'>}})")
     if not _exists(d, "plan.json"):
         return invoke(f"deliver.py plan --package {d} --design {d}/design.json")
     plan = read_json(pathlib.Path(d) / "plan.json")
@@ -187,7 +198,7 @@ def decide_decomposed(run: dict, root: pathlib.Path, d: str, man: dict, invoke, 
         return stop(rec.get("state", "blocked"), rec.get("reason", "?"))
     r = run.get("review_package")
     if not _exists(r, "manifest.json"):
-        return invoke(f"review.py prepare --repo {repo} --branch {rec['branch']['name']} --item {item} --item-file {root / 'item.md'}")
+        return invoke(f"review.py prepare --repo {repo} --branch {rec['branch']['name']} --item {item} --item-file {root / 'item.md'} --delivery {d}")
     return _review_step(run, r, repo, stop, invoke)
 
 
@@ -202,8 +213,9 @@ def _review_step(run: dict, r: str, repo: str, stop, invoke) -> dict:
             fact += f" · {t('run.fix_door', text=f'deliver.py prepare --repo {repo} --fix {r}')}"
         return stop("intervention", fact)
     if not _exists(r, "findings.json"):
-        return invoke(f"Workflow({{name: 'task-review', args: <{r}/workflow-args.json>}})")
-    return invoke(f"review.py conclude --package {r} --findings {r}/findings.json")
+        return invoke(f"Workflow({{name: '{_wf('task-review')}', args: <{r}/workflow-args.json>}})")
+    return invoke(f"review.py conclude --package {r} --findings {r}/findings.json"
+                  + (f" --criteria {r}/criteria-verdicts.json" if _exists(r, "criteria-verdicts.json") else ""))
 
 
 def next_step(root: pathlib.Path) -> dict:

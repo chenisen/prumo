@@ -121,6 +121,14 @@ review.py conclude --package P --findings A [--scripts-manual R]
 
 `prepare` prints the workflow invocation already assembled, with the activation plan.
 
+**A branch the prumo delivered carries its own proof.** `prepare --delivery <package>`
+takes the delivery's `delivery.json` into the review as `delivery-record.json`. When the
+record is about this very head, the suite it measured by name stands as the suite
+evidence, its lint as the lint check, and the reviewers read each criterion of the item
+against it, returning `criteria` with a record that states the fact; `conclude
+--criteria <file>` writes those readings over the extractor's list. A record about
+another commit is kept for the reader and counts for nothing.
+
 | Phase | Part | What it produces |
 |---|---|---|
 | **F0** preflight | `preflight.py` | `capabilities.json` — what THIS environment can do |
