@@ -151,31 +151,63 @@ def today() -> str:
 OWNER_TOKEN = "${RESPONSAVEL}"
 
 
-def owner() -> str | None:
-    """Who signs, in this run, the human acts the profile records.
+def client_identity() -> str | None:
+    """Whoever is logged into the AI client this installation runs under, read from the
+    harness's own account file — `.claude.json` under `CLAUDE_CONFIG_DIR`, else under
+    the home directory. Never asked, never guessed: absent or unreadable is `None`."""
+    base = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~")
+    try:
+        account = json.loads((pathlib.Path(base) / ".claude.json").read_text(encoding="utf-8"))
+        account = account.get("oauthAccount") or {}
+    except Exception:
+        return None
+    name = str(account.get("displayName") or account.get("emailAddress") or "").strip()
+    return name or None
+
+
+def owner_source() -> tuple[str, str]:
+    """Who signs, in this run, the human acts the profile records — and WHERE the name
+    came from, because a presumed name is declared, never passed off as a given one.
 
     The environment wins over the configuration, and that order is the point. A solo
     installation writes the name once in `prumo.yml` and forgets it; a team that commits
     its `prumo.yml` would otherwise sign every review with one person's name, and the
     environment variable is each person's way out of that without editing a shared file.
+    With neither, the name is presumed: whoever is logged into the AI client, and failing
+    that the assistant itself — so a run never stops for want of a signature, and the
+    record says the signature was presumed. Decided on 2026-11-11.
     """
     from_env = (os.environ.get("TASK_REVIEW_RESPONSAVEL") or "").strip()
     if from_env:
-        return from_env
+        return "environment", from_env
     try:
-        return cfg().owner or None
+        configured = cfg().owner or ""
     except Exception:
-        # No configuration is not the same as no owner: the caller that needs a name
-        # will say so. Raising here would turn a missing `prumo.yml` into a traceback in
-        # the middle of rendering a report.
-        return None
+        # No configuration is not the same as no owner: the fallbacks below still
+        # answer. Raising here would turn a missing `prumo.yml` into a traceback in the
+        # middle of rendering a report.
+        configured = ""
+    if configured:
+        return "configuration", configured
+    client = client_identity()
+    if client:
+        return "client", client
+    from i18n import t
+    return "assistant", t("owner.assistant")
+
+
+PRESUMED_SOURCES = ("client", "assistant")
+
+
+def owner() -> str:
+    return owner_source()[1]
 
 
 def resolve_owner(value, who: str | None = None):
     """Swap the token for the name of whoever is conducting. With no name in the
     environment, leave the token standing — so the absence stays VISIBLE downstream
     instead of collapsing into an empty string."""
-    who = who or owner()
+    who = owner() if who is None else who
     if not who:
         return value
     if isinstance(value, str):

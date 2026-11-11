@@ -147,6 +147,24 @@ class TestEveryRoutingDecisionIsReadFromDisk(unittest.TestCase):
         self.put(self.review, "verdict.json", {"verdict": "INTERVENTION_REQUIRED"})
         self.assertEqual(self.decide()["class"], "intervention")
 
+    def test_a_verdict_releases_a_standing_worktree_before_the_stop(self):
+        workdir = self.root / "wt"; workdir.mkdir()
+        self.put(self.deliver, "deliver-manifest.json", {"in_worktree": True, "workdir": str(workdir)})
+        self.put(self.deliver, "delivery.json", {"state": "delivered", "branch": {"name": "b"}})
+        self.put(self.review, "manifest.json", {})
+        self.put(self.review, "verdict.json", {"verdict": "APPROVED"})
+        out = self.decide()
+        self.assertEqual((out["kind"], out["text"]), ("invoke", f"deliver.py release --package {self.deliver}"))
+        workdir.rmdir()
+        self.assertEqual(self.decide()["class"], "approved")
+
+    def test_a_blocked_delivery_keeps_its_worktree_for_a_person_to_read(self):
+        workdir = self.root / "wt"; workdir.mkdir()
+        self.put(self.deliver, "deliver-manifest.json", {"in_worktree": True, "workdir": str(workdir)})
+        self.put(self.deliver, "delivery.json", {"state": "blocked", "reason": "r"})
+        self.assertEqual(self.decide()["class"], "blocked")
+        self.assertTrue(workdir.exists())
+
     def test_an_intervention_with_an_author_fix_route_hands_the_fix_door(self):
         self.put(self.deliver, "deliver-manifest.json", {})
         self.put(self.deliver, "delivery.json", {"state": "delivered", "branch": {"name": "b"}})

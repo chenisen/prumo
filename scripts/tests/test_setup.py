@@ -159,15 +159,19 @@ class TestTheOwnerLivesInTheFileButTheEnvironmentWins(unittest.TestCase):
              mock.patch.dict("os.environ", {"TASK_REVIEW_RESPONSAVEL": "Beltrana"}):
             self.assertEqual(common.owner(), "Beltrana")
 
-    def test_with_neither_there_is_no_owner_and_no_crash(self):
+    def test_with_neither_the_name_is_presumed_and_nothing_crashes(self):
         """A missing configuration must not become a traceback in the middle of
-        rendering a report — the caller that needs a name says so itself."""
-        import common
+        rendering a report — the name falls through to the AI client's login, and to
+        the assistant itself, each declared as presumed."""
+        import common, tempfile
         def boom():
             raise RuntimeError("no configuration")
         with mock.patch.object(common, "cfg", boom), \
-             mock.patch.dict("os.environ", {"TASK_REVIEW_RESPONSAVEL": ""}):
-            self.assertIsNone(common.owner())
+             mock.patch.dict("os.environ", {"TASK_REVIEW_RESPONSAVEL": "",
+                                            "CLAUDE_CONFIG_DIR": tempfile.mkdtemp()}):
+            source, name = common.owner_source()
+        self.assertEqual(source, "assistant")
+        self.assertTrue(name)
 
 
 if __name__ == "__main__":

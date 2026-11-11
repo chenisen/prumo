@@ -16,7 +16,7 @@ import yaml
 import jsonschema
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from common import (CLASSES, PRUMO_ROOT, dir_profiles, CHECK_ROLES, OWNER_TOKEN,
+from common import (CLASSES, PRUMO_ROOT, dir_profiles, CHECK_ROLES, OWNER_TOKEN, PRESUMED_SOURCES, owner_source,
                    profile_path, valid_date, waiver_in_force, owner,
                    unresolved_tokens)
 from i18n import t
@@ -60,8 +60,11 @@ def validate(profile: dict, schema: dict | None = None) -> tuple[list[str], list
             errors.append(t("validate.confirmed_at_date"))
 
     # --- whoever signs comes from the environment, never from the versioned file
-    if unresolved_tokens(profile) and not owner():
-        warnings.append(t("validate.owner_unresolved", token=OWNER_TOKEN))
+    if unresolved_tokens(profile):
+        source, name = owner_source()
+        if source in PRESUMED_SOURCES:
+            warnings.append(t("validate.owner_presumed", token=OWNER_TOKEN, name=name,
+                              source=t(f"owner.source_{source}")))
 
     # --- anchors: known class, §B with a verification, complete nao_se_aplica
     for klass, anchor in (profile.get("anchors") or {}).items():

@@ -106,7 +106,8 @@ deliver.py conclude --package P --measure P/measure.json --written P/written.jso
     F9 record       delivery.json, the short report, the commit, the next command
     marker off
 deliver.py release --package P
-    the worktree goes, the branch stays — after the review read it, or after a blocked tree was read
+    the worktree goes, the branch stays — the `run` route does it once the verdict is in;
+    a blocked tree stays, for a person to read
 ```
 
 The three agents travel with the plugin and answer by `<prefix><name>`. A checkout that is

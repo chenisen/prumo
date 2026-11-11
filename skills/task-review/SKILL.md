@@ -58,8 +58,10 @@ the profile.** A profile is versioned and shared; writing a name into it would m
 review by everybody come out signed by the first person who confirmed it. That is why the
 profile writes the token `${RESPONSAVEL}` into `confirmed_by` and into every `approver`,
 and the harness swaps it for the value of **`TASK_REVIEW_RESPONSAVEL`** — the same
-convention as `TASK_REVIEW_HOJE`. A `confirmed` profile with the token still unresolved is
-an **impediment** at preflight: a `not_applicable` with no owner is trust with no owner.
+convention as `TASK_REVIEW_HOJE`. With no name in the environment or in `prumo.yml` the
+name is **presumed** — the AI client's login, else the assistant itself — and preflight
+warns who was presumed and from where: a `not_applicable` signed by a presumed name is
+declared as such, never passed off as a person's.
 
 If the item is readable but **carries no criterion at all**, say so; do not invent what it
 asked for.

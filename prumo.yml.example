@@ -36,7 +36,8 @@ language: en
 #
 # `TASK_REVIEW_RESPONSAVEL` in the environment WINS over this line. That is the way out
 # for a team that commits its prumo.yml: the file carries the common default, each person
-# overrides it for their own run.
+# overrides it for their own run. With neither, the name is presumed — whoever is logged
+# into the AI client, else the assistant itself — and every record says it was presumed.
 # owner: "Your Name"
 
 # --- WHERE THINGS LIVE --------------------------------------------------------------

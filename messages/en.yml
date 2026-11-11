@@ -80,6 +80,10 @@ config:
   missing: '`prumo.yml` not found. The prumo assumes neither provider nor path: copy `prumo.yml.example`
     from the prumo root, fill it in, and put it at the root of your workspace — or point `PRUMO_CONFIG`
     at it.'
+owner:
+  assistant: the AI assistant
+  source_client: the AI client's login
+  source_assistant: the assistant itself
 deliver:
   blocked:
     baseline_not_assessable: 'no `red_name_pattern` in the profile — the baseline cannot be compared by name'
@@ -299,8 +303,7 @@ preflight:
     `missing_profile` route with origin `project` — declared in the report, OUTSIDE the verdict'
   warn_mcp_publishing_manual: 'no token for {proposal} in the environment: the connector READS it, and only publishing stays manual'
   warn_no_token: 'no token for {proposal} in the environment: publishing stays manual'
-  warn_unresolved_owner: 'the profile is `confirmed` but whoever signs is not in the environment:
-    export `TASK_REVIEW_RESPONSAVEL`'
+  warn_owner_presumed: 'nobody signs in the environment or in prumo.yml: presumed {name}, from {source}'
   warning: 'warning: {text}'
 findings:
   colliding_ids: 'findings.json carries {n} id(s) given to more than one finding: {ids}. An id is what the verification, the judge and the report key by, so two findings sharing one means findings were LOST — overwritten by a copy of each other — and the result is shaped exactly like a correct one.'
@@ -572,8 +575,8 @@ validate:
     — the case will fail every time'
   line: '{repo}  [{status}]  coverage {mapped}/18'
   not_applicable_date: 'anchors.{klass}.not_applicable.date: date must be YYYY-MM-DD'
-  owner_unresolved: the profile delegates whoever signs to `{token}` and TASK_REVIEW_RESPONSAVEL
-    is not in the environment — set it before reviewing, or the human act has no owner
+  owner_presumed: the profile delegates whoever signs to `{token}` and nobody is named — presumed
+    {name}, from {source}; set TASK_REVIEW_RESPONSAVEL to sign as yourself
   profile_missing: '{repo}: profile missing at {path}'
   schema_root: (root)
   thin_coverage: 'profile coverage: only {mapped} of 18 classes have an anchor — confirming a

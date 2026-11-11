@@ -22,7 +22,8 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from common import (MissingConfiguration, InvalidConfiguration, cfg as common_cfg, dir_repositories, CHECK_ROLES, profile_path, load_profile,
-                   waiver_in_force, write_json, today, unresolved_tokens)
+                   waiver_in_force, write_json, today, unresolved_tokens,
+                   owner_source, PRESUMED_SOURCES)
 from i18n import t
 
 # External tools the harness would reach for. Absent is not an error: it is a measured
@@ -222,14 +223,19 @@ def preflight(repo: str, origin: str | None = None, item_read: bool = False,
         impediments.append(t("preflight.no_git"))
     if profile_errors:
         impediments.append(t("preflight.profile_invalid"))
-    if profile.get("status") == "confirmed" and unresolved_tokens(profile):
-        impediments.append(t("preflight.warn_unresolved_owner"))
     impediments += reading_impediments(cap["leitura_obrigatoria"], cfg)
     cap["impediments"] = impediments
 
     warnings = []
     if cap["profile"]["status"] != "confirmed":
         warnings.append(t("preflight.warn_draft_profile"))
+    # A signature nobody gave is presumed, and said so: the run goes on, the record
+    # names who was presumed and from where.
+    source, name = owner_source()
+    if source in PRESUMED_SOURCES:
+        cap["owner"] = {"name": name, "source": source}
+        warnings.append(t("preflight.warn_owner_presumed", name=name,
+                          source=t(f"owner.source_{source}")))
     for role, c in cap["checks"].items():
         if not c["available"] and c["required"] and not c["waiver_in_force"]:
             warnings.append(t("preflight.warn_check_unavailable", role=role, reason=c["reason"]))

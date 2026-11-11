@@ -202,8 +202,20 @@ def decide_decomposed(run: dict, root: pathlib.Path, d: str, man: dict, invoke, 
     return _review_step(run, r, repo, stop, invoke)
 
 
+def _worktree_standing(d: str | None) -> bool:
+    """A delivery cut in a worktree leaves it standing until the review read the branch;
+    once the verdict is in, the worktree is released and the branch stays."""
+    if not _exists(d, "deliver-manifest.json"):
+        return False
+    man = read_json(pathlib.Path(d) / "deliver-manifest.json")
+    return bool(man.get("in_worktree")) and pathlib.Path(man.get("workdir") or "/nonexistent").exists()
+
+
 def _review_step(run: dict, r: str, repo: str, stop, invoke) -> dict:
     if _exists(r, "verdict.json"):
+        d = run.get("deliver_package")
+        if _worktree_standing(d):
+            return invoke(f"deliver.py release --package {d}")
         v = read_json(pathlib.Path(r) / "verdict.json")
         verdict = v.get("verdict")
         if verdict == "APPROVED":

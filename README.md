@@ -334,6 +334,11 @@ and is git-ignored, so a name is at home there. If your team *does* commit its
 `prumo.yml`, the environment variable is the way out — the file carries the common
 default, each person overrides it for their own run.
 
+With neither, the name is **presumed, and declared as such**: whoever is logged into the
+AI client (its own account file), and failing that the assistant itself. The run never
+stops for want of a signature; preflight warns who was presumed and from where, and the
+record carries it.
+
 ### Setup on Codex
 
 Codex has no skills and no named subagents, so the prumo runs in two parts: the
@@ -482,7 +487,8 @@ tree, a cache directory a framework wants writable — arrives by the profile's
 suite that runs somewhere else — a container, a runner — reaches the worktree through
 `{workdir}` in the check's command, translated by `delivery.path_map`; the allowlist
 judges the template, and the substitution comes after. `deliver.py release --package P`
-removes the worktree and keeps the branch. Measured on the third real run: the suite ran
+removes the worktree and keeps the branch, and the `run` route does that by itself once
+the verdict is in — a blocked tree stays, for a person to read. Measured on the third real run: the suite ran
 over the worktree inside the container, every test executed, the same reds by name as
 the base, and the checkout never moved.
 

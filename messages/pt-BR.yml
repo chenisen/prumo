@@ -84,6 +84,10 @@ config:
   missing: '`prumo.yml` não encontrado. O prumo não presume fornecedor nem caminho: copie `prumo.yml.example`
     da raiz do prumo, preencha, e ponha na raiz do seu workspace — ou aponte `PRUMO_CONFIG` para
     ele.'
+owner:
+  assistant: a IA
+  source_client: o login do cliente de IA
+  source_assistant: a própria IA
 deliver:
   blocked:
     baseline_not_assessable: 'sem `red_name_pattern` no perfil — a baseline não compara por nome'
@@ -300,8 +304,7 @@ preflight:
     com origem `projeto` — declarada no relatório, FORA do veredito'
   warn_mcp_publishing_manual: 'sem token d{proposal_with_article} no ambiente: o conector LÊ, e só a publicação fica manual'
   warn_no_token: 'sem token d{proposal_with_article} no ambiente: a publicação fica manual'
-  warn_unresolved_owner: 'o perfil é `confirmado` mas quem assina não está no ambiente: exporte
-    `TASK_REVIEW_RESPONSAVEL`'
+  warn_owner_presumed: 'ninguém assina no ambiente nem no prumo.yml: presumido {name}, de {source}'
   warning: 'aviso: {text}'
 findings:
   colliding_ids: 'findings.json traz {n} id(s) dado(s) a mais de um achado: {ids}. O id é por onde a verificação, o juiz e o relatório indexam, então dois achados com o mesmo id significam achados PERDIDOS — sobrescritos por cópia um do outro — e o resultado tem a forma exata de um correto.'
@@ -574,8 +577,8 @@ validate:
     — o caso vai falhar sempre'
   line: '{repo}  [{status}]  cobertura {mapped}/18'
   not_applicable_date: 'anchors.{klass}.not_applicable.date: data deve ser AAAA-MM-DD'
-  owner_unresolved: o perfil delega quem assina a `{token}` e TASK_REVIEW_RESPONSAVEL não está
-    no ambiente — defina-a antes de revisar, ou o ato de pessoa fica sem dono
+  owner_presumed: o perfil delega quem assina a `{token}` e ninguém está nomeado — presumido
+    {name}, de {source}; defina TASK_REVIEW_RESPONSAVEL para assinar como você
   profile_missing: '{repo}: perfil ausente em {path}'
   schema_root: (raiz)
   thin_coverage: 'cobertura de perfil: só {mapped} de 18 classes têm âncora — confirmar um perfil
