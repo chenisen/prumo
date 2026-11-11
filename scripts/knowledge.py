@@ -296,11 +296,18 @@ def accrue(package: pathlib.Path, conventions_file: str | None,
 
     ledger_path, reading_path = root / f"{repo}.json", root / f"{repo}.md"
     ledger = read_json(ledger_path) if ledger_path.exists() else {}
-    ledger = merge(ledger, harvest(package, conventions), manifest, today())
+    found = harvest(package, conventions)
+    ledger = merge(ledger, found, manifest, today())
     write_json(ledger_path, ledger)
     reading_path.write_text(distil(ledger), encoding="utf-8")
+    # What THIS review brought, by kind — so "0 entries over 4 reviews" reads as what it
+    # is. Measured on four reviews of one delivery: the reviewers at `minimal` effort
+    # opened no repository file, returned no convention, and the package held no
+    # observation and no pending route. Zero was the measurement, not a defect; without
+    # this line it looked like one.
     return {"repo": repo, "entries": len(ledger["entries"]),
-            "reviews": ledger["reviews"], "reading": str(reading_path)}
+            "reviews": ledger["reviews"], "reading": str(reading_path),
+            "harvested": {kind: len(items) for kind, items in found.items()}}
 
 
 def main() -> int:
@@ -313,6 +320,8 @@ def main() -> int:
                     pathlib.Path(args.output) if args.output else None)
     print(f"knowledge · {result['repo']}: {result['entries']} entries over "
           f"{result['reviews']} review(s) → {result['reading']}")
+    print("  this review harvested: " + " · ".join(
+        f"{kind} {n}" for kind, n in result["harvested"].items()))
     return 0
 
 

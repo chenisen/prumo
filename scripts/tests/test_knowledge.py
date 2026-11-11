@@ -98,6 +98,16 @@ class TestAccrual(unittest.TestCase):
     def reading(self):
         return (self.out / "repo-x.md").read_text(encoding="utf-8")
 
+    def test_the_result_says_what_this_review_harvested_by_kind(self):
+        """"0 entries over 4 reviews" read as a defect until the line said what each
+        review had brought: nothing, because the reviewers opened no repository file
+        and returned no convention. The count by kind is the measurement."""
+        result = self.accrue(package(), [convention("Guards return from the query builder")])
+        self.assertEqual(result["harvested"]["convention"], 1)
+        self.assertEqual(set(result["harvested"]), set(knowledge.KINDS))
+        bare = self.accrue(package(), [])
+        self.assertEqual(sum(bare["harvested"].values()), 0)
+
     def test_an_observation_seen_once_is_held_back(self):
         self.accrue(package(), [convention("Guards return from the query builder")])
         self.assertNotIn("Guards return from the query builder", self.reading())
