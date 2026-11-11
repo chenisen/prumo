@@ -69,6 +69,14 @@ class DeliveryGuard(unittest.TestCase):
     def test_a_write_inside_the_worktree_but_outside_the_named_files_is_blocked(self):
         self.assertEqual(self.write(str(self.worktree / "src" / "a.py")), 2)
 
+    def test_before_the_measurement_names_a_file_no_write_passes(self):
+        """The marker is on from `prepare`; the files come with `measure.json`. In
+        between, the surveyor reads and nobody writes."""
+        self.marker.write_text(json.dumps({"worktree": str(self.worktree), "allowed": [],
+                                           "package": str(self.project / "no-such-pkg")}),
+                               encoding="utf-8")
+        self.assertEqual(self.write(str(self.worktree / "tests" / "test_a.py")), 2)
+
     def test_the_named_files_are_read_from_the_package_s_measure(self):
         """The marker is written before the measurement exists; the files come later,
         from `measure.json` in the package, and the guard reads them from there."""

@@ -125,7 +125,11 @@ real = os.path.realpath(target or "")
 if not worktree or not real.startswith(worktree.rstrip("/") + "/"):
     print("outside the worktree " + worktree); sys.exit(0)
 rel = os.path.relpath(real, worktree)
-if allowed and rel not in allowed:
+# Before the measurement named anything, nothing may be written: the surveyor reads,
+# and a write with no named file to land in is a write nobody measured.
+if not allowed:
+    print("before any file was named by the measurement: " + rel); sys.exit(0)
+if rel not in allowed:
     print("outside the named files: " + rel); sys.exit(0)
 PY
 )

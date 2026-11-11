@@ -441,6 +441,9 @@ def prepare(args) -> int:
     write_json(package / "workflow-args.json", {
         "package": str(package), "repo": args.repo, "item": manifest["item"],
         "workdir": str(workdir), "delivery": block,
+        # The repository's own conventions, as pointers: the writer reads them before
+        # the first line, the way the reviewers read them before judging style.
+        "conventions": list(profile.get("conventions") or []),
         "agent_prefix": _agent_prefix(),
         "inline": {"item.md": (package / "item.md").read_text(encoding="utf-8"),
                    "profile.yml": (package / "profile.yml").read_text(encoding="utf-8")},

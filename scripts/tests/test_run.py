@@ -126,6 +126,16 @@ class TestEveryRoutingDecisionIsReadFromDisk(unittest.TestCase):
         self.put(self.review, "verdict.json", {"verdict": "INTERVENTION_REQUIRED"})
         self.assertEqual(self.decide()["class"], "intervention")
 
+    def test_an_intervention_with_an_author_fix_route_hands_the_fix_door(self):
+        self.put(self.deliver, "deliver-manifest.json", {})
+        self.put(self.deliver, "delivery.json", {"state": "delivered", "branch": {"name": "b"}})
+        self.put(self.review, "manifest.json", {})
+        self.put(self.review, "verdict.json", {"verdict": "INTERVENTION_REQUIRED", "routes": [
+            {"type": "author_fix", "items": ["COR-1"], "owner": "author", "closes_when": "x"}]})
+        out = self.decide()
+        self.assertEqual(out["class"], "intervention")
+        self.assertIn(f"deliver.py prepare --repo repo-x --fix {self.review}", out["text"])
+
     def test_the_same_disk_gives_the_same_answer(self):
         self.put(self.deliver, "deliver-manifest.json", {})
         answers = {self.decide()["text"] for _ in range(50)}

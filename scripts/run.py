@@ -124,9 +124,16 @@ def decide(run: dict, root: pathlib.Path) -> dict:
     if not _exists(r, "manifest.json"):
         return invoke(f"review.py prepare --repo {repo} --branch {branch} --item {item} --item-file {item_file}")
     if _exists(r, "verdict.json"):
-        verdict = read_json(pathlib.Path(r) / "verdict.json").get("verdict")
-        klass = "approved" if verdict == "APPROVED" else "intervention"
-        return stop(klass, str(verdict))
+        v = read_json(pathlib.Path(r) / "verdict.json")
+        verdict = v.get("verdict")
+        if verdict == "APPROVED":
+            return stop("approved", str(verdict))
+        # The door out of an intervention is handed over, never taken: a fix is a new
+        # delivery on the person's own ask, and the invocation is what the person pastes.
+        fact = str(verdict)
+        if any(x.get("type") == "author_fix" for x in v.get("routes") or []):
+            fact += f" · {t('run.fix_door', text=f'deliver.py prepare --repo {repo} --fix {r}')}"
+        return stop("intervention", fact)
     if not _exists(r, "findings.json"):
         return invoke(f"Workflow({{name: 'task-review', args: <{r}/workflow-args.json>}})")
     return invoke(f"review.py conclude --package {r} --findings {r}/findings.json")

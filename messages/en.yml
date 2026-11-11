@@ -440,6 +440,7 @@ run:
   ask_empty: '{path} is empty — a blank ask is nobody''s words'
   ask_missing: 'no ask on disk — the whole route runs only on the person''s own words, written to a file'
   bound: '{kind} package bound: {path}'
+  fix_door: 'the author_fix routes are a new delivery, on your words: {text}'
   next: 'next: {text}'
   started: 'run of {item} on {repo}: {path}'
   stop: 'stop: {klass} — {fact}'

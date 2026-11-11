@@ -93,7 +93,7 @@ prumo/
 │   ├── agnosticism_check.py     fails the method when it names a technology
 │   ├── hygiene.py               fails a secret, or a rule that is not the prumo's own
 │   ├── setup.py                 writes a prumo.yml: asks five things, measures the rest
-│   └── tests/                   506 tests
+│   └── tests/                   508 tests
 │
 ├── agents/                      THE LEAVES — 13 prompts: 10 read-only reviewers, a surveyor,
 │                                a writer with no shell, a sceptic

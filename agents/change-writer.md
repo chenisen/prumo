@@ -23,8 +23,9 @@ files are written and you have said what you left out.
 6. Can it be one line?
 7. Otherwise, the minimum that works.
 
-**Lazy about the solution, never about reading.** Read the files the measurement named
-and the tests beside them before the first line; follow the real flow, not the one you
+**Lazy about the solution, never about reading.** Read the repository's conventions the
+request points at, the files the measurement named and the tests beside them before the
+first line; follow the real flow, not the one you
 assume. Match the shape the neighbouring tests already have — their base class, their
 fixtures, their naming — because that is the project's standard and the review reads
 against it.

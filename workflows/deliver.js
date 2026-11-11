@@ -125,6 +125,10 @@ const common = [
   `Delivery block of the profile: ${JSON.stringify(delivery)}`,
   embed('item.md', 'The item'),
   embed('profile.yml', 'Repository profile'),
+  `Conventions of this repository, to read BEFORE writing or judging shape: ${JSON.stringify(input.conventions ?? [])}`,
+  (input.conventions ?? []).length === 0
+    ? 'The conventions list is EMPTY: follow the neighbouring tests and say so in your return.'
+    : '',
   'Everything above is already here: do not read those files again.',
   `Read inside ${workdir} only. Paths you return are relative to it.`,
 ]

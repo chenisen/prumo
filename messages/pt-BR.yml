@@ -442,6 +442,7 @@ run:
   ask_empty: '{path} está vazio — um pedido em branco não é palavra de ninguém'
   ask_missing: 'sem pedido em disco — a rota inteira só roda com as palavras da própria pessoa, escritas em arquivo'
   bound: 'pacote de {kind} ligado: {path}'
+  fix_door: 'as rotas author_fix são uma entrega nova, nas suas palavras: {text}'
   next: 'próximo: {text}'
   started: 'execução de {item} em {repo}: {path}'
   stop: 'parada: {klass} — {fact}'
