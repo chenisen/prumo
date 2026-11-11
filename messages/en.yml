@@ -448,6 +448,7 @@ review:
     ({proposal}, branch) and the resolved base.
   final_destination: 'final destination: {path}'
   runs_digested: '{n} captured run(s) digested with the profile''s patterns → {path} · reds beyond the base, per run: {killed}'
+  workflow_envelope_unwrapped: '{path} is the harness''s own output file: its `result` is the object the workflow returned, and that is what conclude reads'
   findings_split: 'findings: {own} from this delivery · {project} from the project, moved to observations.json'
   help_item_file: 'the normalised item (markdown). Mandatory reading: without it the review does
     not start — no script reaches the tracker.'

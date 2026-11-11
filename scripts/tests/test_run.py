@@ -529,6 +529,24 @@ class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
         schema = json.loads((PRUMO_ROOT / "schemas" / "finding.schema.json").read_text(encoding="utf-8"))
         self.assertIn("unverified", json.dumps(schema))
 
+    def test_conclude_reads_the_workflows_object_out_of_the_harness_envelope(self):
+        """The task's output file wraps the object in `{summary, logs, result, …}`. The
+        first real run of 2.8.0 handed that file to `conclude` and nothing was split."""
+        import json, tempfile
+        import review
+        inner = {"findings": [], "coverage": {"checked": []}, "criteria": [{"id": "AC-1", "state": "met", "record": "r"}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            env = pathlib.Path(tmp) / "task.output"
+            env.write_text(json.dumps({"summary": "x", "logs": ["a"], "result": inner, "totalTokens": 1}))
+            bare = pathlib.Path(tmp) / "bare.json"
+            bare.write_text(json.dumps(inner))
+            self.assertEqual(review.workflow_result_from(env), inner)
+            self.assertEqual(review.workflow_result_from(bare), inner)
+            # an object that carries the workflow's keys AND a `result` key is itself
+            odd = pathlib.Path(tmp) / "odd.json"
+            odd.write_text(json.dumps({"findings": [], "result": {"findings": [{"id": "X"}]}}))
+            self.assertEqual(review.workflow_result_from(odd)["findings"], [])
+
     def test_the_suite_the_delivery_measured_on_this_head_is_evidence(self):
         import json, tempfile
         import review

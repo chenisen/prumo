@@ -260,6 +260,20 @@ WORKFLOW_FILES = (("findings", "findings.json"), ("scripts_manual", "scripts_man
                   ("conventions_observed", "conventions_observed.json"), ("coverage", "coverage.json"))
 
 
+def workflow_result_from(path: pathlib.Path) -> dict:
+    """The object the workflow returned — bare, or inside the envelope the harness writes
+    to the task's output file (`summary`, `logs`, `result`, `totalTokens`). The first
+    real run of 2.8.0 saved that file as it came and `conclude` split nothing: the keys
+    it looks for sat one level down. The envelope is what a person has at hand; it is
+    accepted as is, and unwrapping is said."""
+    raw = read_json(path)
+    inner = raw.get("result") if isinstance(raw, dict) else None
+    if isinstance(inner, dict) and not any(k in raw for k, _ in WORKFLOW_FILES):
+        print(t("review.workflow_envelope_unwrapped", path=path))
+        return inner
+    return raw
+
+
 def absorb_workflow_result(package: pathlib.Path, result: dict) -> list[dict]:
     """The object the workflow returned, split into the files the judge reads. Five
     files used to be written by hand between the workflow and `conclude`, one per
@@ -555,7 +569,7 @@ def conclude(args) -> int:
     package = pathlib.Path(args.package)
     readings: list[dict] = []
     if getattr(args, "workflow_result", None):
-        readings = absorb_workflow_result(package, read_json(pathlib.Path(args.workflow_result)))
+        readings = absorb_workflow_result(package, workflow_result_from(pathlib.Path(args.workflow_result)))
     for name, source in (("findings.json", args.findings),
                          ("scripts_manual.json", args.scripts_manual),
                          ("conventions_observed.json", args.conventions),
