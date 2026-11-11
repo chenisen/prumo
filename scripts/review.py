@@ -23,6 +23,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -32,6 +33,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from common import (MissingConfiguration, InvalidConfiguration, dir_packages, dir_reports, forge, tracker, UsageError, profile_path, load_profile, write_json,
                    today, read_json, slug, cfg, capabilities_after_preflight, hint_config)
 from i18n import t
+from evidence import red_names, progress
 
 ROOT = pathlib.Path(__file__).resolve().parent
 # Where the package is assembled, when `--package` does not say. It is `paths.packages`
@@ -205,6 +207,55 @@ def copy_delivery(source: pathlib.Path, package: pathlib.Path) -> list[str]:
     return runs
 
 
+DIGEST_FILE = "delivery-digest.json"
+BASE_RUN = "run-suite-base.txt"
+
+
+def digest_runs(package: pathlib.Path, profile: dict) -> dict | None:
+    """Every captured run, read ONCE by the harness with the profile's own patterns, so
+    the reviewers get the measurement instead of a pointer to six thousand lines.
+
+    The runs travelled with the record since 2.8.0, and the prompt said "open one when a
+    state needs checking". Measured on the next real review: both reviewers spent their
+    two reads on the diff slice, never opened a run, and raised — from the record's
+    prose — that mutant (a) had turned one refusal test red. Its run held seventeen reds
+    beyond the base, the three refusal tests among them. A pointer is not evidence; the
+    reds by name are. `beyond_base` is the set a mutant killed: the run's reds minus the
+    base run's, the same subtraction `deliver.py` makes, done here for a record that was
+    written before it recorded the whole set."""
+    runs_dir = package / RUNS_DIR
+    if not runs_dir.is_dir():
+        return None
+    checks = profile.get("checks") or {}
+    suite, lint = checks.get("suite") or {}, checks.get("lint") or {}
+    digest: dict = {"measured_by": "the harness, from each run file, with the profile's patterns",
+                    "base_run": BASE_RUN if (runs_dir / BASE_RUN).is_file() else None, "runs": {}}
+    base_reds = None
+    if digest["base_run"]:
+        base_reds = red_names((runs_dir / BASE_RUN).read_text(encoding="utf-8", errors="replace"),
+                              suite.get("red_name_pattern"))
+    for path in sorted(runs_dir.glob("run-*.txt")):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if path.name.startswith("run-lint"):
+            pattern = lint.get("failure_pattern")
+            failed = None
+            if pattern:
+                try:
+                    failed = re.search(pattern, text) is not None
+                except re.error:
+                    failed = None
+            digest["runs"][path.name] = {"role": "lint", "failed": failed}
+            continue
+        reds = red_names(text, suite.get("red_name_pattern"))
+        executed, predicted = progress(text, suite.get("progress_pattern"))
+        entry = {"role": "suite", "reds": reds, "executed": executed, "predicted": predicted,
+                 "beyond_base": (sorted(set(reds) - set(base_reds))
+                                 if reds is not None and base_reds is not None else None)}
+        digest["runs"][path.name] = entry
+    write_json(package / DIGEST_FILE, digest)
+    return digest
+
+
 WORKFLOW_FILES = (("findings", "findings.json"), ("scripts_manual", "scripts_manual.json"),
                   ("conventions_observed", "conventions_observed.json"), ("coverage", "coverage.json"))
 
@@ -329,6 +380,12 @@ def prepare(args) -> int:
     # own run measured — mutations, the suite by name, lint — travels with the review.
     if getattr(args, "delivery", None):
         copy_delivery(pathlib.Path(args.delivery), package)
+        digest = digest_runs(package, load_profile(args.repo))
+        if digest:
+            killed = {n: len(r["beyond_base"]) for n, r in digest["runs"].items()
+                      if r.get("beyond_base")}
+            print(t("review.runs_digested", n=len(digest["runs"]), path=package / DIGEST_FILE,
+                    killed=", ".join(f"{n}: {k}" for n, k in killed.items()) or "-"))
 
     pre = ["--repo", args.repo, "--package", str(package), "--origin", reading["origin"]]
     if reading["item"]:
@@ -441,7 +498,7 @@ INLINE_CEILING = 24_000   # bytes, per file: above this, pointing at it is cheap
 # a file too big to share is already pointed at, not carried.
 INLINE_FILES = ("manifest.json", "capabilities.json", "profile.yml", "classes.json",
                 "criteria.json", "item.md", "proposal.md", "out-of-scope.json",
-                "delivery-record.json")
+                "delivery-record.json", DIGEST_FILE)
 
 
 def inline_payload(package: pathlib.Path) -> dict:

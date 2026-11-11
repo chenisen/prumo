@@ -473,6 +473,50 @@ class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
         workflow = (PRUMO_ROOT / "workflows" / "task-review.js").read_text(encoding="utf-8")
         self.assertIn("delivery-runs/", workflow)
 
+    def test_the_runs_are_digested_by_the_profiles_patterns_and_travel_inline(self):
+        """The runs travelled since 2.8.0 and the prompt said "open one when a state needs
+        checking". On the next real review neither reviewer opened one: both raised, from
+        the record's prose, that a mutant had turned ONE test red, while its run held
+        seventeen beyond the base. The harness now reads every run once with the
+        profile's patterns and hands the reviewers the reds by name — `beyond_base` is
+        what a mutant killed — inline, beside the record."""
+        import json, tempfile
+        import review
+        profile = {"checks": {"suite": {"red_name_pattern": r"(?m)^\d+\) (\S+)",
+                                        "progress_pattern": r"(\d+) / (\d+) \(\s*\d+%\)"},
+                              "lint": {"failure_pattern": r"(?m)^\s*(FAIL|Laravel Pint failed)"}}}
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = pathlib.Path(tmp); runs = pkg / review.RUNS_DIR; runs.mkdir()
+            (runs / "run-suite-base.txt").write_text("1) A::old_red\n 10 / 10 (100%)\nERRORS!\n")
+            (runs / "run-suite-branch.txt").write_text("1) A::old_red\n 11 / 11 (100%)\n")
+            (runs / "run-suite-mutation-1.txt").write_text(
+                "1) A::old_red\n2) B::it_refuses\n3) C::it_refuses_both\n 11 / 11 (100%)\nFAILURES!\n")
+            (runs / "run-lint.txt").write_text("  PASS  ........ 1298 files\n")
+            digest = review.digest_runs(pkg, profile)
+            self.assertEqual(digest["base_run"], "run-suite-base.txt")
+            m = digest["runs"]["run-suite-mutation-1.txt"]
+            self.assertEqual(m["beyond_base"], ["B::it_refuses", "C::it_refuses_both"])
+            self.assertEqual((m["executed"], m["predicted"]), (11, 11))
+            self.assertEqual(digest["runs"]["run-suite-branch.txt"]["beyond_base"], [])
+            self.assertEqual(digest["runs"]["run-lint.txt"], {"role": "lint", "failed": False})
+            # the digest is a package file the reviewers get inline, never a pointer
+            self.assertIn(review.DIGEST_FILE, review.INLINE_FILES)
+            self.assertIn(review.DIGEST_FILE, review.inline_payload(pkg))
+            self.assertEqual(json.loads((pkg / review.DIGEST_FILE).read_text())["runs"].keys(),
+                             digest["runs"].keys())
+            # no pattern: no names, and no claim that nothing is red
+            bare = review.digest_runs(pkg, {"checks": {}})
+            self.assertIsNone(bare["runs"]["run-suite-mutation-1.txt"]["reds"])
+            self.assertIsNone(bare["runs"]["run-suite-mutation-1.txt"]["beyond_base"])
+            self.assertIsNone(bare["runs"]["run-lint.txt"]["failed"])
+            # a package without runs digests nothing and writes nothing
+            empty = pathlib.Path(tmp) / "empty"; empty.mkdir()
+            self.assertIsNone(review.digest_runs(empty, profile))
+            self.assertFalse((empty / review.DIGEST_FILE).exists())
+        workflow = (PRUMO_ROOT / "workflows" / "task-review.js").read_text(encoding="utf-8")
+        self.assertIn("embed('delivery-digest.json'", workflow)
+        self.assertIn("beyond_base", workflow)
+
     def test_the_suite_the_delivery_measured_on_this_head_is_evidence(self):
         import json, tempfile
         import review

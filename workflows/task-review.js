@@ -286,6 +286,13 @@ const context = (slice) => [
         + 'open one when a state needs checking. `skipped` is the writer\'s word, written '
         + 'before the script ran; the runs decide.')
     : '',
+  inlined['delivery-digest.json']
+    ? embed('delivery-digest.json', "The harness's own digest of every run file, measured with the "
+        + 'profile\'s patterns: each run\'s reds BY NAME, executed × predicted, and `beyond_base` — '
+        + 'the tests a mutant turned red that the base run did not have. THIS says what a mutant '
+        + 'killed; the record\'s `test` field names the one test the script asked for, not the whole '
+        + 'set, and the record\'s prose never decides. Do not open a run file when the digest answers.')
+    : '',
 
   `Conventions to read BEFORE judging style or structure: ${JSON.stringify(plan.conventions)}`,
   plan.conventions.length === 0
@@ -455,8 +462,10 @@ const verified = await pipeline(blocking, (f) =>
         'only if that slice alone cannot decide, and say so in your reason if you did.',
     inlined['delivery-record.json']
       ? `The delivery's record is at ${bundle}/delivery-record.json and the runs it names ` +
-        `by file are at ${bundle}/delivery-runs/. A claim about what that record says was ` +
-        'or was not executed is decided by the run file, never by the record\'s prose.'
+        `by file are at ${bundle}/delivery-runs/, digested at ${bundle}/delivery-digest.json ` +
+        '(reds by name per run, and `beyond_base`: what a mutant killed). A claim about what ' +
+        'that record says was or was not executed is decided by the digest or the run file, ' +
+        'never by the record\'s prose.'
       : '',
     'When in doubt, return `uncertain` — never `confirmed`.',
   ].filter(Boolean).join('\n'), {

@@ -447,6 +447,7 @@ review:
   empty_diff_at: o intervalo {ref} não tem arquivo nenhum — não há o que revisar. Confira a origem
     ({proposal_with_article}, branch) e a base resolvida.
   final_destination: 'destino final: {path}'
+  runs_digested: '{n} run(s) capturado(s) digerido(s) com os padrões do perfil → {path} · vermelhos além da base, por run: {killed}'
   findings_split: 'achados: {own} desta entrega · {project} do projeto, movidos para observations.json'
   help_item_file: 'o item normalizado (markdown). Leitura obrigatória: sem ele a revisão não começa
     — nenhum script alcança o rastreador.'

@@ -447,6 +447,7 @@ review:
   empty_diff_at: the range {ref} has no files at all — there is nothing to review. Check the origin
     ({proposal}, branch) and the resolved base.
   final_destination: 'final destination: {path}'
+  runs_digested: '{n} captured run(s) digested with the profile''s patterns → {path} · reds beyond the base, per run: {killed}'
   findings_split: 'findings: {own} from this delivery · {project} from the project, moved to observations.json'
   help_item_file: 'the normalised item (markdown). Mandatory reading: without it the review does
     not start — no script reaches the tracker.'
