@@ -134,6 +134,18 @@ class TestStops(unittest.TestCase):
         self.assert_blocked(rec, "deliver.blocked.mutation_survived", "author",
                             file="src/a.py", line=41)
 
+    def test_a_proof_the_sceptic_refuted_blocks(self):
+        """The mutation reads the suite; the sceptic reads the test. Either alone can be
+        fooled — a test on a mock goes red on a mutation the mock does not see."""
+        proof = dict(record()["proof"], refutation={"verdict": "does_not_prove",
+                                                    "reason": "asserts on the fake"})
+        self.assert_blocked(record(proof=proof), "deliver.blocked.refuted", "author",
+                            reason="asserts on the fake")
+
+    def test_an_uncertain_sceptic_is_recorded_and_does_not_block(self):
+        proof = dict(record()["proof"], refutation={"verdict": "uncertain", "reason": "could not trace"})
+        self.assertEqual(judge(record(proof=proof))["state"], "delivered")
+
     def test_a_line_outside_the_scope_blocks(self):
         rec = record(diff={"files": ["tests/test_a.py", "src/z.py"], "added": 31,
                            "removed": 0, "outside_scope": ["src/z.py"], "within_budget": True})

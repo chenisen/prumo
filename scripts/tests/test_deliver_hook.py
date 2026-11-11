@@ -69,6 +69,19 @@ class DeliveryGuard(unittest.TestCase):
     def test_a_write_inside_the_worktree_but_outside_the_named_files_is_blocked(self):
         self.assertEqual(self.write(str(self.worktree / "src" / "a.py")), 2)
 
+    def test_the_named_files_are_read_from_the_package_s_measure(self):
+        """The marker is written before the measurement exists; the files come later,
+        from `measure.json` in the package, and the guard reads them from there."""
+        package = self.project / "pkg"
+        package.mkdir()
+        (package / "measure.json").write_text(json.dumps({"files": ["tests/test_b.py"]}),
+                                              encoding="utf-8")
+        self.marker.write_text(json.dumps({"worktree": str(self.worktree),
+                                           "allowed": [], "package": str(package)}),
+                               encoding="utf-8")
+        self.assertEqual(self.write(str(self.worktree / "tests" / "test_b.py")), 0)
+        self.assertEqual(self.write(str(self.worktree / "tests" / "test_c.py")), 2)
+
     # ---- allowed while the marker exists
     def test_a_commit_with_a_pathspec_passes(self):
         self.assertEqual(self.bash("git commit -m 'ITEM-1 - prove the guard' -- tests/test_a.py"), 0)

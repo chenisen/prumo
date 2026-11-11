@@ -92,6 +92,7 @@ deliver:
     new_red: 'vermelho novo por nome: {names}'
     outside_scope: 'linhas fora do escopo: {paths}'
     premise_failed: 'premissa central falha — {premise} ({evidence})'
+    refuted: 'o cético leu o teste e ele não prova a guarda — {reason}'
     suite_incomplete: 'a suíte executou {executed} de {predicted} — não é verde'
     suite_not_run: 'a suíte não rodou: {reason}'
     test_not_red_on_base: '`{test}` não ficou vermelho na base — sem prova'
@@ -120,6 +121,7 @@ deliver:
     next: PRÓXIMO
     premises: PREMISSAS
     proof: PROVA
+    sceptic: cético
     skipped: PULADO
   state:
     blocked: BLOQUEADO

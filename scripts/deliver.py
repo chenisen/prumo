@@ -114,6 +114,11 @@ def deliver_judge(record: dict, profile: dict, reference: str | None = None) -> 
             return stop(BLOCKED, t("deliver.blocked.mutation_survived",
                                    file=m["file"], line=m["line"]), "author")
 
+    refutation = proof.get("refutation") or {}
+    if refutation.get("verdict") == "does_not_prove":
+        return stop(BLOCKED, t("deliver.blocked.refuted", reason=refutation.get("reason", "")),
+                    "author")
+
     diff = record["diff"]
     if diff.get("outside_scope"):
         return stop(BLOCKED, t("deliver.blocked.outside_scope",
@@ -371,6 +376,7 @@ def conclude(args) -> int:
     workdir = pathlib.Path(man["workdir"])
     measure = read_json(pathlib.Path(args.measure))
     written = read_json(pathlib.Path(args.written)) if args.written else {"files": [], "skipped": []}
+    refutation = read_json(pathlib.Path(args.refutation)) if args.refutation else None
     write_json(package / "measure.json", measure)
     write_json(package / "written.json", written)
 
@@ -425,7 +431,9 @@ def conclude(args) -> int:
         "branch": {"name": man["branch"]["name"], "sha": git(workdir, "rev-parse", "HEAD")},
         "premises": premises,
         "proof": {"red_on_base": None, "green_on_branch": None,
-                  "mutations": [{k: v for k, v in m.items() if k != "why"} for m in mutations]},
+                  "mutations": [{k: v for k, v in m.items() if k != "why"} for m in mutations],
+                  "refutation": ({"verdict": refutation["verdict"], "reason": refutation["reason"]}
+                                 if refutation else None)},
         "baseline": baseline, "diff": diff,
         "skipped": list(written.get("skipped") or []),
         "waiver": block.get("waiver"),
@@ -476,6 +484,10 @@ def render(record: dict, mutations: list[dict]) -> str:
         lines.append(f"{SYMBOL[m['result']]} {m['file']}:{m['line']} `{m['from']}`→`{m['to']}` "
                      f"→ {m['test']} {m['result']}" + (" · reverted" if m["reverted"] else "")
                      + (f" · {m['why']}" if m.get("why") else ""))
+    ref = record["proof"].get("refutation")
+    if ref:
+        lines.append(f"{SYMBOL.get({'proves': 'holds', 'does_not_prove': 'fails'}.get(ref['verdict'], 'not_assessable'))} "
+                     f"{t('deliver.report.sceptic')}: {ref['verdict']} — {ref['reason']}")
     b = record["baseline"]
     lines.append(f"  suite {b['executed']}/{b['predicted']} · reds base={len(b['base_reds'])} "
                  f"branch={len(b['branch_reds'])} new={len(b['new_reds'] or [])}")

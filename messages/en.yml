@@ -88,6 +88,7 @@ deliver:
     new_red: 'new red by name: {names}'
     outside_scope: 'lines outside the scope: {paths}'
     premise_failed: 'central premise fails — {premise} ({evidence})'
+    refuted: 'the sceptic read the test and it does not prove the guard — {reason}'
     suite_incomplete: 'the suite ran {executed} of {predicted} — not green'
     suite_not_run: 'the suite did not run: {reason}'
     test_not_red_on_base: '`{test}` was not red on the base — no proof'
@@ -116,6 +117,7 @@ deliver:
     next: NEXT
     premises: PREMISES
     proof: PROOF
+    sceptic: sceptic
     skipped: SKIPPED
   state:
     blocked: BLOCKED

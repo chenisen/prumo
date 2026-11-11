@@ -112,7 +112,15 @@ try:
 except Exception:
     sys.exit(0)
 worktree = os.path.realpath(m.get("worktree") or "")
-allowed = m.get("allowed") or []
+allowed = list(m.get("allowed") or [])
+# The files a write may touch are what the measurement named — written to the package
+# by the skill between the two stages of the workflow, so the guard reads them from
+# disk and asks nobody.
+try:
+    measure = json.load(open(os.path.join(m.get("package") or "", "measure.json"), encoding="utf-8"))
+    allowed += list(measure.get("files") or [])
+except Exception:
+    pass
 real = os.path.realpath(target or "")
 if not worktree or not real.startswith(worktree.rstrip("/") + "/"):
     print("outside the worktree " + worktree); sys.exit(0)

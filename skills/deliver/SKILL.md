@@ -70,17 +70,25 @@ deliver.py prepare  --repo R --item C --item-file ITEM.md [--kind K] [--branch B
     F4 branch       <branch_format> from the base — a worktree, or the checkout if clean
     F3 baseline     the suite on the branch while it still IS the base; reds by name
     marker on
-Workflow({name: 'deliver', args: {...}})                        # prepare prints it filled
-    F2 measure      premises, the files, the mutation → measure.json  [agent: premise-surveyor]
-                    a central premise that fails ends the workflow here
+Workflow({name: 'deliver', args: {...workflow-args.json, stage: 'measure'}})
+    F2 measure      premises, the files, the mutation           [agent: premise-surveyor]
+→ write its `measure` to <package>/measure.json — the hook reads the files from there
+  a central premise that fails: skip the write stage; go to conclude
+Workflow({name: 'deliver', args: {...workflow-args.json, stage: 'write', measure: {...}}})
     F5 write        the test (and, by kind, the code) inside the named files [agent: change-writer]
     F7 refute       tries to knock the proof down                       [agent: proof-skeptic]
-deliver.py conclude --package P --measure M --written W [--refutation R]
+→ write `written` to <package>/written.json and `refutation` to <package>/refutation.json
+deliver.py conclude --package P --measure P/measure.json --written P/written.json
+                    --refutation P/refutation.json
     F6 prove        scope guard, mutation by hand, the suite, baseline by name   [script]
     F8 judge        delivered | blocked | unsupported                 (pure function)
     F9 record       delivery.json, the short report, the commit, the next command
     marker off
 ```
+
+The three returns are written **as the workflow returned them**, whole: a hand-edited
+measurement names files the surveyor never read, and the guard would let a write
+through on the strength of an edit nobody measured.
 
 `prepare` stops when the tree is dirty, the kind is not in the profile, or the suite does
 not finish on the base. `conclude` commits only a delivery that stands; a blocked tree is
@@ -98,8 +106,9 @@ fixed rule:
 
 - `unsupported` — the kind is not in the profile's `kinds`;
 - `blocked` — a central premise fails; a new red by name; a line outside the scope; the
-  budget exceeded with no waiver in force; a mutation that survived; a suite that did not
-  finish; a test that was not red on the base when the kind demands it;
+  budget exceeded with no waiver in force; a mutation that survived; the sceptic's
+  `does_not_prove`; a suite that did not finish; a test that was not red on the base when
+  the kind demands it;
 - `delivered` — otherwise.
 
 `skipped` is mandatory: what the writer did not check is written, even when empty.

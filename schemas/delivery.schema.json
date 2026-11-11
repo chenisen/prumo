@@ -147,6 +147,34 @@
               }
             }
           }
+        },
+        "refutation": {
+          "description": "the sceptic's reading of the proof, blind to the writer; optional, and `does_not_prove` blocks",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "verdict",
+                "reason"
+              ],
+              "properties": {
+                "verdict": {
+                  "enum": [
+                    "proves",
+                    "does_not_prove",
+                    "uncertain"
+                  ]
+                },
+                "reason": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
         }
       }
     },

@@ -27,12 +27,14 @@ METHOD_TARGETS = [
     PRUMO_ROOT / "templates",
     PRUMO_ROOT / "scripts",
     PRUMO_ROOT / "workflows" / "task-review.js",
+    PRUMO_ROOT / "workflows" / "deliver.js",
     PRUMO_ROOT / "hooks" / "review-guard.sh",
 ]
 AGENTS = ["criteria-extractor", "scope-coherence-reviewer", "correctness-proof-reviewer",
           "domain-rules-reviewer", "contract-compat-reviewer", "security-privacy-reviewer",
           "architecture-reviewer", "performance-ops-reviewer", "finding-verifier",
-          "manual-verification-planner"]
+          "manual-verification-planner",
+          "premise-surveyor", "change-writer", "proof-skeptic"]
 
 # Patterns that give coupling away. A repository name is discovered from disk, never
 # written here. The UNIVERSAL ones hold in any installation: they name technology, not a
