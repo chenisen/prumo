@@ -8,6 +8,10 @@
 # SCOPE, and this is the delicate point of this guard:
 #
 #   * **merging a proposal is blocked ALWAYS.** No skill of this workspace should merge.
+#   * **landing on a protected branch is blocked ALWAYS** — push, commit, rewrite — in any
+#     repository under `paths.repositories`; `scripts/branch_guard.py` judges it, with the
+#     list from `forge.protected_branches` (`homolog`, `main`, `master`, `prod`, `develop`
+#     by default). The prumo's own checkout is not under that root, and is not guarded.
 #   * **push, commit and moving the item are blocked ONLY during a review**, marked by
 #     `.claude/.task-review-ativo`, which `review.py` creates and removes.
 #   * **during a delivery** — `.claude/.prumo-deliver-ativo`, which `deliver.py` creates
@@ -66,6 +70,14 @@ if [ -n "$cmd" ]; then
     && block "merging a proposal from the CLI"
   printf '%s' "$cmd" | grep -Eqi 'merge_requests?/[0-9]+/merge|/pulls?/[0-9]+/merge' \
     && block "merging a proposal through the API"
+  # Nothing lands directly on a protected branch — push, commit or rewrite — in any
+  # repository the prumo works on. The list and the scope come from prumo.yml; the
+  # judgement is a script, so it is tested like one.
+  if printf '%s' "$cmd" | grep -Eq '(^|[[:space:]])git([[:space:]]|$)'; then
+    SCRIPTS="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}/scripts"
+    reason=$(python3 "$SCRIPTS/branch_guard.py" --pwd "$PWD" --command "$cmd" 2>/dev/null)
+    [ -n "$reason" ] && block "$reason"
+  fi
 fi
 
 moves_the_item() {

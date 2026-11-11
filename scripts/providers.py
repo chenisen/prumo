@@ -195,6 +195,11 @@ LEGACY_FIELDS = {
 LEGACY_TRACKER_TYPES = {"generico": "generic"}
 
 
+# What a fresh installation protects before anyone names a branch. An installation
+# overrides it with `forge.protected_branches`.
+DEFAULT_PROTECTED_BRANCHES = ("homolog", "main", "master", "prod", "develop")
+
+
 @dataclasses.dataclass(frozen=True)
 class Forge:
     type: str
@@ -212,6 +217,10 @@ class Forge:
     # git, through the ref the server publishes. Reading a proposal's description
     # without a file, and publishing, need one of the two.
     connection: str = "none"
+    # The branches nothing of the prumo ever lands on directly — not a push, not a
+    # commit, not a rewrite. A delivery is cut FROM one of them and handed over as a
+    # proposal; landing is a person's act, through the forge.
+    protected_branches: tuple[str, ...] = ()
 
     def proposal_ref(self, n) -> str:
         return self._ref.format(n=n)
@@ -510,11 +519,21 @@ def build(data: dict, source: pathlib.Path | None = None) -> Config:
                 "`forge.tokens` takes the NAME of an environment variable, never a "
                 f"token: `{name[:7]}…` looks like a secret. Write `GITLAB_TOKEN` and "
                 "export the value in your environment.")
+    protected = pf.get("protected_branches", DEFAULT_PROTECTED_BRANCHES)
+    if isinstance(protected, str):
+        protected = [protected]
+    if not isinstance(protected, (list, tuple)) or not all(
+            isinstance(b, str) and b.strip() for b in protected):
+        raise InvalidConfiguration(
+            "`forge.protected_branches` is a list of branch names — the ones nothing "
+            "lands on directly. Leave it out for the default: "
+            + ", ".join(DEFAULT_PROTECTED_BRANCHES))
     forge = Forge(type=forge_type, proposal=pf["proposal"],
                   proposal_plural=pf["proposal_plural"], article=pf["article"],
                   prefix=pf["prefix"], _ref=pf["ref"], tokens=tuple(tokens),
                   cli=pf["cli"] or "", approve=bool(pf["approve"]),
-                  connection=connection)
+                  connection=connection,
+                  protected_branches=tuple(b.strip() for b in protected))
 
     # --- tracker
     r = data.get("tracker") or {}

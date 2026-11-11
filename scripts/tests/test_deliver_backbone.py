@@ -457,6 +457,17 @@ class Spine(Fixture):
         with self.assertRaises(common.UsageError):
             self.prepare(kind="coverage-gap", shape="bug")
 
+    def test_a_delivery_is_never_cut_on_a_protected_branch(self):
+        args = argparse.Namespace(repo="repo-x", item="ITEM-1", item_file=str(self.root / "item.md"),
+                                  kind=None, branch="main", package=str(self.root / "pkg"),
+                                  fix=None, shape="debt", type=None)
+        with self.assertRaises(common.UsageError) as cm, contextlib.redirect_stdout(io.StringIO()):
+            deliver.prepare(args)
+        self.assertIn("main", str(cm.exception))
+        head = subprocess.run(("git", "log", "--format=%s", "-1"), cwd=self.repo,
+                              capture_output=True, text=True).stdout.strip()
+        self.assertEqual(head, "base")
+
     def test_a_file_outside_the_named_ones_is_outside_the_scope(self):
         package = self.prepare()
         (self.repo / "src" / "a.py").write_text(SOURCE + "\n", encoding="utf-8")

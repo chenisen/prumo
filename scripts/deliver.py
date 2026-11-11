@@ -550,6 +550,8 @@ def prepare(args) -> int:
         if not base_sha:
             raise UsageError(t("resolver.branch_unresolved", branch=name))
         base_name = name
+    if name in cfg().forge.protected_branches:
+        raise UsageError(t("deliver.cli.branch_protected", branch=name))
     workdir = cut_branch(repo_dir, block, name, base_sha, fresh=not (fix or story))
 
     # F3 — the baseline, by name, on the branch while it still IS the base.

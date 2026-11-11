@@ -136,6 +136,12 @@ tracker:
 forge:
   type: gitlab
 
+  # The branches nothing of the prumo lands on directly — not a push, not a commit, not
+  # a rewrite — in any repository under `paths.repositories`. The hook blocks the
+  # command; `deliver` refuses to cut a delivery under one of these names. Leave it out
+  # for the default: homolog, main, master, prod, develop.
+  # protected_branches: [homolog, main, master, prod, develop]
+
   # How the HARNESS reaches this forge's API: mcp | token | none.
   #   mcp    a connector the harness already carries — it reads the proposal's
   #          description and its pipeline, and publishing still asks for a yes

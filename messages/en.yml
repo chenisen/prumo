@@ -127,6 +127,7 @@ deliver:
     tree_dirty: '{path} has pending changes — somebody''s work in progress; commit or stash it first'
     worktree_exists: '{path} already exists — a branch of that name is under way'
     branch_exists: '`{branch}` already exists in {path} — a worktree never resets a branch; pass --branch, or delete it first'
+    branch_protected: '`{branch}` is a protected branch — a delivery is cut from one, never on one'
     setup_composed: 'worktree_setup `{command}` composes with the shell — one plain command per line, nothing chained'
     setup_failed: 'worktree_setup `{command}` failed with exit code {n}: {output}'
     worktree_removed: 'worktree {path} removed; branch `{branch}` stays'
@@ -305,6 +306,9 @@ preflight:
   warn_no_token: 'no token for {proposal} in the environment: publishing stays manual'
   warn_owner_presumed: 'nobody signs in the environment or in prumo.yml: presumed {name}, from {source}'
   warning: 'warning: {text}'
+guard:
+  push_protected: 'pushing to `{branch}` in {repo} — nothing of the prumo lands directly on a protected branch; hand over a proposal'
+  write_protected: '`git {action}` on `{branch}` in {repo} — nothing of the prumo writes directly on a protected branch'
 findings:
   colliding_ids: 'findings.json carries {n} id(s) given to more than one finding: {ids}. An id is what the verification, the judge and the report key by, so two findings sharing one means findings were LOST — overwritten by a copy of each other — and the result is shaped exactly like a correct one.'
   colliding_remedy: 'The id belongs to the METHOD, not to the reviewer: each agent numbers from `F1` inside its own context and cannot know what the others chose. The workflow stamps a unique id per reviewer; a collision here means it did not run, or ran an older version. Re-run the workflow rather than renumbering by hand.'

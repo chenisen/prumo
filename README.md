@@ -47,11 +47,11 @@ what is judgement.
 
 | | |
 |---|---|
-| **22 Python scripts** | Resolve the base, assemble the package, triage the risk, judge; cut the branch, prove by mutation, hand over. No dependency beyond `yaml` and `jsonschema`. Both judges are pure functions: same input, same answer. |
+| **23 Python scripts** | Resolve the base, assemble the package, triage the risk, judge; cut the branch, prove by mutation, hand over. No dependency beyond `yaml` and `jsonschema`. Both judges are pure functions: same input, same answer. |
 | **14 agents** | One question each. Ten read-only for the review — seven reviewers of one axis, a criteria extractor, a manual-verification planner, and a **sceptical verifier** that tries to *refute* every finding without having seen the reasoning behind it. Four for the delivery — a surveyor that measures, a writer with no shell, a **sceptic** that never saw the writer, and a planner that cuts a story into tasks. |
 | **3 knowledge skills** | What the reviewers load to read a diff: five axes, OWASP/ASVS, personal data. Neutral of language, framework and project. |
 | **18 risk classes** | A guardrail has three states — `fired`, `did_not_fire`, `not_assessable`. |
-| **2 message catalogues** | 472 keys each. Everything a person reads, in the configured language. |
+| **2 message catalogues** | 484 keys each. Everything a person reads, in the configured language. |
 
 Three rules govern everything, and each has a test that fails when it is broken:
 
@@ -86,6 +86,7 @@ prumo/
 │   ├── shape.py                 the six shapes: plan depth, gate, kinds, budget, review effort
 │   ├── deliver.py               the delivery: cut the branch, plan, prove by mutation, judge, hand over
 │   ├── run.py                   the route: every next step read from disk, every stop classed
+│   ├── branch_guard.py          the hook's judge: nothing lands directly on a protected branch
 │   ├── delta.py, closure.py     the loops: re-judgement and item resolutions
 │   ├── telemetry.py, metrics.py measured cost, never estimated
 │   ├── derive_profile.py        bootstraps a profile for a new repository
@@ -94,7 +95,7 @@ prumo/
 │   ├── agnosticism_check.py     fails the method when it names a technology
 │   ├── hygiene.py               fails a secret, or a rule that is not the prumo's own
 │   ├── setup.py                 writes a prumo.yml: asks five things, measures the rest
-│   └── tests/                   546 tests
+│   └── tests/                   571 tests
 │
 ├── agents/                      THE LEAVES — 14 prompts: 10 read-only reviewers, a surveyor,
 │                                a writer with no shell, a sceptic, a planner
@@ -111,7 +112,7 @@ prumo/
 │   ├── task-review.js           the reviewer fan-out, the verifier, the manual plan
 │   └── deliver.js               measure; then write and refute — two stages, one file
 ├── hooks/
-│   ├── review-guard.sh          blocks merge always; push/commit while a review runs;
+│   ├── review-guard.sh          blocks merge and landing on a protected branch always; push/commit while a review runs;
 │                                push, `add -A`, the base, and writes outside the named files while a delivery runs
 │   └── hooks.json               registers the hook — you edit no settings.json
 │
@@ -526,6 +527,12 @@ Across every capability:
 
 And per capability:
 
+- **nothing lands directly on a protected branch** — `homolog`, `main`, `master`, `prod`,
+  `develop` by default, `forge.protected_branches` in `prumo.yml` to say otherwise. Not a
+  push, not a commit, not a rewrite, in any repository under `paths.repositories`; the
+  hook asks `scripts/branch_guard.py` on every `git` command, and `deliver` refuses to cut
+  a delivery under a protected name. A delivery is cut *from* one and handed over as a
+  proposal; landing is a person's act, through the forge.
 - **task-review** writes nothing into the repository under review, and never fixes — the
   author fixes.
 - **deliver** writes only inside the files the measurement named, on a branch cut from

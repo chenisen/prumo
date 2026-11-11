@@ -37,6 +37,7 @@ repository** (suite, base, container, commit convention, budget — all from the
 ## What it never does
 
 - push, merge, move the item, approve;
+- land on a protected branch (`forge.protected_branches`): the delivery is cut *from* one, never *on* one;
 - write outside the worktree, or outside the files `measure.json` named plus the test file;
 - touch the base branch, rewrite history, `git add -A`;
 - invent a premise, a kind or a profile block that is not there.
