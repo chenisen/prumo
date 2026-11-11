@@ -184,6 +184,27 @@ def item_scope(package: pathlib.Path) -> dict:
             "source": "criteria.json"}
 
 
+RUNS_DIR = "delivery-runs"
+
+
+def copy_delivery(source: pathlib.Path, package: pathlib.Path) -> list[str]:
+    """The delivery's record AND its captured runs — `run-*.txt`, the suite on the base
+    and on the branch, each mutant, the lint — copied beside the review. The record
+    names each run by file; a reviewer who doubts a state opens the output instead of
+    arguing with a sentence. A verifier once confirmed a contradiction that the run,
+    one directory away, refuted. Returns the names copied, for the invocation."""
+    record = source / "delivery.json"
+    if not record.is_file():
+        raise UsageError(t("review.reading_missing", path=record))
+    shutil.copy2(record, package / "delivery-record.json")
+    runs = sorted(p.name for p in source.glob("run-*.txt"))
+    if runs:
+        (package / RUNS_DIR).mkdir(exist_ok=True)
+        for name in runs:
+            shutil.copy2(source / name, package / RUNS_DIR / name)
+    return runs
+
+
 def delivery_record_for(package: pathlib.Path, head_sha: str) -> dict | None:
     """The record a delivery left, when it is about THIS head. A record about another
     commit is somebody else's proof: it is kept in the package for the reader and
@@ -249,10 +270,7 @@ def prepare(args) -> int:
     # A delivery's record, when the branch was delivered by the prumo: the proof its
     # own run measured — mutations, the suite by name, lint — travels with the review.
     if getattr(args, "delivery", None):
-        source = pathlib.Path(args.delivery) / "delivery.json"
-        if not source.is_file():
-            raise UsageError(t("review.reading_missing", path=source))
-        shutil.copy2(source, package / "delivery-record.json")
+        copy_delivery(pathlib.Path(args.delivery), package)
 
     pre = ["--repo", args.repo, "--package", str(package), "--origin", reading["origin"]]
     if reading["item"]:

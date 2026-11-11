@@ -369,6 +369,34 @@ class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
             out = decide({"repo": "r", "item": "I", "deliver_package": str(d), "review_package": str(root / "r")}, root)
             self.assertIn(f"--delivery {d}", out["text"])
 
+    def test_the_runs_the_delivery_captured_travel_with_its_record(self):
+        """A verifier once confirmed "the record contradicts itself on whether the
+        mutants ran" while the mutant's run sat one directory away. The runs now come
+        along, under a directory of their own, and the invocation names them."""
+        import json, tempfile
+        import review
+        with tempfile.TemporaryDirectory() as tmp:
+            source, pkg = pathlib.Path(tmp) / "deliver", pathlib.Path(tmp) / "review"
+            source.mkdir(); pkg.mkdir()
+            (source / "delivery.json").write_text(json.dumps({"branch": {"sha": "abc"}}))
+            for name in ("run-suite-base.txt", "run-suite-mutation-1.txt", "run-lint.txt"):
+                (source / name).write_text(name)
+            (source / "plan.md").write_text("not a run")
+            runs = review.copy_delivery(source, pkg)
+            self.assertEqual(runs, ["run-lint.txt", "run-suite-base.txt", "run-suite-mutation-1.txt"])
+            self.assertTrue((pkg / "delivery-record.json").is_file())
+            self.assertEqual((pkg / review.RUNS_DIR / "run-suite-mutation-1.txt").read_text(),
+                             "run-suite-mutation-1.txt")
+            self.assertFalse((pkg / review.RUNS_DIR / "plan.md").exists())
+            # a delivery that captured nothing leaves no empty directory behind
+            bare = pathlib.Path(tmp) / "bare"; bare.mkdir()
+            (bare / "delivery.json").write_text("{}")
+            (pkg / "x").mkdir()
+            self.assertEqual(review.copy_delivery(bare, pkg / "x"), [])
+            self.assertFalse((pkg / "x" / review.RUNS_DIR).exists())
+        workflow = (PRUMO_ROOT / "workflows" / "task-review.js").read_text(encoding="utf-8")
+        self.assertIn("delivery-runs/", workflow)
+
     def test_the_suite_the_delivery_measured_on_this_head_is_evidence(self):
         import json, tempfile
         import review

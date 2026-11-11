@@ -217,7 +217,10 @@ const context = (slice) => [
         + 'the suite by name against the base, lint, the diff and what the writer skipped. It is '
         + 'evidence, not a claim: decide each criterion of the item against it and return '
         + '`criteria` with a record that states the fact (never a finding id). A criterion the '
-        + 'record does not reach stays `not_verifiable`.')
+        + 'record does not reach stays `not_verifiable`. The runs the record names by file '
+        + `(\`measured\`, \`lint.run\`, \`proof.mutations[].run\`) are at ${bundle}/delivery-runs/: `
+        + 'open one when a state needs checking. `skipped` is the writer\'s word, written '
+        + 'before the script ran; the runs decide.')
     : '',
 
   `Conventions to read BEFORE judging style or structure: ${JSON.stringify(plan.conventions)}`,
@@ -386,8 +389,13 @@ const verified = await pipeline(blocking, (f) =>
       : `Read the code at: ${bundle}/slices/${sliceOf.get(f.reviewer) ?? 'complete'}.patch ` +
         '— the slice the finding came from. Do not read beyond it: open the repository ' +
         'only if that slice alone cannot decide, and say so in your reason if you did.',
+    inlined['delivery-record.json']
+      ? `The delivery's record is at ${bundle}/delivery-record.json and the runs it names ` +
+        `by file are at ${bundle}/delivery-runs/. A claim about what that record says was ` +
+        'or was not executed is decided by the run file, never by the record\'s prose.'
+      : '',
     'When in doubt, return `uncertain` — never `confirmed`.',
-  ].join('\n'), {
+  ].filter(Boolean).join('\n'), {
     agentType: agentFor('finding-verifier'),
     label: `verify:${f.id}`,
     phase: 'Verification',
