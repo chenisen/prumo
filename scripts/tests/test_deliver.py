@@ -305,3 +305,22 @@ class TestTheVoice(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheBranchName(unittest.TestCase):
+    """The team names the branch on the item; a slug is only what stands in when
+    nobody did."""
+    BLOCK = {"branch_format": "{item}-{slug}"}
+
+    def test_the_invocation_s_branch_wins(self):
+        from deliver import branch_name
+        self.assertEqual(branch_name(self.BLOCK, "I-1", "# t\nBranch: named\n", "given"), "given")
+
+    def test_the_item_s_branch_line_is_read(self):
+        from deliver import branch_name
+        self.assertEqual(branch_name(self.BLOCK, "I-1", "# Title\n\nCard I-1\nBranch: I-1-prove-the-guard\n", None),
+                         "I-1-prove-the-guard")
+
+    def test_without_one_the_title_is_slugged(self):
+        from deliver import branch_name
+        self.assertEqual(branch_name(self.BLOCK, "I-1", "# Prove the guard\n", None), "I-1-prove-the-guard")

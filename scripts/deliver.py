@@ -314,8 +314,15 @@ def read_item(path: str, package: pathlib.Path) -> None:
 
 
 def branch_name(block: dict, item: str, item_text: str, given: str | None) -> str:
+    """The invocation's branch; else the one the item names on a `Branch:` line — a
+    tracker's field the harness writes into the item; else the profile's format over
+    the item's title. The item's name is the team's, and a slug is a guess at it."""
     if given:
         return given
+    for line in item_text.splitlines():
+        m = re.match(r"^\s*branch\s*:\s*(\S+)\s*$", line, re.I)
+        if m:
+            return m.group(1)
     title = item_text.strip().splitlines()[0].lstrip("# ").strip() if item_text.strip() else ""
     return block["branch_format"].format(item=item, slug=slug(title, 40))
 
@@ -570,10 +577,13 @@ def render_plan(man: dict, measure: dict) -> str:
     for m in measure.get("mutations") or []:
         lines.append(f"  {m['file']}:{m['line']} `{m['from']}`→`{m['to']}` → {m['test']} red"
                      + (f" · stays green: {', '.join(m['stays_green'])}" if m.get("stays_green") else ""))
-    if measure.get("proving_tests"):
+    # Only what this kind proves: a surveyor that filled every field of the shape it
+    # was given would otherwise have the plan promise a red-before-green nobody runs.
+    kind = man["item"]["kind"]
+    if kind == "behaviour-change" and measure.get("proving_tests"):
         lines.append(f"  red on base, green on branch: {', '.join(measure['proving_tests'])}")
-    if measure.get("guarding_tests"):
-        lines.append(f"  stays green: {', '.join(measure['guarding_tests'])}")
+    if kind == "refactor":
+        lines.append(f"  stays green: {', '.join(measure.get('guarding_tests') or []) or '? (none — the delivery stops)'}")
     lines.append("")
     return "\n".join(lines)
 
