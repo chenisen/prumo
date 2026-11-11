@@ -479,6 +479,9 @@ const verified = await pipeline(blocking, (f) =>
                     verifier_reason: v ? v.reason : 'the verifier did not return' })))
 
 const byId = new Map(verified.filter(Boolean).map((f) => [f.id, f]))
+const NOT_SENT_BELOW_BLOCKING =
+  'not sent to the verifier: below the blocking severities a finding decides no gate — ' +
+  "the reviewer's word, unrefuted and unchecked"
 const SKIPPED_PRE_EXISTING =
   'not verified: marked attributable:false, and a finding the change did not cause never ' +
   'holds the proposal — the verifier would decide nothing'
@@ -489,9 +492,13 @@ const final = findings.map((f) => byId.get(f.id)
   // states and collapsing them would read as a verifier failure that never happened.
   || (['critical', 'required'].includes(f.severity) && f.attributable !== false
       ? { ...f, status: 'uncertain', verifier_reason: 'not verified' }
-      : { ...f, status: 'confirmed',
-          ...(['critical', 'required'].includes(f.severity)
-              ? { verifier_reason: SKIPPED_PRE_EXISTING } : {}) }))
+      // Nobody read these twice, so they are not `confirmed`: two nits raised from the
+      // record's prose once went out as "confirmed" while the run file refuted both.
+      // `unverified` is what happened — the reviewer's word, unrefuted and unchecked.
+      : { ...f, status: 'unverified',
+          verifier_reason: ['critical', 'required'].includes(f.severity)
+            ? SKIPPED_PRE_EXISTING
+            : NOT_SENT_BELOW_BLOCKING }))
 
 phase('Manual plan')
 const candidates = classes.filter(

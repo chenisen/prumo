@@ -517,6 +517,18 @@ class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
         self.assertIn("embed('delivery-digest.json'", workflow)
         self.assertIn("beyond_base", workflow)
 
+    def test_a_finding_nobody_verified_is_unverified_never_confirmed(self):
+        """Two nits raised from the record's prose went out as `confirmed` on a review
+        whose verifier never saw them — nits do not go to the verifier — while the run
+        file refuted both. A status is what happened: `unverified`."""
+        import json
+        workflow = (PRUMO_ROOT / "workflows" / "task-review.js").read_text(encoding="utf-8")
+        self.assertIn("status: 'unverified'", workflow)
+        self.assertNotIn("{ ...f, status: 'confirmed'", workflow)
+        self.assertIn("NOT_SENT_BELOW_BLOCKING", workflow)
+        schema = json.loads((PRUMO_ROOT / "schemas" / "finding.schema.json").read_text(encoding="utf-8"))
+        self.assertIn("unverified", json.dumps(schema))
+
     def test_the_suite_the_delivery_measured_on_this_head_is_evidence(self):
         import json, tempfile
         import review

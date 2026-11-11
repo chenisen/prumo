@@ -100,7 +100,8 @@
         "proposed",
         "confirmed",
         "refuted",
-        "uncertain"
+        "uncertain",
+        "unverified"
       ]
     },
     "categoria_owasp": {
