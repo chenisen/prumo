@@ -460,9 +460,11 @@ def conclude(args) -> int:
     # delivery that stands. A blocked tree stays as it is, for a person to read.
     if record["state"] == DELIVERED and files:
         git(workdir, "add", "--", *files)
-        title = (package / "item.md").read_text(encoding="utf-8").strip().splitlines()[0].lstrip("# ")
+        # The message is the item's title, verbatim: a slug drops the accents and cuts
+        # the sentence, and the person reading the log should find the item by its name.
+        title = (package / "item.md").read_text(encoding="utf-8").strip().splitlines()[0].lstrip("# ").strip()
         git(workdir, "commit", "-q", "-m",
-            block["commit_format"].format(item=man["item"]["id"], message=slug(title, 60).replace("-", " ")))
+            block["commit_format"].format(item=man["item"]["id"], message=title))
         record["branch"]["sha"] = git(workdir, "rev-parse", "HEAD")
 
     write_json(package / "delivery.json", record)
