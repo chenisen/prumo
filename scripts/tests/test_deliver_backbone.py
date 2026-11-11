@@ -94,7 +94,10 @@ def git(cwd, *args):
     subprocess.run(("git", *args), cwd=cwd, check=True, capture_output=True, text=True)
 
 
-class Spine(unittest.TestCase):
+class Fixture(unittest.TestCase):
+    """The throwaway repository, its profile and the two commands, shared by the
+    spine in the checkout and the spine in a worktree."""
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = pathlib.Path(self.tmp.name)
@@ -152,9 +155,12 @@ class Spine(unittest.TestCase):
         return self.root / package
 
     def conclude(self, package, test_text, measure_data=MEASURE, source=None):
-        (self.repo / "tests" / "test_guard.py").write_text(test_text, encoding="utf-8")
+        # the writer writes where the branch was cut: the checkout, or its worktree
+        tree = pathlib.Path(json.loads((package / "deliver-manifest.json")
+                                       .read_text(encoding="utf-8"))["workdir"])
+        (tree / "tests" / "test_guard.py").write_text(test_text, encoding="utf-8")
         if source is not None:
-            (self.repo / "src" / "a.py").write_text(source, encoding="utf-8")
+            (tree / "src" / "a.py").write_text(source, encoding="utf-8")
         measure, written = package / "m.json", package / "w.json"
         measure.write_text(json.dumps(measure_data), encoding="utf-8")
         written.write_text(json.dumps({"files": list(measure_data["files"]),
@@ -165,6 +171,9 @@ class Spine(unittest.TestCase):
             code = deliver.conclude(args)
         return code, json.loads((package / "delivery.json").read_text(encoding="utf-8"))
 
+
+
+class Spine(Fixture):
     def test_prepare_cuts_the_branch_reads_the_baseline_and_marks(self):
         package = self.prepare()
         man = json.loads((package / "deliver-manifest.json").read_text(encoding="utf-8"))
@@ -454,6 +463,135 @@ class Spine(unittest.TestCase):
         code, rec = self.conclude(package, PROVING_TEST)
         self.assertEqual(rec["state"], "blocked")
         self.assertEqual(rec["diff"]["outside_scope"], ["src/a.py"])
+
+
+class InAWorktree(Fixture):
+    """The same spine, with the profile asking for a worktree: the person's checkout
+    never changes branch, the suite runs over the worktree through `{workdir}`, what
+    git does not hold arrives by `worktree_setup`, and `release` takes the worktree
+    away and leaves the branch. The runner sits outside git — the way a dependency
+    tree does — so a suite that passes in the worktree proves the setup ran there."""
+
+    SETUP = ["cp -r {repo}/runner {worktree}/runner"]
+
+    def setUp(self):
+        super().setUp()
+        (self.repo / "runner").mkdir()
+        (self.repo / "run_tests.py").rename(self.repo / "runner" / "run_tests.py")
+        (self.repo / ".gitignore").write_text("__pycache__/\nrunner/\n", encoding="utf-8")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "-m", "the runner lives outside git")
+        self.profile(self.SETUP)
+
+    def profile(self, setup, path_map=None):
+        import yaml
+        data = json.loads(json.dumps(PROFILE))
+        data["checks"]["suite"]["command"] = "python3 {workdir}/runner/run_tests.py"
+        data["delivery"].update({"worktree": True, "worktree_setup": setup,
+                                 "path_map": path_map or {"host": str(self.repo),
+                                                          "container": str(self.repo)}})
+        (self.root / "profiles" / "repo-x.yml").write_text(yaml.safe_dump(data), encoding="utf-8")
+
+    def branch_of(self, cwd):
+        return subprocess.run(("git", "branch", "--show-current"), cwd=cwd,
+                              capture_output=True, text=True).stdout.strip()
+
+    def test_prepare_cuts_the_branch_reads_the_baseline_and_marks(self):
+        package = self.prepare()
+        man = json.loads((package / "deliver-manifest.json").read_text(encoding="utf-8"))
+        workdir = self.repo / ".worktrees" / man["branch"]["name"]
+        self.assertEqual((man["in_worktree"], man["workdir"]), (True, str(workdir)))
+        self.assertEqual(man["baseline"], {"base_reds": [], "predicted": 1, "executed": 1})
+        self.assertEqual(self.branch_of(self.repo), "main")
+        self.assertEqual(self.branch_of(workdir), man["branch"]["name"])
+        self.assertTrue((workdir / "runner" / "run_tests.py").exists())
+        self.assertEqual(json.loads(deliver.marker().read_text())["worktree"], str(workdir))
+        self.assertIn(".worktrees/", (self.repo / ".git" / "info" / "exclude").read_text())
+
+    def test_a_dirty_tree_is_a_stop(self):
+        # a worktree is cut beside the checkout: pending work there is nobody's business
+        (self.repo / "src" / "a.py").write_text(SOURCE + "# pending\n", encoding="utf-8")
+        package = self.prepare()
+        self.assertTrue(pathlib.Path(json.loads((package / "deliver-manifest.json")
+                                               .read_text(encoding="utf-8"))["workdir"]).is_dir())
+
+    def test_a_proving_test_is_delivered_committed_and_handed_to_review(self):
+        package = self.prepare()
+        code, rec = self.conclude(package, PROVING_TEST)
+        self.assertEqual((code, rec["state"]), (0, "delivered"), rec)
+        self.assertEqual(rec["proof"]["mutations"][0]["result"], "red")
+        self.assertEqual((rec["baseline"]["executed"], rec["baseline"]["predicted"]), (2, 2))
+        branch = rec["branch"]["name"]
+        log = subprocess.run(("git", "log", "--format=%s", f"main..{branch}"), cwd=self.repo,
+                             capture_output=True, text=True).stdout.strip().splitlines()
+        self.assertEqual(log, ["ITEM-1 - prove the refusal above ten"])
+        # the checkout: still on main, still clean, never saw the test file
+        self.assertEqual(self.branch_of(self.repo), "main")
+        self.assertEqual(subprocess.run(("git", "status", "--porcelain"), cwd=self.repo,
+                                        capture_output=True, text=True).stdout, "")
+        self.assertFalse((self.repo / "tests" / "test_guard.py").exists())
+        self.assertFalse(deliver.marker().exists())
+
+    def test_release_removes_the_worktree_and_keeps_the_branch(self):
+        package = self.prepare()
+        workdir = pathlib.Path(json.loads((package / "deliver-manifest.json")
+                                          .read_text(encoding="utf-8"))["workdir"])
+        with contextlib.redirect_stdout(io.StringIO()):
+            deliver.release_worktree(package)
+        self.assertFalse(workdir.exists())
+        listed = subprocess.run(("git", "worktree", "list"), cwd=self.repo,
+                                capture_output=True, text=True).stdout
+        self.assertNotIn(".worktrees", listed)
+        branches = subprocess.run(("git", "branch", "--list", "ITEM-1-*"), cwd=self.repo,
+                                  capture_output=True, text=True).stdout
+        self.assertIn("ITEM-1-prove-the-refusal-above-ten", branches)
+
+    def test_a_setup_that_fails_takes_the_worktree_and_the_branch_down(self):
+        self.profile(["cp -r {repo}/runner {worktree}/runner", "false"])
+        with self.assertRaises(common.UsageError) as cm, contextlib.redirect_stdout(io.StringIO()):
+            self.prepare()
+        self.assertIn("worktree_setup", str(cm.exception))
+        self.assertFalse((self.repo / ".worktrees").exists() and any((self.repo / ".worktrees").iterdir()))
+        branches = subprocess.run(("git", "branch", "--list", "ITEM-1-*"), cwd=self.repo,
+                                  capture_output=True, text=True).stdout
+        self.assertEqual(branches.strip(), "")
+
+    def test_a_composed_setup_never_runs(self):
+        self.profile(["cp -r {repo}/runner {worktree}/runner && rm -rf {repo}"])
+        with self.assertRaises(common.UsageError) as cm, contextlib.redirect_stdout(io.StringIO()):
+            self.prepare()
+        self.assertIn("worktree_setup", str(cm.exception))
+        self.assertTrue((self.repo / "src" / "a.py").exists())
+
+    def test_an_existing_branch_is_never_reset_under_a_worktree(self):
+        git(self.repo, "branch", "ITEM-1-prove-the-refusal-above-ten", "main")
+        with self.assertRaises(common.UsageError) as cm, contextlib.redirect_stdout(io.StringIO()):
+            self.prepare()
+        self.assertIn("ITEM-1-prove-the-refusal-above-ten", str(cm.exception))
+
+    def test_the_workdir_is_translated_through_the_path_map(self):
+        import evidence
+        profile = {"delivery": {"path_map": {"host": str(self.repo), "container": "/var/www/html"}}}
+        self.assertEqual(evidence.mapped_workdir(profile, self.repo), "/var/www/html")
+        self.assertEqual(evidence.mapped_workdir(profile, self.repo / ".worktrees" / "b"),
+                         "/var/www/html/.worktrees/b")
+        self.assertEqual(evidence.resolve("docker exec -w {workdir} c phpunit", profile,
+                                          self.repo / ".worktrees" / "b"),
+                         "docker exec -w /var/www/html/.worktrees/b c phpunit")
+        self.assertEqual(evidence.mapped_workdir({"delivery": {}}, self.repo / "x"),
+                         str(self.repo / "x"))
+        with self.assertRaises(common.UsageError):
+            evidence.mapped_workdir(profile, self.root)
+
+    def test_a_test_that_does_not_prove_the_guard_is_blocked_and_nothing_is_committed(self):
+        package = self.prepare()
+        code, rec = self.conclude(package, WEAK_TEST)
+        self.assertEqual((code, rec["state"]), (1, "blocked"))
+        branch = rec["branch"]["name"]
+        log = subprocess.run(("git", "log", "--format=%s", f"main..{branch}"), cwd=self.repo,
+                             capture_output=True, text=True).stdout.strip()
+        self.assertEqual(log, "")
+        self.assertEqual(self.branch_of(self.repo), "main")
 
 
 if __name__ == "__main__":

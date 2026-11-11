@@ -133,7 +133,8 @@ class TestEveryRoutingDecisionIsReadFromDisk(unittest.TestCase):
         self.put(self.deliver, "deliver-manifest.json", {})
         self.put(self.deliver, "delivery.json", {"state": "delivered", "branch": {"name": "b"}})
         self.put(self.review, "manifest.json", {})
-        self.assertIn("name: 'task-review'", self.decide()["text"])
+        import run
+        self.assertIn(f"name: '{run._wf('task-review')}'", self.decide()["text"])
         self.put(self.review, "findings.json", [])
         self.assertTrue(self.decide()["text"].startswith("review.py conclude"))
 
