@@ -51,7 +51,7 @@ what is judgement.
 | **13 agents** | One question each. Ten read-only for the review — seven reviewers of one axis, a criteria extractor, a manual-verification planner, and a **sceptical verifier** that tries to *refute* every finding without having seen the reasoning behind it. Three for the delivery — a surveyor that measures, a writer with no shell, and a **sceptic** that never saw the writer. |
 | **3 knowledge skills** | What the reviewers load to read a diff: five axes, OWASP/ASVS, personal data. Neutral of language, framework and project. |
 | **18 risk classes** | A guardrail has three states — `fired`, `did_not_fire`, `not_assessable`. |
-| **2 message catalogues** | 441 keys each. Everything a person reads, in the configured language. |
+| **2 message catalogues** | 447 keys each. Everything a person reads, in the configured language. |
 
 Three rules govern everything, and each has a test that fails when it is broken:
 
@@ -93,7 +93,7 @@ prumo/
 │   ├── agnosticism_check.py     fails the method when it names a technology
 │   ├── hygiene.py               fails a secret, or a rule that is not the prumo's own
 │   ├── setup.py                 writes a prumo.yml: asks five things, measures the rest
-│   └── tests/                   494 tests
+│   └── tests/                   503 tests
 │
 ├── agents/                      THE LEAVES — 13 prompts: 10 read-only reviewers, a surveyor,
 │                                a writer with no shell, a sceptic
@@ -455,10 +455,13 @@ never share a context. The writer has no shell; the suite, the mutation and the 
 are run by a script through the profile's allowlist; a sceptic that never saw the writer
 reads the proof; and the judge is a pure function over the record.
 
-**Delivery kinds are closed recipes.** `reference/delivery-kinds.md` holds them — today
-`coverage-gap` only: a guard with no test, proved by a mutation the script makes by hand
-and reverts. A kind the profile does not list is `unsupported`, and the run stops rather
-than improvises.
+**Delivery kinds are closed recipes.** `reference/delivery-kinds.md` holds them:
+`coverage-gap` — a guard with no test, proved by a mutation the script makes by hand and
+reverts, with the tests the item says must stay green checked beside it — and
+`behaviour-change` — the code does the wrong thing, proved red on the base's files and
+green on the writer's. An `author_fix` route a review opened is a `behaviour-change`
+delivered with `--fix`, on the reviewed branch, against its head. A kind the profile
+does not list is `unsupported`, and the run stops rather than improvises.
 
 **The whole route runs only on the person's words.** `run` is closed to the model's
 invocation and refuses to start without the ask on disk; every step after that is read
