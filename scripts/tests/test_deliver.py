@@ -250,7 +250,7 @@ class TestTheVoice(unittest.TestCase):
     def test_every_deliver_message_is_twenty_words_or_fewer(self):
         for lang in i18n.available():
             for key, text in catalogue(lang).items():
-                if not key.startswith("deliver."):
+                if not key.startswith(("deliver.", "run.")):
                     continue
                 with self.subTest(language=lang, key=key):
                     for sentence in re.split(r"(?<=[.!?])\s+", str(text)):

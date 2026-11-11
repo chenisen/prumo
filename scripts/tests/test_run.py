@@ -142,3 +142,57 @@ class TestEveryRoutingDecisionIsReadFromDisk(unittest.TestCase):
         lines = (self.root / "orchestration.md").read_text(encoding="utf-8").splitlines()
         self.assertEqual(len(lines), 2)
         self.assertIn("unsupported", lines[-1])
+
+
+class TestTheRouteOverRealPackages(unittest.TestCase):
+    """The decision table above reads file names; this reads the files the spine
+    actually writes. A delivery and a review are run for real over a throwaway
+    repository, and `run.py next` has to find its way through what they left."""
+
+    def setUp(self):
+        from tests.test_deliver_backbone import Spine
+        self.spine = Spine("test_prepare_cuts_the_branch_reads_the_baseline_and_marks")
+        self.spine.setUp()
+        self.root, self.repo = self.spine.root, self.spine.repo
+
+    def tearDown(self):
+        self.spine.tearDown()
+
+    def test_next_walks_from_nothing_to_the_verdict(self):
+        import argparse, contextlib, io, json
+        from tests.test_deliver_backbone import PROVING_TEST
+        import run, review
+        pkg = run.start("repo-x", "ITEM-1", str(self.root / "item.md"),
+                        item_file=str(self.root / "item.md"), package=str(self.root / "run"))
+        self.assertTrue(run.next_step(pkg)["text"].startswith("deliver.py prepare"))
+
+        deliver_pkg = self.spine.prepare()
+        run.bind(pkg, "deliver", str(deliver_pkg))
+        self.assertIn("stage: 'measure'", run.next_step(pkg)["text"])
+        code, rec = self.spine.conclude(deliver_pkg, PROVING_TEST)
+        self.assertEqual(rec["state"], "delivered")
+        # the real spine writes measure.json and written.json into the package itself
+        self.assertTrue((deliver_pkg / "measure.json").exists())
+        step = run.next_step(pkg)
+        self.assertTrue(step["text"].startswith("review.py prepare --repo repo-x --branch "), step)
+
+        review_pkg = self.root / "review"
+        args = argparse.Namespace(repo="repo-x", proposal=None, branch=rec["branch"]["name"],
+                                  item="ITEM-1", item_file=str(self.root / "item.md"),
+                                  proposal_file=None, package=str(review_pkg), advisory=False)
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(review.prepare(args), 0)
+        run.bind(pkg, "review", str(review_pkg))
+        self.assertIn("name: 'task-review'", run.next_step(pkg)["text"])
+
+        (review_pkg / "findings-in.json").write_text("[]", encoding="utf-8")
+        args = argparse.Namespace(package=str(review_pkg), findings=str(review_pkg / "findings-in.json"),
+                                  scripts_manual=None, conventions=None, coverage=None, advisory=False)
+        with contextlib.redirect_stdout(io.StringIO()):
+            review.conclude(args)
+        self.assertTrue((review_pkg / "verdict.json").exists())
+        stop = run.next_step(pkg)
+        self.assertEqual(stop["kind"], "stop")
+        self.assertIn(stop["class"], ("approved", "intervention"))
+        log = (pkg / "orchestration.md").read_text(encoding="utf-8").splitlines()
+        self.assertTrue(log[-1].startswith(("stop:", "parada:")), log[-1])
