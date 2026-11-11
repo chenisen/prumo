@@ -133,6 +133,26 @@ class TestFindings(unittest.TestCase):
         v = judge(findings=[self.finding()])
         self.assertIn("author_fix", route_types(v))
 
+    def test_a_finding_about_a_criterion_closes_the_item_s_gate_not_the_standards_one(self):
+        # a finding that the mutation record did not prove the tests once closed gate 1,
+        # and the reader was told the delivery broke a convention it had not touched
+        v = judge(findings=[self.finding(criterion="AC-2")])
+        self.assertEqual(v["verdict"], INTERVENTION)
+        self.assertTrue(v["gates"][0]["passed"], "gate 1 is not the finding's")
+        self.assertIn("X-1", v["gates"][2]["items"])
+        self.assertIn("author_fix", route_types(v))
+
+    def test_a_class_the_anchors_did_not_see_but_a_finding_names_is_declared_beside_it(self):
+        v = judge(findings=[self.finding(**{"class": "A8"}),
+                            self.finding(id="X-2", status="refuted", **{"class": "A3"})])
+        self.assertEqual(v["summary"]["classes_named_by_findings"], {"A8": ["X-1"]})
+        # named is not fired: the reviewer's label opens no human decision
+        self.assertNotIn("A8", v["summary"]["classes_fired"])
+        self.assertTrue(v["gates"][1]["passed"])
+
+    def test_the_summary_names_what_this_review_assessed_apart_from_the_profile_s_anchors(self):
+        self.assertEqual(judge()["summary"]["classes_assessed"], "18/18")
+
     def test_a_refuted_finding_disappears(self):
         self.assertEqual(
             judge(findings=[self.finding(status="refuted")])["verdict"], APPROVED)

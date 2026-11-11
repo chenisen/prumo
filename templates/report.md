@@ -6,7 +6,7 @@
 | | |
 |---|---|
 | **Repository** | `{repo}` |
-| **Profile** | `{profile_status}` v{profile_version} · coverage {coverage} |
+| **Profile** | `{profile_status}` v{profile_version} · anchors {anchors} · classes assessed in this review {coverage} |
 | **Origin** | {origin} |
 | **Base** | `{base_ref}` @ `{base_sha_short}` ({base_source}) |
 | **Commits reviewed** | `{sha_initial}`..`{sha_final}` |

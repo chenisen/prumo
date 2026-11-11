@@ -108,6 +108,13 @@
         "string",
         "null"
       ]
+    },
+    "criterion": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "the id of the item's acceptance criterion this finding bears on, when it is about one; the judge then charges it at gate 3 (what the item asked for), not at gate 1"
     }
   },
   "allOf": [

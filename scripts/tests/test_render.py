@@ -10,6 +10,15 @@ class TestEscape(unittest.TestCase):
     raw into the HTML (item 10001). Escaping is done IN CODE, never by instructing the
     model."""
 
+    def test_a_class_named_by_a_finding_says_so_on_its_own_line(self):
+        from render import class_list
+        classes = [{"id": "A8", "section": "A", "state": "did_not_fire", "reason": "no anchor matched"},
+                   {"id": "A1", "section": "A", "state": "did_not_fire", "reason": "no anchor matched"}]
+        text = class_list(classes, "A", "did_not_fire", {"A8": ["COR-1"]})
+        self.assertIn("COR-1", text)
+        self.assertEqual(text.count("COR-1"), 1)
+        self.assertNotIn("COR-1", class_list(classes, "A", "did_not_fire"))
+
     def test_markers_are_escaped(self):
         self.assertEqual(escape("<route>"), "&lt;route&gt;")
 

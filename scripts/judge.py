@@ -198,8 +198,18 @@ def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
     #     wrote this proposal.
     severe = lambda f: f.get("severity") in BLOCKING_SEVERITIES
     blocks = lambda f: severe(f) and f.get("attributable", True)
+    # A finding about an acceptance criterion of the item is charged where the item is
+    # charged — gate 3 — not at "standards and good practice". A finding that the
+    # mutation record did not prove the tests closed gate 1 once, and the reader was told
+    # the delivery broke a convention it had not touched.
+    about_criterion = lambda f: bool(f.get("criterion"))
     route("author_fix",
-          [f["id"] for f in findings if blocks(f) and f.get("status") == "confirmed"])
+          [f["id"] for f in findings if blocks(f) and f.get("status") == "confirmed"
+           and not about_criterion(f)])
+    route("author_fix",
+          [f["id"] for f in findings if blocks(f) and f.get("status") == "confirmed"
+           and about_criterion(f)],
+          {"detail": t("verdict.detail_finding_on_criterion", **_words())}, gate=3)
     route("confirm_finding",
           [f["id"] for f in findings if blocks(f) and f.get("status") == "uncertain"])
     non_attributable = [f["id"] for f in findings
@@ -304,9 +314,24 @@ def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
                                 reason=evidence.get("conflicts_reason") or "")))
                 if evidence.get("behind_base") else None),
             "classes_fired": [c["id"] for c in classes if c["state"] == "fired"],
+            # A class the triage's anchors did not see, that a standing finding names:
+            # declared beside the class, so the report never says "nothing matched" on
+            # one line and "class A8" three sections later. The finding's gate is the
+            # finding's; a reviewer's label does not fire a class the anchors did not.
+            "classes_named_by_findings": {
+                c["id"]: sorted(f["id"] for f in findings
+                                if f.get("class") == c["id"] and f.get("status") != "refuted")
+                for c in classes if c["state"] == "did_not_fire"
+                and any(f.get("class") == c["id"] and f.get("status") != "refuted" for f in findings)},
             "classes_did_not_fire": [c["id"] for c in classes if c["state"] == "did_not_fire"],
             "classes_not_assessable": [c["id"] for c in classes if c["state"] == "not_assessable"],
+            # What THIS review assessed, over 18. The preflight prints a different figure
+            # under the same word — how many classes the PROFILE anchors — and the two
+            # were read as a contradiction (16/18 against 18/18 on one delivery). This
+            # one is named `assessed`; the profile's is `anchors`, and the report prints
+            # both with their names.
             "profile_coverage": f"{len([c for c in classes if c['state'] != 'not_assessable'])}/18",
+            "classes_assessed": f"{len([c for c in classes if c['state'] != 'not_assessable'])}/18",
             "blocking_findings": len([f for f in findings if blocks(f)]),
             "refuted_findings": len([f for f in findings if f.get("status") == "refuted"]),
             "non_attributable_findings": non_attributable,

@@ -64,6 +64,11 @@ concrete consequence in this code. **Contextual in what you demand.**
 **Silence does not count as "nothing found".** Say what you checked and what does not
 apply to this slice.
 
+**A finding about an acceptance criterion names it.** When what you found is that a
+criterion of the item is not met, or not proven, put that criterion's id in the
+finding's `criterion`, verbatim from the list you were given. The judge then charges
+it where the item is charged, not as a breach of the project's standards.
+
 **You review what THIS change did, not the repository.** A defect that already existed
 and that the change did not touch is **not your finding** — do not raise it as though it
 were the author's work. If your reading surfaced it and losing it would be a waste,

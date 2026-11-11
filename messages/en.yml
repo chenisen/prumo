@@ -357,6 +357,7 @@ report:
   criterion_note: "reviewer's note, not a record"
   criteria_none: _No readable criteria came from the {item}, or the mandatory reading came back
     empty._
+  named_by_finding: 'the anchors saw nothing, but finding {ids} names this class'
   did_not_fire: '**Did not fire — named:**'
   does_not_resolve: '**does not resolve**'
   evidence: Evidence
@@ -616,6 +617,7 @@ verdict:
     manual_check: the evidence recorded on the item triggers the re-judgement
     missing_capability: the profile is updated and reviewed in a proposal
     missing_profile: a person confirms the profile; closes once per repository
+  detail_finding_on_criterion: 'finding about an acceptance criterion of the {item}, charged where the {item} is charged'
   detail_criterion_unmet: criterion of the {item} that the delivery did not meet
   detail_criterion_unrecorded: criterion the diff does not decide and that nobody recorded
   detail_delivery_untested: behaviour this delivery wrote that no test covers

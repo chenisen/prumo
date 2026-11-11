@@ -358,6 +358,7 @@ report:
   criterion_note: nota do revisor, não registro
   criteria_none: _Não vieram critérios legíveis d{item_with_article}, ou a leitura obrigatória
     veio vazia._
+  named_by_finding: 'as âncoras não viram nada, mas o achado {ids} nomeia esta classe'
   did_not_fire: '**Não dispararam — nomeados:**'
   does_not_resolve: '**não resolve**'
   evidence: Evidência
@@ -618,6 +619,7 @@ verdict:
     manual_check: a evidência registrada no item dispara o re-julgamento
     missing_capability: o perfil é atualizado e versionado numa proposta
     missing_profile: uma pessoa confirma o perfil; fecha uma vez por repositório
+  detail_finding_on_criterion: 'achado sobre um critério de aceite d{item_with_article}, cobrado no mesmo portão que {item_with_article}'
   detail_criterion_unmet: critério d{item_with_article} que a entrega não atendeu
   detail_criterion_unrecorded: critério que o diff não decide e que ninguém registrou
   detail_delivery_untested: comportamento que esta entrega escreveu e nenhum teste cobre

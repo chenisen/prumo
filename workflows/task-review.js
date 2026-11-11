@@ -102,6 +102,7 @@ const FINDINGS_SCHEMA = {
           attributable: { type: 'boolean' },
           status: { enum: ['proposed'] },
           owasp_category: { type: ['string', 'null'] },
+          criterion: { type: ['string', 'null'] },
         },
       },
     },

@@ -186,12 +186,19 @@ def project_pending_table(verdict: dict, meaning=None) -> str:
             + routes_table(verdict, origin="project", meaning=meaning))
 
 
-def class_list(classes: list[dict], section: str, state: str) -> str:
+def class_list(classes: list[dict], section: str, state: str,
+               named: dict[str, list[str]] | None = None) -> str:
+    """`named` is the judge's `classes_named_by_findings`: a class the anchors did not
+    see but a standing finding labels. Said on the class's own line, so the report
+    never contradicts itself between section 6 and section 9."""
     target = [c for c in classes if c["section"] == section and c["state"] == state]
     if not target:
         return t("report.none")
     return "\n".join(
-        f"- **{c['id']}** — {class_question(c['id'])}  \n  {c['reason']}" for c in target)
+        f"- **{c['id']}** — {class_question(c['id'])}  \n  {c['reason']}"
+        + (f" — {t('report.named_by_finding', ids=', '.join((named or {})[c['id']]))}"
+           if (named or {}).get(c["id"]) else "")
+        for c in target)
 
 
 def build_report(package: pathlib.Path) -> str:
@@ -358,12 +365,14 @@ def build_report(package: pathlib.Path) -> str:
                     + "> " + t("report.approve_not_merge", **vocabulary()))
         return routes_header() + routes_table(verd, meaning=meaning)
 
+    named_by_findings = verd["summary"].get("classes_named_by_findings") or {}
     template = (DIR_TEMPLATES / "report.md").read_text(encoding="utf-8")
     return template.format(
         repo=man["repo"], item_id=man["item"]["id"] or t("report.unresolved"),
         profile_status=profile.get("status", "absent"),
         profile_version=profile.get("version", 0),
-        coverage=verd["summary"]["profile_coverage"], origin=man["origin"],
+        coverage=verd["summary"].get("classes_assessed", verd["summary"]["profile_coverage"]),
+        anchors=(cap.get("profile") or {}).get("coverage", "?"), origin=man["origin"],
         base_ref=man["base"]["ref"], base_sha_short=man["base"]["sha"][:12],
         base_source=man["base"]["source"], sha_initial=man["merge_base"][:12],
         sha_final=man["head_sha"][:12], lines=size["lines"], band=size["band"],
@@ -377,9 +386,9 @@ def build_report(package: pathlib.Path) -> str:
         section_criteria=sec_criteria(), section_proof=sec_proof(),
         section_conventions=sec_conventions(),
         section_a=class_list(classes, "A", "fired") + "\n\n" + t("report.did_not_fire")
-                  + "\n\n" + class_list(classes, "A", "did_not_fire"),
+                  + "\n\n" + class_list(classes, "A", "did_not_fire", named_by_findings),
         section_b=class_list(classes, "B", "fired") + "\n\n" + t("report.did_not_fire")
-                  + "\n\n" + class_list(classes, "B", "did_not_fire"),
+                  + "\n\n" + class_list(classes, "B", "did_not_fire", named_by_findings),
         section_not_assessable=sec_not_assessable(), section_findings=sec_findings(),
         section_observations=sec_observations(),
         section_capabilities=sec_capabilities(), section_reviewers=sec_reviewers(),
