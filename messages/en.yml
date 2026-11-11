@@ -89,6 +89,8 @@ deliver:
     no_red_on_base: 'no test went red on the base — a behaviour change without a red before the green is not proven'
     mutation_survived: 'the mutation at {file}:{line} left the suite green — the test does not prove the guard'
     new_red: 'new red by name: {names}'
+    no_guarding_tests: 'no test guards the behaviour this refactor preserves — write the guard first, as a coverage-gap'
+    guard_went_red: 'a guarding test went red on the branch — the refactor changed what it preserves: {names}'
     outside_scope: 'lines outside the scope: {paths}'
     plan_not_approved: 'the plan asks a person''s approval and has none — `{command}`'
     premise_failed: 'central premise fails — {premise} ({evidence})'

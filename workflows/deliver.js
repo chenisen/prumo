@@ -86,6 +86,7 @@ const MEASURE_SCHEMA = {
       },
     },
     proving_tests: { type: 'array', items: { type: 'string' } },
+    guarding_tests: { type: 'array', items: { type: 'string' } },
     checked: { type: 'array', items: { type: 'string' } },
   },
 }

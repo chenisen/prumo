@@ -189,6 +189,37 @@
               }
             }
           ]
+        },
+        "guarding": {
+          "description": "refactor: the existing tests that guard the behaviour being preserved, and whether they all stayed green on the branch",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "tests",
+                "result"
+              ],
+              "properties": {
+                "tests": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "result": {
+                  "enum": [
+                    "green",
+                    "red",
+                    "not_run"
+                  ]
+                }
+              }
+            }
+          ]
         }
       }
     },

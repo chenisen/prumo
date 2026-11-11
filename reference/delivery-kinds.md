@@ -45,6 +45,21 @@ package>` writes the item from the routes' findings, stays on the review's branc
 takes the branch's head as the base — the red before the green is measured against what
 the review read.
 
+## `refactor` — the shape changes, the behaviour does not
+
+| | |
+|---|---|
+| **Trigger** | the item names code to reshape — a duplication, a dependency to invert, a module to split — and says the observable behaviour stays |
+| **Premises the surveyor measures** | the files being reshaped at `file:line`; `guarding_tests` — the existing tests, by name, that exercise them today |
+| **What the writer may touch** | the files the measurement named, production and tests alike |
+| **Proof** | **preservation**: every guarding test green on the branch, by name; the baseline by name; the diff inside the named files and the budget; the profile's lint green. No red before green — nothing new is proven, something old is kept |
+| **Done when** | all of the above, and at least one guarding test named |
+| **Blocked when** | no guarding test exists — the behaviour has no proof to preserve, and the guard comes first, as a `coverage-gap`; a guarding test went red; a line outside the named files |
+
+The shape that asks for this kind, `refactor`, buys twice the profile's budget and
+waits for a person's approval of the plan: the plan is where the person reads which
+tests stand guard, and decides whether that is enough.
+
 ## Every kind
 
 The profile's lint check, when it declares one, runs over the tree the writer left and

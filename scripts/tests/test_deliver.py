@@ -197,6 +197,29 @@ class TestStops(unittest.TestCase):
                                                    "budget": {"max_files": 4, "max_lines": 120}}}
         self.assertEqual(judge(rec, profile=profile)["state"], "delivered")
 
+    def test_a_refactor_with_no_guarding_test_stops_for_a_person(self):
+        rec = record(item={"id": "ITEM-1", "kind": "refactor", "source": "tracker"},
+                     proof={"red_on_base": None, "green_on_branch": None, "mutations": [],
+                            "guarding": {"tests": [], "result": "not_run"}})
+        profile = {"profile": "repo-x", "delivery": {"kinds": ["refactor"], "budget": {"max_files": 8, "max_lines": 240}}}
+        out = judge(rec, profile=profile)
+        self.assertEqual((out["state"], out["owner"]), ("blocked", "person"))
+
+    def test_a_refactor_whose_guard_went_red_is_the_author_s(self):
+        rec = record(item={"id": "ITEM-1", "kind": "refactor", "source": "tracker"},
+                     proof={"red_on_base": None, "green_on_branch": None, "mutations": [],
+                            "guarding": {"tests": ["t_old"], "result": "red"}})
+        profile = {"profile": "repo-x", "delivery": {"kinds": ["refactor"], "budget": {"max_files": 8, "max_lines": 240}}}
+        out = judge(rec, profile=profile)
+        self.assertEqual((out["state"], out["owner"]), ("blocked", "author"))
+
+    def test_a_refactor_with_its_guards_green_is_delivered(self):
+        rec = record(item={"id": "ITEM-1", "kind": "refactor", "source": "tracker"},
+                     proof={"red_on_base": None, "green_on_branch": None, "mutations": [],
+                            "guarding": {"tests": ["t_old"], "result": "green"}})
+        profile = {"profile": "repo-x", "delivery": {"kinds": ["refactor"], "budget": {"max_files": 8, "max_lines": 240}}}
+        self.assertEqual(judge(rec, profile=profile)["state"], "delivered")
+
     def test_a_line_outside_the_scope_blocks(self):
         rec = record(diff={"files": ["tests/test_a.py", "src/z.py"], "added": 31,
                            "removed": 0, "outside_scope": ["src/z.py"], "within_budget": True})

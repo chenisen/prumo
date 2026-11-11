@@ -37,6 +37,7 @@ JSON only:
      "stays_green": ["<tests the item says must stay green under this mutant>"]}
   ],
   "proving_tests": ["<behaviour-change only: the tests that must be red on the base and green after>"],
+  "guarding_tests": ["<refactor only: the existing tests that exercise the code being reshaped>"],
   "checked": ["<what you read>"]
 }
 ```
@@ -58,8 +59,13 @@ JSON only:
   missing, the test file that will prove it, and `proving_tests` — the names the writer
   must use, which the script requires red on the base and green on the branch. A
   mutation is optional here; the red-before-green is the proof.
+- For `refactor`: the files being reshaped, and `guarding_tests` — the existing tests,
+  by name, that exercise them today. Grep the test roots for the units' names and
+  routes. A refactor with no guarding test is not deliverable: say so, with the files
+  that have none, and the delivery stops for a person.
 - `files` holds only what this kind allows: for `coverage-gap`, the test file alone; for
-  `behaviour-change`, the production files the fix needs plus the test file.
+  `behaviour-change`, the production files the fix needs plus the test file; for
+  `refactor`, the files being reshaped and, if the shape needs them, their tests.
 
 ## Voice
 

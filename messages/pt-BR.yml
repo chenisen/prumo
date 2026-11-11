@@ -93,6 +93,8 @@ deliver:
     no_red_on_base: 'nenhum teste ficou vermelho na base — mudança de comportamento sem vermelho antes do verde não está provada'
     mutation_survived: 'a mutação em {file}:{line} deixou a suíte verde — o teste não prova a guarda'
     new_red: 'vermelho novo por nome: {names}'
+    no_guarding_tests: 'nenhum teste guarda o comportamento que este refactor preserva — escreva a guarda antes, como coverage-gap'
+    guard_went_red: 'um teste de guarda ficou vermelho na branch — o refactor mudou o que preserva: {names}'
     outside_scope: 'linhas fora do escopo: {paths}'
     plan_not_approved: 'o plano pede aprovação de pessoa e não tem — `{command}`'
     premise_failed: 'premissa central falha — {premise} ({evidence})'

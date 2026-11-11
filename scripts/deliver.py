@@ -93,6 +93,12 @@ def deliver_judge(record: dict, profile: dict, reference: str | None = None) -> 
         return stop(BLOCKED, t("deliver.blocked.plan_not_approved",
                                command="deliver.py approve --package <package> --by <name>"), "person")
 
+    # A refactor with nothing standing guard has no proof to preserve, and the suite
+    # never ran for it: the stop is the person's, before "the suite did not run".
+    proof = record["proof"]
+    if kind == "refactor" and not ((proof.get("guarding") or {}).get("tests")):
+        return stop(BLOCKED, t("deliver.blocked.no_guarding_tests"), "person")
+
     base = record["baseline"]
     if base.get("executed") is None:
         return stop(BLOCKED, t("deliver.blocked.suite_not_run",
@@ -114,6 +120,11 @@ def deliver_judge(record: dict, profile: dict, reference: str | None = None) -> 
                     "author")
     if kind == "behaviour-change" and not red:
         return stop(BLOCKED, t("deliver.blocked.no_red_on_base"), "author")
+    guarding = proof.get("guarding")
+    if kind == "refactor":
+        if guarding.get("result") == "red":
+            return stop(BLOCKED, t("deliver.blocked.guard_went_red",
+                                   names=", ".join(guarding.get("tests") or [])), "author")
     for m in proof.get("mutations") or []:
         if m.get("stays_green_result") == "red":
             return stop(BLOCKED, t("deliver.blocked.mutation_too_wide", file=m["file"],
@@ -639,9 +650,12 @@ def conclude(args) -> int:
     check = (profile.get("checks") or {}).get("suite") or {}
     from evidence import compare_reds, red_names, progress
     central_failed = any(p["central"] and p["state"] == "fails" for p in premises)
+    # a refactor with nothing standing guard runs nothing: the stop is the person's
+    if kind == "refactor" and not (measure.get("guarding_tests") or []):
+        central_failed = True
 
     mutations, suite_out = [], ""
-    red_on_base = green_on_branch = None
+    red_on_base = green_on_branch = guarding = None
     lint = {"state": "not_run", "reason": t("review.suite_not_run")}
     gate_shut = plan_record["gate"] and not plan_record["approved_by"]
     if not central_failed and files and not gate_shut:
@@ -692,10 +706,15 @@ def conclude(args) -> int:
                                       else "green") if r.get("ran") else "not_run"}
         suite = run_suite(profile, workdir, package, "branch")
         suite_out = suite.get("output", "")
+        on_branch = red_names(suite_out, check.get("red_name_pattern")) or [] if suite.get("ran") else []
         if proving and suite.get("ran"):
-            on_branch = red_names(suite_out, check.get("red_name_pattern")) or []
             green_on_branch = {"test": ", ".join(proving),
                                "result": "red" if any(p in name for p in proving for name in on_branch) else "green"}
+        guards = list(measure.get("guarding_tests") or [])
+        if kind == "refactor":
+            guarding = {"tests": guards,
+                        "result": ("red" if any(g in name for g in guards for name in on_branch)
+                                   else "green") if suite.get("ran") else "not_run"}
         lint = run_lint(profile, workdir, package)
 
     base_out = (package / "run-suite-base.txt").read_text(encoding="utf-8") \
@@ -714,6 +733,7 @@ def conclude(args) -> int:
         "lint": lint,
         "plan": plan_record,
         "proof": {"red_on_base": red_on_base, "green_on_branch": green_on_branch,
+                  "guarding": guarding,
                   "mutations": [{k: v for k, v in m.items() if k != "why"} for m in mutations],
                   "refutation": ({"verdict": refutation["verdict"], "reason": refutation["reason"]}
                                  if refutation else None)},
@@ -809,6 +829,10 @@ def render(record: dict, mutations: list[dict]) -> str:
     rb = record["proof"].get("red_on_base")
     if rb:
         lines.append(f"{SYMBOL[rb['result']]} red on base: {rb['test']} {rb['result']}")
+    gd = record["proof"].get("guarding")
+    if gd:
+        lines.append(f"{SYMBOL['holds' if gd['result'] == 'green' else 'fails' if gd['result'] == 'red' else 'not_assessable']} "
+                     f"guarding: {', '.join(gd['tests']) or '?'} {gd['result']}")
     for m in mutations:
         lines.append(f"{SYMBOL[m['result']]} {m['file']}:{m['line']} `{m['from']}`→`{m['to']}` "
                      f"→ {m['test']} {m['result']}" + (" · reverted" if m["reverted"] else "")

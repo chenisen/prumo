@@ -78,7 +78,7 @@ PROFILE = {
                  "worktree": False, "budget": {"max_files": 2, "max_lines": 60},
                  "source_roots": ["src"], "test_roots": ["tests"],
                  "mutation": {"command": None, "note": None}, "hotfix_base": "main",
-                 "kinds": ["coverage-gap", "behaviour-change"]},
+                 "kinds": ["coverage-gap", "behaviour-change", "refactor"]},
 }
 
 MEASURE = {
@@ -318,6 +318,47 @@ class Spine(unittest.TestCase):
         # two files against a budget of one: the shape's half, not the profile's whole
         self.assertEqual(rec["state"], "blocked")
         self.assertIn("1", rec["reason"])
+
+    def test_a_refactor_is_proven_by_the_guards_that_stay_green(self):
+        """The shape is `refactor`: gated, twice the budget, the kind `refactor`. The
+        source is reshaped without changing what `test_accept_small` asserts; that test
+        is the guard, and it stays green."""
+        import contextlib, io
+        package = self.prepare(kind="refactor", shape="refactor")
+        measure = {"premises": [], "files": ["src/a.py"], "mutations": [],
+                   "guarding_tests": ["test_accept_small"]}
+        (package / "m.json").write_text(json.dumps(measure), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            deliver.plan(argparse.Namespace(package=str(package), measure=str(package / "m.json")))
+            deliver.approve(argparse.Namespace(package=str(package), by="someone"))
+        reshaped = "LIMIT = 10\n\n\ndef accept(x):\n    return x < LIMIT\n"
+        (self.repo / "src" / "a.py").write_text(reshaped, encoding="utf-8")
+        measure_path, written = package / "m.json", package / "w.json"
+        written.write_text(json.dumps({"files": ["src/a.py"], "skipped": []}), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = deliver.conclude(argparse.Namespace(package=str(package), measure=str(measure_path),
+                                                       written=str(written), refutation=None))
+        rec = json.loads((package / "delivery.json").read_text(encoding="utf-8"))
+        self.assertEqual(code, 0, rec)
+        self.assertEqual(rec["proof"]["guarding"], {"tests": ["test_accept_small"], "result": "green"})
+        self.assertEqual(rec["plan"]["budget"], {"max_files": 4, "max_lines": 120})
+
+    def test_a_refactor_with_nothing_standing_guard_runs_nothing_and_stops_for_a_person(self):
+        import contextlib, io
+        package = self.prepare(kind="refactor", shape="refactor")
+        measure = {"premises": [], "files": ["src/a.py"], "mutations": [], "guarding_tests": []}
+        (package / "m.json").write_text(json.dumps(measure), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            deliver.plan(argparse.Namespace(package=str(package), measure=str(package / "m.json")))
+            deliver.approve(argparse.Namespace(package=str(package), by="someone"))
+        (self.repo / "src" / "a.py").write_text(SOURCE + "\n", encoding="utf-8")
+        written = package / "w.json"; written.write_text(json.dumps({"files": ["src/a.py"], "skipped": []}))
+        with contextlib.redirect_stdout(io.StringIO()):
+            deliver.conclude(argparse.Namespace(package=str(package), measure=str(package / "m.json"),
+                                                written=str(written), refutation=None))
+        rec = json.loads((package / "delivery.json").read_text(encoding="utf-8"))
+        self.assertEqual((rec["state"], rec["owner"]), ("blocked", "person"))
+        self.assertFalse((package / "run-suite-branch.txt").exists())
 
     def test_an_epic_is_not_delivered(self):
         with self.assertRaises(common.UsageError):
