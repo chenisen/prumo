@@ -122,6 +122,11 @@ deliver:
     then_conclude: 'Then: deliver.py conclude --package {path} --measure <file> --written <file>'
     tree_dirty: '{path} has pending changes — somebody''s work in progress; commit or stash it first'
     worktree_exists: '{path} already exists — a branch of that name is under way'
+    branch_exists: '`{branch}` already exists in {path} — a worktree never resets a branch; pass --branch, or delete it first'
+    setup_composed: 'worktree_setup `{command}` composes with the shell — one plain command per line, nothing chained'
+    setup_failed: 'worktree_setup `{command}` failed with exit code {n}: {output}'
+    worktree_removed: 'worktree {path} removed; branch `{branch}` stays'
+    release_hint: 'the worktree stays until: deliver.py release --package {path}'
   next: 'next, by a person: {command}'
   not_assessable:
     no_delivery_block: 'profile `{repo}` has no `delivery:` block — run `{command}` and confirm it'
@@ -241,6 +246,7 @@ evidence:
     — an allowed command chained to another one is a different command
   suite_line: '  suite: {state} — {reason}'
   timed_out: timed out after {seconds}s
+  path_map_outside: '{path} is not under `delivery.path_map.host` ({host}) — the executor cannot reach it'
 gate_name:
   standards: standards and good practice
   business_rules: business rule

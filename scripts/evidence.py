@@ -16,6 +16,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import pathlib
 import re
 import shlex
@@ -23,7 +24,8 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from common import (dir_repositories, CHECK_ROLES, load_profile, write_json, read_json)
+from common import (dir_repositories, CHECK_ROLES, UsageError, load_profile, write_json,
+                    read_json)
 from i18n import t
 
 # Shell metacharacters. The presence of any one of them fails the whole command.
@@ -48,6 +50,39 @@ def authorise(command: str, profile: dict) -> tuple[bool, str]:
     if command not in allowed:
         return False, t("evidence.not_in_allowlist")
     return True, t("evidence.authorised_by_profile")
+
+
+# The placeholder a profile's command uses to name the tree it runs over. The allowlist
+# judges the TEMPLATE — the substitution happens after, so a path can never smuggle a
+# command in, and the same template serves the checkout and a worktree.
+WORKDIR = "{workdir}"
+
+
+def mapped_workdir(profile: dict, workdir: pathlib.Path) -> str:
+    """The tree a command runs over, as the EXECUTOR sees it. Without a `path_map` the
+    executor is this machine and the path is the host's. With one, the checkout is
+    mounted somewhere else — a container, a runner — and a worktree inside the checkout
+    is reached at the same relative place under the mount. A tree the map does not
+    cover is a stop: the executor could not reach it, and a suite run over the wrong
+    tree is a green that measured nothing."""
+    path_map = (profile.get("delivery") or {}).get("path_map")
+    if not path_map:
+        return str(workdir)
+    host = pathlib.Path(os.path.realpath(path_map["host"]))
+    real = pathlib.Path(os.path.realpath(workdir))
+    try:
+        relative = real.relative_to(host)
+    except ValueError:
+        raise UsageError(t("evidence.path_map_outside", path=workdir, host=path_map["host"]))
+    container = path_map["container"].rstrip("/")
+    return container if str(relative) == "." else f"{container}/{relative.as_posix()}"
+
+
+def resolve(command: str, profile: dict, workdir: pathlib.Path) -> str:
+    """The template with `{workdir}` filled in — after `authorise`, never before."""
+    if WORKDIR not in command:
+        return command
+    return command.replace(WORKDIR, mapped_workdir(profile, workdir))
 
 
 def run_command(command: str, repo_dir: pathlib.Path, limit: int | None = 20000) -> dict:
@@ -185,7 +220,8 @@ def main() -> int:
         print(t("evidence.not_executed"))
         return 0
 
-    result = run_command(command, dir_repositories() / man["repo"])
+    repo_dir = dir_repositories() / man["repo"]
+    result = run_command(resolve(command, profile, repo_dir), repo_dir)
     (package / f"run-{args.role}.txt").write_text(
         result.get("output", result.get("reason", "")), encoding="utf-8")
     if args.role == "suite":

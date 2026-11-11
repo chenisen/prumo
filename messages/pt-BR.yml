@@ -126,6 +126,11 @@ deliver:
     then_conclude: 'Depois: deliver.py conclude --package {path} --measure <arquivo> --written <arquivo>'
     tree_dirty: '{path} tem mudanças pendentes — trabalho de alguém em andamento; commite ou guarde antes'
     worktree_exists: '{path} já existe — uma branch com esse nome está em andamento'
+    branch_exists: '`{branch}` já existe em {path} — worktree nunca reseta branch; passe --branch, ou apague-a antes'
+    setup_composed: 'worktree_setup `{command}` compõe com o shell — um comando simples por linha, nada encadeado'
+    setup_failed: 'worktree_setup `{command}` falhou com código {n}: {output}'
+    worktree_removed: 'worktree {path} removida; a branch `{branch}` fica'
+    release_hint: 'a worktree fica até: deliver.py release --package {path}'
   next: 'próximo, por uma pessoa: {command}'
   not_assessable:
     no_delivery_block: 'perfil `{repo}` sem bloco `delivery:` — rode `{command}` e confirme'
@@ -243,6 +248,7 @@ evidence:
     comando permitido encadeado com outro é outro comando
   suite_line: '  suíte: {state} — {reason}'
   timed_out: estourou {seconds}s
+  path_map_outside: '{path} não está sob `delivery.path_map.host` ({host}) — o executor não a alcança'
 gate_name:
   standards: padrões e boas práticas
   business_rules: regra de negócio

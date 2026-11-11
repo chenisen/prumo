@@ -26,6 +26,7 @@ import json
 import os
 import pathlib
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -214,13 +215,15 @@ def _py(script: str, *args: str, check: bool = True) -> None:
 
 
 def run_suite(profile: dict, cwd: pathlib.Path, package: pathlib.Path, label: str) -> dict:
-    """The suite, through the profile's allowlist, output kept beside the package."""
-    from evidence import authorise, run_command
+    """The suite, through the profile's allowlist, output kept beside the package. The
+    template is what the allowlist judges; `{workdir}` is filled in after, with `cwd`
+    as the executor sees it."""
+    from evidence import authorise, resolve, run_command
     check = (profile.get("checks") or {}).get("suite") or {}
     ok, reason = authorise(check.get("command") or "", profile)
     if not ok:
         return {"ran": False, "reason": reason, "output": ""}
-    result = run_command(check["command"], cwd, limit=None)
+    result = run_command(resolve(check["command"], profile, cwd), cwd, limit=None)
     (package / f"run-suite-{label}.txt").write_text(
         result.get("output", result.get("reason", "")), encoding="utf-8")
     return result
@@ -229,14 +232,14 @@ def run_suite(profile: dict, cwd: pathlib.Path, package: pathlib.Path, label: st
 def run_lint(profile: dict, cwd: pathlib.Path, package: pathlib.Path) -> dict:
     """The profile's lint check, read like the suite: the output first, the exit code
     second. No command declared is `not_run`, said in words — never green."""
-    from evidence import authorise, run_command
+    from evidence import authorise, resolve, run_command
     check = (profile.get("checks") or {}).get("lint") or {}
     if not check.get("command"):
         return {"state": "not_run", "reason": t("evidence.not_in_allowlist")}
     ok, reason = authorise(check["command"], profile)
     if not ok:
         return {"state": "not_run", "reason": reason}
-    r = run_command(check["command"], cwd, limit=None)
+    r = run_command(resolve(check["command"], profile, cwd), cwd, limit=None)
     (package / "run-lint.txt").write_text(r.get("output", r.get("reason", "")), encoding="utf-8")
     if not r.get("ran"):
         return {"state": "not_run", "reason": r.get("reason", "")}
@@ -353,12 +356,34 @@ def fix_item(review: pathlib.Path) -> tuple[str, str, str]:
     return item, man.get("origin") or "", "\n".join(lines) + "\n"
 
 
+def setup_worktree(repo_dir: pathlib.Path, workdir: pathlib.Path, block: dict) -> None:
+    """What a fresh worktree needs before a suite can run in it — a dependency tree git
+    does not hold, a cache directory the framework wants writable — is a fact of the
+    repository, and it comes from the profile's `worktree_setup`: one command per
+    line, by `shlex`, no shell, `{repo}` and `{worktree}` filled in. Nothing runs that
+    is not declared there. A command that fails takes the worktree down with it, so
+    the next prepare does not meet a half-built tree."""
+    from evidence import COMPOSITION
+    for template in block.get("worktree_setup") or []:
+        if COMPOSITION.search(template):
+            raise UsageError(t("deliver.cli.setup_composed", command=template))
+        command = template.replace("{repo}", str(repo_dir)).replace("{worktree}", str(workdir))
+        r = subprocess.run(shlex.split(command), cwd=workdir, capture_output=True, text=True)
+        if r.returncode != 0:
+            output = ((r.stdout or "") + (r.stderr or "")).strip()[-500:]
+            raise UsageError(t("deliver.cli.setup_failed", command=template, n=r.returncode,
+                               output=output))
+
+
 def cut_branch(repo_dir: pathlib.Path, block: dict, name: str, base_sha: str,
                fresh: bool = True) -> pathlib.Path:
     """A clean tree is a precondition, not a courtesy: a pending change nobody made here
     is somebody's work in progress. In a worktree the branch lives beside the checkout
-    and the checkout is never touched; without one, the branch is checked out in place
-    and the report says where HEAD stood."""
+    and the checkout is never touched — not even its branch; without one, the branch
+    is checked out in place and the report says where HEAD stood. A branch that already
+    exists is never reset under a worktree: it may carry somebody's commits, and the
+    person names another or deletes it. A worktree that already holds the branch is
+    continued, not recut — that is a story's second task, or a fix on a reviewed branch."""
     if block.get("worktree"):
         workdir = repo_dir / ".worktrees" / name
         exclude = repo_dir / ".git" / "info" / "exclude"
@@ -367,11 +392,22 @@ def cut_branch(repo_dir: pathlib.Path, block: dict, name: str, base_sha: str,
             if ".worktrees/" not in text:
                 exclude.write_text(text.rstrip("\n") + "\n.worktrees/\n", encoding="utf-8")
         if workdir.exists():
+            if not fresh and git(workdir, "branch", "--show-current", check=False) == name:
+                return workdir
             raise UsageError(t("deliver.cli.worktree_exists", path=workdir))
         if fresh:
+            if git(repo_dir, "rev-parse", "--verify", "-q", f"refs/heads/{name}", check=False):
+                raise UsageError(t("deliver.cli.branch_exists", branch=name, path=repo_dir))
             git(repo_dir, "worktree", "add", "-b", name, str(workdir), base_sha)
         else:
             git(repo_dir, "worktree", "add", str(workdir), name)
+        try:
+            setup_worktree(repo_dir, workdir, block)
+        except UsageError:
+            git(repo_dir, "worktree", "remove", "--force", str(workdir), check=False)
+            if fresh:
+                git(repo_dir, "branch", "-D", name, check=False)
+            raise
         return workdir
     if git(repo_dir, "status", "--porcelain"):
         raise UsageError(t("deliver.cli.tree_dirty", path=repo_dir))
@@ -380,6 +416,22 @@ def cut_branch(repo_dir: pathlib.Path, block: dict, name: str, base_sha: str,
     else:
         git(repo_dir, "checkout", "-q", name)
     return repo_dir
+
+
+def release_worktree(package: pathlib.Path) -> None:
+    """The worktree a delivery was cut in goes away with the marker; the branch stays,
+    because the branch is the delivery and the worktree was only where it was written.
+    A package that was not cut in a worktree has nothing to remove."""
+    path = package / "deliver-manifest.json"
+    if not path.exists():
+        return
+    man = read_json(path)
+    if not man.get("in_worktree"):
+        return
+    workdir = pathlib.Path(man["workdir"])
+    if workdir.exists():
+        git(dir_repositories() / man["repo"], "worktree", "remove", "--force", str(workdir))
+    print(t("deliver.cli.worktree_removed", path=workdir, branch=man["branch"]["name"]))
 
 
 def prepare(args) -> int:
@@ -913,6 +965,8 @@ def conclude(args) -> int:
     unmark()
     print(report)
     print(t("review.report_at", path=destination / f"deliver-{today()}.md"))
+    if man.get("in_worktree"):
+        print(t("deliver.cli.release_hint", path=package))
 
     # What this delivery cost, read from the harness's transcripts — every workflow run
     # over the package, because a delivery is two. A by-product: a failure here never
@@ -1037,6 +1091,7 @@ def main() -> int:
     b.add_argument("--written")
     b.add_argument("--refutation")
     c = sub.add_parser("release", help=t("review.help_release"))
+    c.add_argument("--package", help="the delivery's package: its worktree is removed too; the branch stays")
     args = p.parse_args()
     try:
         if args.command == "prepare":
@@ -1053,6 +1108,8 @@ def main() -> int:
             return story_status(args)
         if args.command == "approve":
             return approve(args)
+        if args.package:
+            release_worktree(pathlib.Path(args.package))
         unmark()
         print(t("review.marker_removed", path=marker()))
         return 0
