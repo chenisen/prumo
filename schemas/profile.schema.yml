@@ -119,6 +119,59 @@ properties:
     description: rebaixamento opcional de modelo por agente, num repo de baixo risco
     additionalProperties: {enum: [haiku, sonnet, opus]}
 
+  delivery:
+    type: object
+    description: >
+      What `deliver` needs to write into THIS repository and prove it. OPTIONAL: a
+      profile without it makes every delivery `not_assessable`, with the derivation
+      command handed back — never a default. Nothing here names a stack: the suite is
+      `checks.suite`, the base is `base.branch`.
+    additionalProperties: false
+    required: [branch_format, commit_format, worktree, budget, source_roots, test_roots, mutation, kinds]
+    properties:
+      branch_format:
+        type: string
+        minLength: 1
+        description: "how the branch is named; `{item}` and `{slug}` are filled in"
+      commit_format:
+        type: string
+        minLength: 1
+        description: "the repository's commit convention; `{item}` and `{message}` are filled in"
+      worktree:
+        type: boolean
+        description: deliver in an isolated worktree inside the repository, never in the checkout
+      budget:
+        type: object
+        additionalProperties: false
+        required: [max_files, max_lines]
+        properties:
+          max_files: {type: integer, minimum: 1}
+          max_lines: {type: integer, minimum: 1}
+        description: over it the run stops and proposes the split; `waiver` lifts it, with a name and an expiry
+      source_roots:
+        type: array
+        minItems: 1
+        items: {type: string}
+        description: where production lives; a line outside the scope is a defect
+      test_roots:
+        type: array
+        minItems: 1
+        items: {type: string}
+      mutation:
+        type: object
+        additionalProperties: false
+        required: [command, note]
+        properties:
+          command:
+            type: [string, "null"]
+            description: null means by hand — the script edits the named line, runs the suite, reverts
+          note: {type: [string, "null"]}
+      kinds:
+        type: array
+        description: the kinds THIS repository accepts, from reference/delivery-kinds.md; anything else is unsupported
+        items: {enum: [coverage-gap]}
+      waiver: {$ref: "#/$defs/waiver"}
+
   anchors:
     type: object
     description: >
@@ -179,6 +232,18 @@ $defs:
           (container, runner, wrapper) can swallow the code, and a green resting on the
           exit code alone is a green that never looked at the result. Absent is
           legitimate: the state then says, in words, that it rests on the exit code only.
+      red_name_pattern:
+        type: [string, "null"]
+        description: >
+          A regular expression with ONE group that, over the OUTPUT, names each red test.
+          It is what lets a baseline be compared BY NAME: without it a red is a count,
+          and a count tells no delivery apart from another.
+      progress_pattern:
+        type: [string, "null"]
+        description: >
+          A regular expression with TWO groups, executed and predicted, over the OUTPUT.
+          A suite whose executed is short of its predicted did not finish, and did not
+          prove anything — whatever its exit code says.
       waiver: {$ref: "#/$defs/waiver"}
 
   anchor:

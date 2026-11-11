@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "A delivery record — what one run of `deliver` measured, wrote and proved",
+  "description": "Read by deliver_judge(), a pure function: same record, same state. The record never carries a verdict — reviewing is task-review's, in another context. `skipped` is mandatory because what the writer did not check is declared, even when the list is empty.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["item", "base", "branch", "premises", "proof", "baseline", "diff", "skipped", "waiver"],
+  "properties": {
+    "item": {
+      "type": "object", "additionalProperties": false, "required": ["id", "kind", "source"],
+      "properties": {
+        "id": {"type": ["string", "integer"]},
+        "kind": {"type": "string", "minLength": 1},
+        "source": {"enum": ["tracker", "project_route"]}
+      }
+    },
+    "base":   {"$ref": "#/$defs/ref"},
+    "branch": {"$ref": "#/$defs/ref"},
+    "premises": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["text", "state", "evidence", "central"],
+        "properties": {
+          "text": {"type": "string", "minLength": 1},
+          "state": {"enum": ["holds", "fails", "not_assessable"]},
+          "evidence": {"type": ["string", "null"], "description": "file:line, or null when not assessable"},
+          "central": {"type": "boolean"}
+        }
+      }
+    },
+    "proof": {
+      "type": "object", "additionalProperties": false,
+      "required": ["red_on_base", "green_on_branch", "mutations"],
+      "properties": {
+        "red_on_base":     {"$ref": "#/$defs/test_result"},
+        "green_on_branch": {"$ref": "#/$defs/test_result"},
+        "mutations": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["file", "line", "from", "to", "test", "result", "reverted"],
+            "properties": {
+              "file": {"type": "string"}, "line": {"type": "integer", "minimum": 1},
+              "from": {"type": "string"}, "to": {"type": "string"},
+              "test": {"type": "string"},
+              "result": {"enum": ["red", "green", "not_run"]},
+              "reverted": {"type": "boolean"}
+            }
+          }
+        }
+      }
+    },
+    "baseline": {
+      "type": "object", "additionalProperties": false,
+      "required": ["base_reds", "branch_reds", "new_reds", "vanished_reds", "predicted", "executed"],
+      "properties": {
+        "base_reds":     {"type": "array", "items": {"type": "string"}},
+        "branch_reds":   {"type": "array", "items": {"type": "string"}},
+        "new_reds":      {"type": "array", "items": {"type": "string"}},
+        "vanished_reds": {"type": "array", "items": {"type": "string"}},
+        "predicted": {"type": ["integer", "null"], "minimum": 0},
+        "executed":  {"type": ["integer", "null"], "minimum": 0}
+      }
+    },
+    "diff": {
+      "type": "object", "additionalProperties": false,
+      "required": ["files", "added", "removed", "outside_scope", "within_budget"],
+      "properties": {
+        "files": {"type": "array", "items": {"type": "string"}},
+        "added": {"type": "integer", "minimum": 0},
+        "removed": {"type": "integer", "minimum": 0},
+        "outside_scope": {"type": "array", "items": {"type": "string"}},
+        "within_budget": {"type": "boolean"}
+      }
+    },
+    "skipped": {
+      "type": "array",
+      "description": "what the writer declared it did not check or deliberately left out",
+      "items": {"type": "string"}
+    },
+    "waiver": {
+      "description": "only ever copied from the profile; a run never writes one",
+      "oneOf": [
+        {"type": "null"},
+        {"type": "object", "additionalProperties": false,
+         "required": ["reason", "approver", "expires"],
+         "properties": {"reason": {"type": "string", "minLength": 1},
+                        "approver": {"type": "string", "minLength": 1},
+                        "expires": {"type": "string"}}}
+      ]
+    },
+    "state":  {"enum": ["delivered", "blocked", "unsupported"]},
+    "reason": {"type": "string"},
+    "owner":  {"enum": ["author", "profile", "person", null]},
+    "next":   {"type": "string", "description": "the invocation ready to paste, verbatim"}
+  },
+  "$defs": {
+    "ref": {
+      "type": "object", "additionalProperties": false, "required": ["name", "sha"],
+      "properties": {"name": {"type": "string", "minLength": 1},
+                     "sha": {"type": "string", "pattern": "^[0-9a-f]{7,40}$"}}
+    },
+    "test_result": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "object", "additionalProperties": false, "required": ["test", "result"],
+         "properties": {"test": {"type": "string"}, "result": {"enum": ["red", "green", "not_run"]}}}
+      ]
+    }
+  }
+}

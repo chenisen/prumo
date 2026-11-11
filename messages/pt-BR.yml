@@ -84,6 +84,39 @@ config:
   missing: '`prumo.yml` não encontrado. O prumo não presume fornecedor nem caminho: copie `prumo.yml.example`
     da raiz do prumo, preencha, e ponha na raiz do seu workspace — ou aponte `PRUMO_CONFIG` para
     ele.'
+deliver:
+  blocked:
+    budget_exceeded: '{files} arquivos e {lines} linhas; o perfil permite {max_files} e {max_lines} — divida o item ou dispense'
+    mutation_survived: 'a mutação em {file}:{line} deixou a suíte verde — o teste não prova a guarda'
+    new_red: 'vermelho novo por nome: {names}'
+    outside_scope: 'linhas fora do escopo: {paths}'
+    premise_failed: 'premissa central falha — {premise} ({evidence})'
+    suite_incomplete: 'a suíte executou {executed} de {predicted} — não é verde'
+    suite_not_run: 'a suíte não rodou: {reason}'
+    test_not_red_on_base: '`{test}` não ficou vermelho na base — sem prova'
+  next: 'próximo, por uma pessoa: {command}'
+  not_assessable:
+    no_delivery_block: 'perfil `{repo}` sem bloco `delivery:` — rode `{command}` e confirme'
+    mutation_not_applied: 'a mutação não pôde ser aplicada em {file}:{line} — {reason}'
+  owner:
+    author: autor
+    person: pessoa
+    profile: dono do perfil
+  report:
+    base: BASE
+    branch: BRANCH
+    diff: DIFF
+    item: ITEM
+    next: PRÓXIMO
+    premises: PREMISSAS
+    proof: PROVA
+    skipped: PULADO
+  state:
+    blocked: BLOQUEADO
+    delivered: ENTREGUE
+    unsupported: NÃO SUPORTADO
+  unsupported:
+    kind: 'kind `{kind}` não está no perfil — ele aceita: {kinds}'
 delta:
   escalate: '  ESCALAR: {detail}'
   escalation: '{n} achado(s) bloqueante(s) no {cycle}º ciclo: {findings} — escalar para o tech

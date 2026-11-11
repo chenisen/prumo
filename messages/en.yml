@@ -80,6 +80,39 @@ config:
   missing: '`prumo.yml` not found. The prumo assumes neither provider nor path: copy `prumo.yml.example`
     from the prumo root, fill it in, and put it at the root of your workspace — or point `PRUMO_CONFIG`
     at it.'
+deliver:
+  blocked:
+    budget_exceeded: '{files} files and {lines} lines; the profile allows {max_files} and {max_lines} — split the item or waive it'
+    mutation_survived: 'the mutation at {file}:{line} left the suite green — the test does not prove the guard'
+    new_red: 'new red by name: {names}'
+    outside_scope: 'lines outside the scope: {paths}'
+    premise_failed: 'central premise fails — {premise} ({evidence})'
+    suite_incomplete: 'the suite ran {executed} of {predicted} — not green'
+    suite_not_run: 'the suite did not run: {reason}'
+    test_not_red_on_base: '`{test}` was not red on the base — no proof'
+  next: 'next, by a person: {command}'
+  not_assessable:
+    no_delivery_block: 'profile `{repo}` has no `delivery:` block — run `{command}` and confirm it'
+    mutation_not_applied: 'the mutation could not be applied at {file}:{line} — {reason}'
+  owner:
+    author: author
+    person: person
+    profile: profile owner
+  report:
+    base: BASE
+    branch: BRANCH
+    diff: DIFF
+    item: ITEM
+    next: NEXT
+    premises: PREMISES
+    proof: PROOF
+    skipped: SKIPPED
+  state:
+    blocked: BLOCKED
+    delivered: DELIVERED
+    unsupported: UNSUPPORTED
+  unsupported:
+    kind: 'kind `{kind}` is not in the profile — it accepts: {kinds}'
 delta:
   escalate: '  ESCALATE: {detail}'
   escalation: '{n} blocking finding(s) at cycle {cycle}: {findings} — escalate to the tech lead'
