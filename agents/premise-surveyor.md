@@ -46,7 +46,9 @@ JSON only:
   exercises it (grep for the function, the route, the message), the test file to write
   (under `test_roots`, next to the unit's existing tests), and one mutation that inverts
   the guard — the operator, the boundary, the returned value — with `from` copied
-  character for character from that line.
+  character for character from that line. When the item itself names the mutants it
+  wants, give one entry per mutant, each a single-line replacement, each naming the test
+  that must go red under it.
 - `files` holds only what this kind allows: for `coverage-gap`, the test file alone.
 
 ## Voice

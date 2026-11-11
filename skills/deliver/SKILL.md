@@ -86,6 +86,11 @@ deliver.py conclude --package P --measure P/measure.json --written P/written.jso
     marker off
 ```
 
+The three agents travel with the plugin and answer by `<prefix><name>`. A checkout that is
+not the installed plugin passes their prompts in `agent_prompts: {name: text}` instead, and
+each runs as a plain subagent — wider tools than the agent file declares, so the guard is
+what holds the writer there.
+
 The three returns are written **as the workflow returned them**, whole: a hand-edited
 measurement names files the surveyor never read, and the guard would let a write
 through on the strength of an edit nobody measured.

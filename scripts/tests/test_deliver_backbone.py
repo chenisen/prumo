@@ -29,8 +29,10 @@ RUNNER = textwrap.dedent('''\
     import sys, unittest
     suite = unittest.defaultTestLoader.discover("tests")
     result = unittest.TextTestRunner(stream=open("/dev/null", "w")).run(suite)
+    print("%d / %d (100%%)" % (result.testsRun, suite.countTestCases()))
     for case, _ in result.failures + result.errors:
         print("FAIL: " + case.id().split(".")[-1])
+        print("trace " * 4000)
     print("Ran %d of %d" % (result.testsRun, suite.countTestCases()))
     ''')
 

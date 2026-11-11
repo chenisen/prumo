@@ -41,10 +41,10 @@ against it.
 
 ## The test
 
-Name it exactly as `mutations[].test` in the measurement says: the script looks for that
-name in the red output. It asserts the guard's **refusal** — the input the guard rejects,
-and the rejection — not the happy path beside it. One test for the criterion; a second
-only if the guard has two sides.
+Name each test exactly as `mutations[].test` in the measurement says: the script looks
+for those names in the red output. Each asserts the guard's **refusal** — the input the
+guard rejects, and the rejection — and the item's remaining cases sit beside them. Use
+only tools that write files: do not run the suite, the formatter or git.
 
 ## What you return
 

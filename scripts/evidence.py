@@ -50,13 +50,20 @@ def authorise(command: str, profile: dict) -> tuple[bool, str]:
     return True, t("evidence.authorised_by_profile")
 
 
-def run_command(command: str, repo_dir: pathlib.Path) -> dict:
+def run_command(command: str, repo_dir: pathlib.Path, limit: int | None = 20000) -> dict:
+    """`limit` keeps the LAST bytes of the output: enough for a review to read the
+    summary, and a cap on what a package carries. A delivery passes `None` — it reads
+    the reds by NAME, and a runner prints the names before the traces that fill the
+    tail, so a cut tail is a list of names cut to nothing. Measured on 2026-11-11: a
+    mutation that turned 39 tests red came out `green` because every name sat above
+    the cut."""
     try:
         r = subprocess.run(shlex.split(command), cwd=repo_dir, capture_output=True,
                            text=True, timeout=TIME_LIMIT)
         output = (r.stdout or "") + (r.stderr or "")
-        return {"ran": True, "exit_code": r.returncode, "output": output[-20000:],
-                "truncated": len(output) > 20000}
+        kept = output if limit is None else output[-limit:]
+        return {"ran": True, "exit_code": r.returncode, "output": kept,
+                "truncated": len(kept) < len(output)}
     except subprocess.TimeoutExpired:
         return {"ran": False, "reason": t("evidence.timed_out", seconds=TIME_LIMIT)}
     except FileNotFoundError as e:

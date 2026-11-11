@@ -35,7 +35,20 @@ for (const field of ['package', 'repo', 'item', 'workdir', 'delivery', 'stage'])
 }
 const { package: bundle, repo, item, workdir, delivery, stage } = input
 const PREFIX = input.agent_prefix ?? 'prumo:'
-const agentFor = (name) => `${PREFIX}${name}`
+// The agents travel with the plugin and answer by `${PREFIX}${name}`. A checkout that is
+// not the installed plugin — a branch under development, a Codex-style harness with no
+// named subagents — hands their prompts in `agent_prompts` instead, and each runs as a
+// plain subagent with that prompt in front. The tool set is then the harness's default,
+// wider than the agent file declares, and the guard is what still holds the writer.
+const prompts = input.agent_prompts ?? {}
+const spawn = (name, opts) => prompts[name]
+  ? { ...opts, prompt: `${prompts[name]}\n\n---\n\n` }
+  : { ...opts, agentType: `${PREFIX}${name}`, prompt: '' }
+const run = (name, body, opts) => {
+  const o = spawn(name, opts)
+  const { prompt, ...rest } = o
+  return agent(`${prompt}${body}`, rest)
+}
 const inlined = input.inline ?? {}
 const embed = (name, label) => inlined[name]
   ? `--- ${label} (${name}) ---\n${inlined[name]}\n--- end ${name} ---`
@@ -116,12 +129,11 @@ const common = [
 
 if (stage === 'measure') {
   phase('Measure')
-  const measure = await agent([
+  const measure = await run('premise-surveyor', [
     ...common,
     'Measure every premise of the item against the code. Name the files a writer may ' +
     'touch for this kind, and the mutation that will prove the delivery. Propose no fix.',
-  ].join('\n'), { agentType: agentFor('premise-surveyor'), label: 'premise-surveyor',
-                 phase: 'Measure', schema: MEASURE_SCHEMA })
+  ].join('\n'), { label: 'premise-surveyor', phase: 'Measure', schema: MEASURE_SCHEMA })
   if (!measure) throw new Error('premise-surveyor returned nothing — nothing was measured')
   const failed = measure.premises.filter((p) => p.central && p.state === 'fails')
   if (failed.length) {
@@ -140,7 +152,7 @@ if (!input.measure) {
 const measure = input.measure
 
 phase('Write')
-const written = await agent([
+const written = await run('change-writer', [
   ...common,
   `Measurement: ${JSON.stringify(measure)}`,
   `You may write ONLY these files: ${measure.files.join(', ')}. The hook refuses any other.`,
@@ -148,21 +160,19 @@ const written = await agent([
     ? `Name the test exactly: ${measure.mutations.map((m) => m.test).join(', ')}.`
     : '',
   'Write the smallest change that delivers the item, by the ladder. Run nothing.',
-].filter(Boolean).join('\n'), { agentType: agentFor('change-writer'), label: 'change-writer',
-                                 phase: 'Write', schema: WRITTEN_SCHEMA })
+].filter(Boolean).join('\n'), { label: 'change-writer', phase: 'Write', schema: WRITTEN_SCHEMA })
 if (!written) throw new Error('change-writer returned nothing — nothing was written')
 log(`${written.files.length} file(s) written · ${written.skipped.length} skipped item(s) declared`)
 
 phase('Refute')
 // The sceptic sees the measurement and the files, never the writer's return: the one who
 // writes does not confirm, and the blindness is what makes the reading worth anything.
-const refutation = await agent([
+const refutation = await run('proof-skeptic', [
   ...common,
   `Measurement: ${JSON.stringify(measure)}`,
   `Files written: ${written.files.join(', ')}`,
   'Try to show the test does NOT prove the guard. When in doubt, `uncertain`.',
-].join('\n'), { agentType: agentFor('proof-skeptic'), label: 'proof-skeptic',
-                phase: 'Refute', schema: REFUTATION_SCHEMA })
+].join('\n'), { label: 'proof-skeptic', phase: 'Refute', schema: REFUTATION_SCHEMA })
 log(refutation ? `sceptic: ${refutation.verdict} — ${refutation.reason}`
                : 'sceptic returned nothing — recorded as uncertain')
 

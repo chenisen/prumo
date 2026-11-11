@@ -34,7 +34,7 @@ Return JSON only:
 ```
 
 **When in doubt, `uncertain`, not `proves`.** An uncertain proof goes to a person to read;
-a false `proves` goes into a branch somebody will merge.
+a false `proves` goes into a branch somebody will merge. Read only; run nothing.
 
 ## Voice
 

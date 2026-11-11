@@ -192,7 +192,7 @@ def run_suite(profile: dict, cwd: pathlib.Path, package: pathlib.Path, label: st
     ok, reason = authorise(check.get("command") or "", profile)
     if not ok:
         return {"ran": False, "reason": reason, "output": ""}
-    result = run_command(check["command"], cwd)
+    result = run_command(check["command"], cwd, limit=None)
     (package / f"run-suite-{label}.txt").write_text(
         result.get("output", result.get("reason", "")), encoding="utf-8")
     return result
@@ -393,27 +393,41 @@ def conclude(args) -> int:
                              and added + removed <= budget.get("max_lines", 10 ** 9)}
 
     check = (profile.get("checks") or {}).get("suite") or {}
-    from evidence import compare_reds, red_names
+    from evidence import compare_reds, red_names, progress
     central_failed = any(p["central"] and p["state"] == "fails" for p in premises)
 
     mutations, suite_out = [], ""
     if not central_failed and files:
         # The mutation by hand: wrong at the named line, the suite, the named test red,
         # the line put back. Kept whole in the record, revert included.
+        # One suite run per DISTINCT mutation: an item that wants three tests red under
+        # the same mutant names it three times, and the suite is the expensive part.
+        groups: dict[tuple, list[dict]] = {}
         for m in measure.get("mutations") or []:
-            entry = {"file": m["file"], "line": m["line"], "from": m["from"], "to": m["to"],
-                     "test": m["test"], "result": "not_run", "reverted": False}
-            why = apply_mutation(workdir, m)
+            groups.setdefault((m["file"], m["line"], m["from"], m["to"]), []).append(m)
+        for n, ((file, line, src, dst), wanted) in enumerate(groups.items(), 1):
+            why = apply_mutation(workdir, {"file": file, "line": line, "from": src, "to": dst})
+            reds, ran, reverted = [], False, False
             if why is None:
-                r = run_suite(profile, workdir, package, f"mutation-{len(mutations) + 1}")
+                r = run_suite(profile, workdir, package, f"mutation-{n}")
+                # A mutation suite that did not finish proves nothing either way: a
+                # fatal in the mutated file ends the run before the named test is
+                # reached, and "no red" is then not "green".
+                executed, predicted = progress(r.get("output", ""), check.get("progress_pattern"))
+                finished = predicted is None or (executed is not None and executed >= predicted)
+                ran = bool(r.get("ran")) and finished
                 reds = red_names(r.get("output", ""), check.get("red_name_pattern")) or []
-                entry["result"] = ("red" if any(m["test"] in name for name in reds)
-                                   else "green") if r.get("ran") else "not_run"
-                revert(workdir, m["file"])
-                entry["reverted"] = not git(workdir, "diff", "--name-only", "--", m["file"])
-            else:
-                entry["why"] = why
-            mutations.append(entry)
+                revert(workdir, file)
+                reverted = not git(workdir, "diff", "--name-only", "--", file)
+            for m in wanted:
+                entry = {"file": file, "line": line, "from": src, "to": dst, "test": m["test"],
+                         "result": "not_run", "reverted": reverted}
+                if why is None:
+                    entry["result"] = ("red" if any(m["test"] in name for name in reds)
+                                       else "green") if ran else "not_run"
+                else:
+                    entry["why"] = why
+                mutations.append(entry)
         suite = run_suite(profile, workdir, package, "branch")
         suite_out = suite.get("output", "")
 
