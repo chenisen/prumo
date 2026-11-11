@@ -121,11 +121,12 @@ review.py conclude --package P --workflow-result W                # F7 F9 F11 F1
 ```
 
 `prepare` prints the workflow invocation already assembled, with the activation plan.
-`W` is the object the workflow returned, saved as a JSON file: `conclude` splits it into
-`findings.json`, `coverage.json`, `conventions_observed.json`, `scripts_manual.json`, the
-reviewers' criterion readings and — when the package carried no `criteria.json` — the
-extractor's list. The five separate flags (`--findings`, `--coverage`, …) still work for
-a file written by hand.
+`W` is the object the workflow returned, saved as a JSON file — or the harness's own
+output file for the task, as it came (`{summary, logs, result, …}`): `conclude` reads its
+`result` and says so. It splits the object into `findings.json`, `coverage.json`,
+`conventions_observed.json`, `scripts_manual.json`, the reviewers' criterion readings
+and — when the package carried no `criteria.json` — the extractor's list. The five
+separate flags (`--findings`, `--coverage`, …) still work for a file written by hand.
 
 **A branch the prumo delivered carries its own proof.** `prepare --delivery <package>`
 takes the delivery's `delivery.json` into the review as `delivery-record.json`. When the
@@ -133,7 +134,17 @@ record is about this very head, the suite it measured by name stands as the suit
 evidence, its lint as the lint check, and the reviewers read each criterion of the item
 against it, returning `criteria` with a record that states the fact; `conclude
 --criteria <file>` writes those readings over the extractor's list. A record about
-another commit is kept for the reader and counts for nothing.
+another commit is kept for the reader and counts for nothing. The delivery's captured
+runs (`run-*.txt`) travel too, under `delivery-runs/`, and `prepare` digests every one of
+them ONCE with the profile's patterns into `delivery-digest.json` — reds by name,
+executed × predicted, and `beyond_base`, the tests a mutant turned red that the base run
+did not have — inline for the reviewers and named to the verifier. The digest, never the
+record's prose nor the one `test` a mutation names, says what a mutant killed: on the
+first real review with the runs attached, both reviewers raised from the prose that a
+mutant had turned one test red while its run held seventeen beyond the base.
+
+A finding the verifier never saw — below the blocking severities nothing is sent — comes
+out `unverified`, never `confirmed`: the reviewer's word, unrefuted and unchecked.
 
 | Phase | Part | What it produces |
 |---|---|---|
