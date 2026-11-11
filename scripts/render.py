@@ -17,7 +17,7 @@ import re
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from common import (CLASSES, PRUMO_ROOT, BLOCKING_SEVERITIES, SEVERITY_ORDER, dir_reports, load_profile, forge, tracker,
+from common import (CLASSES, PRUMO_ROOT, BLOCKING_SEVERITIES, SEVERITY_ORDER, dir_reports, load_profile, forge, tracker, report_dir_name,
                    today, read_json, slug, waiver_in_force)
 from i18n import t
 
@@ -602,7 +602,7 @@ def report_path(man: dict) -> str:
     # is an installation fact, and printing a path that contradicts it sends the reader
     # looking in a directory that does not exist on their machine.
     return str((dir_reports() / man["repo"] /
-                f"{item_id}-{slug(man['origin'])}" / f"review-{today()}.md"))
+                report_dir_name(item_id, man["origin"]) / f"review-{today()}.md"))
 
 
 def main() -> int:

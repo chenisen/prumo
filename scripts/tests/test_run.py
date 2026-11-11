@@ -384,6 +384,14 @@ class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
         self.assertEqual(review.report_dir_name("50557", "feature/uuid-guard"), "50557-feature-uuid-guard")
         self.assertEqual(review.report_dir_name("50557", "505570-other"), "50557-505570-other")
         self.assertEqual(review.report_dir_name(None, "x"), "no-item-x")
+        # render prints the destination and conclude files the report: one spelling.
+        # The render line once said `50557-50557-…` while the report landed elsewhere.
+        import render
+        printed = render.report_path({"repo": "r", "item": {"id": "50557"},
+                                      "origin": "50557-debito-tecnico-criar-testes"})
+        self.assertTrue(printed.endswith("/r/50557-debito-tecnico-criar-testes/review-" + __import__("common").today() + ".md"),
+                        printed)
+        self.assertNotIn("50557-50557", printed)
 
     def test_conclude_absorbs_the_workflow_s_whole_result_and_the_extractor_s_list(self):
         """Five files were written by hand between the workflow and `conclude`, on every

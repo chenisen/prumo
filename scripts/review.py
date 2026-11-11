@@ -31,7 +31,8 @@ import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from common import (MissingConfiguration, InvalidConfiguration, dir_packages, dir_reports, forge, tracker, UsageError, profile_path, load_profile, write_json,
-                   today, read_json, slug, cfg, capabilities_after_preflight, hint_config)
+                   today, read_json, slug, cfg, capabilities_after_preflight, hint_config,
+                   report_dir_name)
 from i18n import t
 from evidence import red_names, progress
 
@@ -317,15 +318,6 @@ def merge_criteria(current: list[dict], readings: list[dict]) -> tuple[list[dict
         elif v.get("record"):
             c["state"], c["record"] = v["state"], v["record"]
     return current, sorted(set(verdicts) - known)
-
-
-def report_dir_name(item: str | None, origin: str) -> str:
-    """`<item>-<origin>`, unless the origin already starts with the item — a branch the
-    prumo delivered is named `<item>-<slug>` by the profile, and the report once landed
-    under `50557-50557-…`. A directory name, not a message: the same in every language,
-    or the same review filed twice lands in two folders depending on who ran it."""
-    item, s = slug(item or "no-item"), slug(origin)
-    return s if s == item or s.startswith(f"{item}-") else f"{item}-{s}"
 
 
 def delivery_record_for(package: pathlib.Path, head_sha: str) -> dict | None:
