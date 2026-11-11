@@ -111,6 +111,19 @@ tracker:
   # heading: '<span class="text-big">{text}</span>'
   # article: o              # Portuguese gender, for pt-BR output: "o card", "a issue"
 
+  # The tracker's item types, by the name it gives them, mapped to the shapes the
+  # method knows: debt, bug, hotfix, refactor, story, epic. The shape decides how deep
+  # a delivery plans before writing, whether a person approves the plan first, which
+  # kinds may deliver it and how much diff it may buy (reference/shapes.md). A type
+  # not mapped here is a stop, never a guess.
+  # shapes:
+  #   "Technical debt": debt
+  #   "Bug": bug
+  #   "Hotfix": hotfix
+  #   "Refactoring": refactor
+  #   "Story": story
+  #   "Epic": epic
+
 # --- FORGE --------------------------------------------------------------------------
 #
 # Where the change proposal lives. The prumo reads the diff through the ref the server

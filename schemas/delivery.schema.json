@@ -211,22 +211,34 @@
           }
         },
         "branch_reds": {
-          "type": "array",
+          "type": [
+            "array",
+            "null"
+          ],
           "items": {
             "type": "string"
-          }
+          },
+          "description": "null when the suite did not run or the names could not be read — declared, never an empty list"
         },
         "new_reds": {
-          "type": "array",
+          "type": [
+            "array",
+            "null"
+          ],
           "items": {
             "type": "string"
-          }
+          },
+          "description": "null when the suite did not run or the names could not be read — declared, never an empty list"
         },
         "vanished_reds": {
-          "type": "array",
+          "type": [
+            "array",
+            "null"
+          ],
           "items": {
             "type": "string"
-          }
+          },
+          "description": "null when the suite did not run or the names could not be read — declared, never an empty list"
         },
         "predicted": {
           "type": [
@@ -357,6 +369,64 @@
         },
         "reason": {
           "type": "string"
+        }
+      }
+    },
+    "plan": {
+      "description": "the shape, the plan's depth, whether a person's approval was required, and who gave it",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shape",
+        "depth",
+        "gate",
+        "approved_by",
+        "budget"
+      ],
+      "properties": {
+        "shape": {
+          "enum": [
+            "debt",
+            "bug",
+            "hotfix",
+            "refactor",
+            "story",
+            "epic"
+          ]
+        },
+        "depth": {
+          "enum": [
+            "measure",
+            "reproduce",
+            "preserve",
+            "design",
+            "decompose"
+          ]
+        },
+        "gate": {
+          "type": "boolean"
+        },
+        "approved_by": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "max_files",
+            "max_lines"
+          ],
+          "properties": {
+            "max_files": {
+              "type": "integer"
+            },
+            "max_lines": {
+              "type": "integer"
+            }
+          }
         }
       }
     }

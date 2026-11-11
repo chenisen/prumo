@@ -51,7 +51,7 @@ what is judgement.
 | **13 agents** | One question each. Ten read-only for the review — seven reviewers of one axis, a criteria extractor, a manual-verification planner, and a **sceptical verifier** that tries to *refute* every finding without having seen the reasoning behind it. Three for the delivery — a surveyor that measures, a writer with no shell, and a **sceptic** that never saw the writer. |
 | **3 knowledge skills** | What the reviewers load to read a diff: five axes, OWASP/ASVS, personal data. Neutral of language, framework and project. |
 | **18 risk classes** | A guardrail has three states — `fired`, `did_not_fire`, `not_assessable`. |
-| **2 message catalogues** | 447 keys each. Everything a person reads, in the configured language. |
+| **2 message catalogues** | 462 keys each. Everything a person reads, in the configured language. |
 
 Three rules govern everything, and each has a test that fails when it is broken:
 
@@ -71,7 +71,7 @@ prumo/
 │   ├── plugin.json              what the harness registers: skill, agents, hook
 │   └── marketplace.json         the storefront `/plugin marketplace add` reads
 │
-├── scripts/                     THE BACKBONE — 22 modules, no model runs here
+├── scripts/                     THE BACKBONE — 23 modules, no model runs here
 │   ├── providers.py             prumo.yml: paths, tracker, forge, language
 │   ├── i18n.py                  message catalogues; a missing key raises
 │   ├── common.py                the 18 classes, shared helpers
@@ -83,7 +83,8 @@ prumo/
 │   ├── judge.py                 F7 — pure function: gates, routes, verdict
 │   ├── render.py                F9 — report and comments
 │   ├── review.py                the two entry points: `prepare` and `conclude`
-│   ├── deliver.py               the delivery: cut the branch, prove by mutation, judge, hand over
+│   ├── shape.py                 the six shapes: plan depth, gate, kinds, budget, review effort
+│   ├── deliver.py               the delivery: cut the branch, plan, prove by mutation, judge, hand over
 │   ├── run.py                   the route: every next step read from disk, every stop classed
 │   ├── delta.py, closure.py     the loops: re-judgement and item resolutions
 │   ├── telemetry.py, metrics.py measured cost, never estimated
@@ -93,7 +94,7 @@ prumo/
 │   ├── agnosticism_check.py     fails the method when it names a technology
 │   ├── hygiene.py               fails a secret, or a rule that is not the prumo's own
 │   ├── setup.py                 writes a prumo.yml: asks five things, measures the rest
-│   └── tests/                   508 tests
+│   └── tests/                   529 tests
 │
 ├── agents/                      THE LEAVES — 13 prompts: 10 read-only reviewers, a surveyor,
 │                                a writer with no shell, a sceptic
@@ -101,6 +102,7 @@ prumo/
 │   ├── task-review/SKILL.md     what Claude Code loads as `/prumo:task-review`
 │   ├── deliver/SKILL.md         the delivery's eleven rules and its sequence
 │   ├── run/SKILL.md             the route, closed to the model
+│   ├── approve/SKILL.md         a person's approval of a plan, closed to the model
 │   ├── five-axis-review/        correctness, readability, architecture, security, performance
 │   ├── owasp-asvs/              OWASP Top 10:2025 + API Top 10 against ASVS 5.0
 │   ├── personal-data/           what is personal data and which destinations are barred
@@ -117,7 +119,7 @@ prumo/
 ├── schemas/                     finding, criterion, triaged-class, verdict,
 │                                manual-script, the delivery record, and the profile contract
 ├── templates/                   report and the three comments
-├── reference/                   the 18 classes, the delivery kinds, publication, playbooks, CI
+├── reference/                   the 18 classes, the delivery kinds, the shapes, publication, playbooks, CI
 └── prumo.yml.example            the installation contract, commented
 ```
 
@@ -449,6 +451,14 @@ its own skill, its own record and its own tests — never a flag on an existing 
 | **task-review** | is what the item asked for delivered in this proposal? | `/prumo:task-review <item url>` | APPROVED or INTERVENTION REQUIRED |
 | **deliver** | what is the smallest change that delivers this item, and what proves it? | `deliver.py prepare` → `Workflow deliver` (measure, write) → `deliver.py conclude` | `delivered`, `blocked` or `unsupported`, and the `task-review` invocation ready to paste |
 | **run** | carry this item end to end, on my own words, and stop where only I decide | `/prumo:run --ask-file ASK.md …` — closed to the model | the review's verdict, or a stop with its class |
+
+**The shape decides the depth.** An item is a `debt`, a `bug`, a `hotfix`, a `refactor`,
+a `story` or an `epic` — the tracker's type, mapped in `prumo.yml`, never inferred —
+and the shape decides how deep the plan goes before a line is written, whether a
+person approves it first, which kinds may deliver it, how much diff it buys and how
+hard the review reads it (`reference/shapes.md`). The plan is a file, rendered from
+the measurement; the approval is a file, written by `/prumo:approve`, closed to the
+model; the guard refuses every write while a required approval is missing.
 
 **Who writes does not approve.** `deliver` ends where `task-review` begins, and the two
 never share a context. The writer has no shell; the suite, the mutation and the baseline

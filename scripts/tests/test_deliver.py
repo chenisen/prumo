@@ -146,6 +146,28 @@ class TestStops(unittest.TestCase):
         proof = dict(record()["proof"], refutation={"verdict": "uncertain", "reason": "could not trace"})
         self.assertEqual(judge(record(proof=proof))["state"], "delivered")
 
+    def test_a_plan_that_asks_a_gate_and_has_no_approval_blocks_for_a_person(self):
+        plan = {"shape": "hotfix", "depth": "reproduce", "gate": True, "approved_by": None,
+                "budget": {"max_files": 2, "max_lines": 60}}
+        out = judge(record(plan=plan))
+        self.assertEqual((out["state"], out["owner"]), ("blocked", "person"))
+        self.assertIn("approve", out["reason"])
+
+    def test_an_approved_plan_lets_the_delivery_through(self):
+        plan = {"shape": "hotfix", "depth": "reproduce", "gate": True, "approved_by": "someone",
+                "budget": {"max_files": 2, "max_lines": 60}}
+        self.assertEqual(judge(record(plan=plan))["state"], "delivered")
+
+    def test_the_budget_the_shape_scaled_is_the_one_the_reason_names(self):
+        plan = {"shape": "hotfix", "depth": "reproduce", "gate": True, "approved_by": "someone",
+                "budget": {"max_files": 2, "max_lines": 60}}
+        rec = record(plan=plan, diff={"files": ["a", "b", "c"], "added": 10, "removed": 0,
+                                       "outside_scope": [], "within_budget": False})
+        out = judge(rec)
+        self.assertEqual(out["state"], "blocked")
+        self.assertEqual(out["reason"], t("deliver.blocked.budget_exceeded", files=3, lines=10,
+                                          max_files=2, max_lines=60))
+
     def test_a_red_lint_blocks(self):
         """The profile's lint check runs over the tree the writer left; a red there
         would cost a whole review cycle to find."""

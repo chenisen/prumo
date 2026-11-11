@@ -94,12 +94,21 @@ deliver:
     mutation_survived: 'a mutação em {file}:{line} deixou a suíte verde — o teste não prova a guarda'
     new_red: 'vermelho novo por nome: {names}'
     outside_scope: 'linhas fora do escopo: {paths}'
+    plan_not_approved: 'o plano pede aprovação de pessoa e não tem — `{command}`'
     premise_failed: 'premissa central falha — {premise} ({evidence})'
     refuted: 'o cético leu o teste e ele não prova a guarda — {reason}'
     suite_incomplete: 'a suíte executou {executed} de {predicted} — não é verde'
     suite_not_run: 'a suíte não rodou: {reason}'
     test_not_red_on_base: '`{test}` não ficou vermelho na base — sem prova'
   cli:
+    approval_needs_name: 'uma aprovação precisa de nome — passe --by, ou defina TASK_REVIEW_RESPONSAVEL'
+    approved: 'plano aprovado por {by}: {path}'
+    plan_at: 'plano: {path} ({shape}, {depth}{gate})'
+    plan_gate: ', uma pessoa aprova antes da escrita'
+    plan_no_gate: ''
+    shape_not_deliverable: 'um {shape} não se entrega — decompõe-se; o plano diz em quê'
+    kind_not_for_shape: 'kind `{kind}` não entrega um {shape} — permitidas: {kinds}'
+    hotfix_base_missing: 'o perfil não declara `delivery.hotfix_base` — um hotfix não tem de onde ser cortado'
     baseline: 'baseline: {reds} vermelhos por nome · {executed}/{predicted} executados'
     branch_at: 'branch `{branch}` em {path}, cortada de {base}'
     delivery_block_draft: 'rascunho de `delivery:` para `{repo}` — cole no perfil e confirme:'
@@ -120,6 +129,10 @@ deliver:
     person: pessoa
     profile: dono do perfil
   report:
+    plan: PLANO
+    shape: FORMA
+    gate_open: aprovado por {by}
+    gate_pending: à espera de aprovação de pessoa
     base: BASE
     branch: BRANCH
     diff: DIFF
@@ -443,6 +456,7 @@ run:
   ask_missing: 'sem pedido em disco — a rota inteira só roda com as palavras da própria pessoa, escritas em arquivo'
   bound: 'pacote de {kind} ligado: {path}'
   fix_door: 'as rotas author_fix são uma entrega nova, nas suas palavras: {text}'
+  plan_stop: 'o plano em {path} espera uma pessoa — leia, depois: {command}'
   next: 'próximo: {text}'
   started: 'execução de {item} em {repo}: {path}'
   stop: 'parada: {klass} — {fact}'

@@ -76,21 +76,41 @@ class TestEveryRoutingDecisionIsReadFromDisk(unittest.TestCase):
         self.put(self.deliver, "deliver-manifest.json", {})
         self.assertIn("stage: 'measure'", self.decide()["text"])
 
-    def test_a_measured_delivery_asks_for_the_write_stage(self):
+    def test_a_measured_delivery_asks_for_the_plan_then_the_write_stage(self):
         self.put(self.deliver, "deliver-manifest.json", {})
         self.put(self.deliver, "measure.json", {"premises": [{"central": True, "state": "holds"}]})
+        self.assertTrue(self.decide()["text"].startswith("deliver.py plan"))
+        self.put(self.deliver, "plan.json", {"gate": False, "digest": "d"})
         self.assertIn("stage: 'write'", self.decide()["text"])
+
+    def test_a_shape_with_a_gate_stops_until_a_person_approves_the_plan_as_it_stands(self):
+        self.put(self.deliver, "deliver-manifest.json", {})
+        self.put(self.deliver, "measure.json", {"premises": []})
+        self.put(self.deliver, "plan.json", {"gate": True, "digest": "d1"})
+        out = self.decide()
+        self.assertEqual((out["kind"], out["class"]), ("stop", "plan"))
+        self.assertIn("/prumo:approve", out["text"])
+        self.put(self.deliver, "approval.json", {"by": "someone", "digest": "stale"})
+        self.assertEqual(self.decide()["class"], "plan", "an approval of another measurement does not count")
+        self.put(self.deliver, "approval.json", {"by": "someone", "digest": "d1"})
+        self.assertIn("stage: 'write'", self.decide()["text"])
+
+    def test_the_shape_travels_into_the_prepare_invocation(self):
+        self.run["shape"] = "bug"
+        self.assertIn("--shape bug", self.decide()["text"])
 
     def test_a_central_premise_that_fails_skips_the_write_and_concludes(self):
         self.put(self.deliver, "deliver-manifest.json", {})
         self.put(self.deliver, "measure.json", {"premises": [{"central": True, "state": "fails"}]})
+        self.put(self.deliver, "plan.json", {"gate": True, "digest": "d"})
         out = self.decide()
-        self.assertTrue(out["text"].startswith("deliver.py conclude"))
+        self.assertTrue(out["text"].startswith("deliver.py conclude"), out)
         self.assertNotIn("--written", out["text"])
 
     def test_a_written_delivery_concludes_with_every_return_it_has(self):
         self.put(self.deliver, "deliver-manifest.json", {})
         self.put(self.deliver, "measure.json", {"premises": []})
+        self.put(self.deliver, "plan.json", {"gate": False, "digest": "d"})
         self.put(self.deliver, "written.json", {})
         self.put(self.deliver, "refutation.json", {})
         out = self.decide()["text"]
@@ -170,7 +190,7 @@ class TestTheRouteOverRealPackages(unittest.TestCase):
 
     def test_next_walks_from_nothing_to_the_verdict(self):
         import argparse, contextlib, io, json
-        from tests.test_deliver_backbone import PROVING_TEST
+        from tests.test_deliver_backbone import PROVING_TEST, MEASURE
         import run, review
         pkg = run.start("repo-x", "ITEM-1", str(self.root / "item.md"),
                         item_file=str(self.root / "item.md"), package=str(self.root / "run"))
@@ -179,6 +199,13 @@ class TestTheRouteOverRealPackages(unittest.TestCase):
         deliver_pkg = self.spine.prepare()
         run.bind(pkg, "deliver", str(deliver_pkg))
         self.assertIn("stage: 'measure'", run.next_step(pkg)["text"])
+        (deliver_pkg / "measure.json").write_text(json.dumps(MEASURE), encoding="utf-8")
+        self.assertTrue(run.next_step(pkg)["text"].startswith("deliver.py plan"))
+        import deliver
+        with contextlib.redirect_stdout(io.StringIO()):
+            deliver.plan(argparse.Namespace(package=str(deliver_pkg), measure=str(deliver_pkg / "measure.json")))
+        self.assertTrue((deliver_pkg / "plan.md").exists())
+        self.assertIn("stage: 'write'", run.next_step(pkg)["text"], "a debt asks no gate")
         code, rec = self.spine.conclude(deliver_pkg, PROVING_TEST)
         self.assertEqual(rec["state"], "delivered")
         # the real spine writes measure.json and written.json into the package itself

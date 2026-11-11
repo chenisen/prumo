@@ -77,6 +77,20 @@ class DeliveryGuard(unittest.TestCase):
                                encoding="utf-8")
         self.assertEqual(self.write(str(self.worktree / "tests" / "test_a.py")), 2)
 
+    def test_a_plan_that_asks_a_gate_admits_no_write_until_the_approval_matches(self):
+        package = self.project / "pkg"
+        package.mkdir()
+        (package / "measure.json").write_text(json.dumps({"files": ["tests/test_b.py"]}), encoding="utf-8")
+        (package / "plan.json").write_text(json.dumps({"gate": True, "digest": "d1"}), encoding="utf-8")
+        self.marker.write_text(json.dumps({"worktree": str(self.worktree), "allowed": [],
+                                           "package": str(package)}), encoding="utf-8")
+        target = str(self.worktree / "tests" / "test_b.py")
+        self.assertEqual(self.write(target), 2)
+        (package / "approval.json").write_text(json.dumps({"by": "x", "digest": "old"}), encoding="utf-8")
+        self.assertEqual(self.write(target), 2)
+        (package / "approval.json").write_text(json.dumps({"by": "x", "digest": "d1"}), encoding="utf-8")
+        self.assertEqual(self.write(target), 0)
+
     def test_the_named_files_are_read_from_the_package_s_measure(self):
         """The marker is written before the measurement exists; the files come later,
         from `measure.json` in the package, and the guard reads them from there."""

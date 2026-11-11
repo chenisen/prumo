@@ -45,6 +45,23 @@ The hook holds these from outside while `.claude/.prumo-deliver-ativo` exists; t
 above hold them from inside. Both, because the model can err and an item can carry text
 that tries.
 
+## The shape decides the depth
+
+Before anything is read, the item's **shape** — `debt`, `bug`, `hotfix`, `refactor`,
+`story`, `epic` — decides how deep the plan goes, whether a person approves it before a
+line is written, which kinds may deliver it, how much diff it buys and how hard the
+review reads it. `reference/shapes.md` is the table. The shape is the tracker's type
+mapped in `prumo.yml` (`--type`), or `--shape`; it is never inferred from the text, and
+an item with no shape is a stop.
+
+**The plan is a file.** After the measure stage, `deliver.py plan` writes `measure.json`,
+`plan.md` — what was measured, what will be touched, what will prove it — and `plan.json`
+with the shape, the depth and a digest of the measurement. A shape that asks a gate
+waits there: `/prumo:approve <package>`, closed to the model, writes `approval.json`
+with a person's name and that digest. The guard refuses every write and `conclude`
+blocks for the person until it matches; a measurement that changes afterwards is
+unapproved again.
+
 ## Inputs
 
 A missing input is a stop that names everything missing at once:
@@ -53,6 +70,7 @@ A missing input is a stop that names everything missing at once:
 |---|---|
 | which repository | its name under `paths.repositories` |
 | which item | the item URL or id, and the `--item-file` read from it |
+| the shape | `--type <tracker type name>` mapped in `prumo.yml`, or `--shape` |
 | the kind, when the item does not say | one of `reference/delivery-kinds.md`, or `unsupported` |
 | the base, when the profile names none | the branch to measure against |
 
@@ -64,16 +82,18 @@ A profile without a `delivery:` block is `not_assessable`, and the stop hands
 Scripts under `${CLAUDE_PLUGIN_ROOT}/scripts/`. Two commands, with the workflow between.
 
 ```
-deliver.py prepare  --repo R --item C --item-file ITEM.md [--kind K] [--branch B]
+deliver.py prepare  --repo R --item C --item-file ITEM.md (--type T | --shape S) [--kind K] [--branch B]
     F0 preflight    git, the suite's tool, the profile's delivery block
-    F1 resolve      remote base, SHA, the item, the kind
+    F1 resolve      the shape, the kind it allows, the base (a hotfix: `delivery.hotfix_base`)
     F4 branch       <branch_format> from the base — a worktree, or the checkout if clean
     F3 baseline     the suite on the branch while it still IS the base; reds by name
     marker on
 Workflow({name: 'deliver', args: {...workflow-args.json, stage: 'measure'}})
     F2 measure      premises, the files, the mutation           [agent: premise-surveyor]
-→ write its `measure` to <package>/measure.json — the hook reads the files from there
-  a central premise that fails: skip the write stage; go to conclude
+deliver.py plan --package P --measure <the measure it returned>
+    F2b plan        measure.json, plan.md, plan.json — the hook reads the files from there
+    a shape with a gate stops here: /prumo:approve P, by a person
+    a central premise that fails: skip the write stage; go to conclude
 Workflow({name: 'deliver', args: {...workflow-args.json, stage: 'write', measure: {...}}})
     F5 write        the test (and, by kind, the code) inside the named files [agent: change-writer]
     F7 refute       tries to knock the proof down                       [agent: proof-skeptic]
@@ -110,7 +130,7 @@ answers `state`, `reason` and `owner`; same record, same answer. The state is de
 fixed rule:
 
 - `unsupported` — the kind is not in the profile's `kinds`;
-- `blocked` — a central premise fails; a new red by name; a line outside the scope; the
+- `blocked` — a central premise fails; the plan's gate has no approval; a new red by name; a line outside the scope; the
   budget exceeded with no waiver in force; a mutation that survived; the sceptic's
   `does_not_prove`; a suite that did not finish; a test that was not red on the base when
   the kind demands it;

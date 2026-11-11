@@ -37,6 +37,8 @@ from common import (MissingConfiguration, InvalidConfiguration, UsageError, cfg,
                     profile_path, read_json, slug, today, waiver_in_force, write_json,
                     casa_algum)
 from i18n import t
+from shape import SHAPES, resolve as resolve_shape, budget_for, UnknownShape
+import hashlib
 
 ROOT = pathlib.Path(__file__).resolve().parent
 DELIVERED, BLOCKED, UNSUPPORTED = "delivered", "blocked", "unsupported"
@@ -86,6 +88,11 @@ def deliver_judge(record: dict, profile: dict, reference: str | None = None) -> 
             return stop(BLOCKED, t("deliver.blocked.premise_failed", premise=p["text"],
                                    evidence=p.get("evidence") or "?"), "person")
 
+    plan = record.get("plan") or {}
+    if plan.get("gate") and not plan.get("approved_by"):
+        return stop(BLOCKED, t("deliver.blocked.plan_not_approved",
+                               command="deliver.py approve --package <package> --by <name>"), "person")
+
     base = record["baseline"]
     if base.get("executed") is None:
         return stop(BLOCKED, t("deliver.blocked.suite_not_run",
@@ -134,7 +141,7 @@ def deliver_judge(record: dict, profile: dict, reference: str | None = None) -> 
         return stop(BLOCKED, t("deliver.blocked.outside_scope",
                                paths=", ".join(diff["outside_scope"])), "author")
     if not diff.get("within_budget") and not waiver_in_force(record.get("waiver"), reference):
-        budget = block.get("budget") or {}
+        budget = plan.get("budget") or block.get("budget") or {}
         return stop(BLOCKED, t("deliver.blocked.budget_exceeded",
                                files=len(diff.get("files") or []),
                                lines=diff.get("added", 0) + diff.get("removed", 0),
@@ -368,6 +375,7 @@ def prepare(args) -> int:
         fix_id, fix_origin, text = fix_item(fix)
         args.item = args.item or fix_id
         args.kind = args.kind or "behaviour-change"
+        args.shape = getattr(args, "shape", None) or "bug"
         args.branch = args.branch or (fix_origin if fix_origin and not fix_origin.startswith("refs/")
                                       and fix_origin != "HEAD" else None)
         if not args.branch:
@@ -388,7 +396,18 @@ def prepare(args) -> int:
     block = delivery_block(profile, args.repo)
     shutil.copy2(profile_path(args.repo), package / "profile.yml")
 
-    kind = args.kind or "coverage-gap"
+    try:
+        shape = resolve_shape(getattr(args, "shape", None), getattr(args, "type", None),
+                              dict(cfg().tracker.shapes))
+    except UnknownShape as e:
+        raise UsageError(str(e))
+    rules = SHAPES[shape]
+    if not rules["deliverable"]:
+        raise UsageError(t("deliver.cli.shape_not_deliverable", shape=shape))
+    kind = args.kind or (rules["kinds"][0] if rules["kinds"] else "coverage-gap")
+    if kind not in rules["kinds"]:
+        raise UsageError(t("deliver.cli.kind_not_for_shape", kind=kind, shape=shape,
+                           kinds=", ".join(rules["kinds"])))
     if kind not in (block.get("kinds") or []):
         raise UsageError(t("deliver.unsupported.kind", kind=kind,
                            kinds=", ".join(block.get("kinds") or []) or "-"))
@@ -405,6 +424,15 @@ def prepare(args) -> int:
     # the branch it was asked about, and that branch's head is its base.
     name = branch_name(block, args.item, (package / "item.md").read_text(encoding="utf-8"),
                        args.branch)
+    if rules.get("base") and not fix:
+        hotfix_base = block.get(rules["base"])
+        if not hotfix_base:
+            raise UsageError(t("deliver.cli.hotfix_base_missing"))
+        base_sha = (git(repo_dir, "rev-parse", "--verify", "-q", f"origin/{hotfix_base}", check=False)
+                    or git(repo_dir, "rev-parse", "--verify", "-q", hotfix_base, check=False))
+        if not base_sha:
+            raise UsageError(t("resolver.branch_unresolved", branch=hotfix_base))
+        base_name = hotfix_base
     if fix:
         base_sha = (git(repo_dir, "rev-parse", "--verify", "-q", name, check=False)
                     or git(repo_dir, "rev-parse", "--verify", "-q", f"origin/{name}", check=False))
@@ -427,6 +455,8 @@ def prepare(args) -> int:
 
     manifest = {
         "repo": args.repo, "item": {"id": args.item, "kind": kind, "source": "tracker"},
+        "shape": shape, "plan_depth": rules["plan"], "gate": rules["gate"],
+        "budget": budget_for(block, shape),
         "base": {"name": base_name, "sha": base_sha},
         "branch": {"name": name, "sha": git(workdir, "rev-parse", "HEAD")},
         "workdir": str(workdir), "in_worktree": bool(block.get("worktree")),
@@ -440,6 +470,7 @@ def prepare(args) -> int:
     mark(package, workdir, [])
     write_json(package / "workflow-args.json", {
         "package": str(package), "repo": args.repo, "item": manifest["item"],
+        "shape": shape, "plan_depth": rules["plan"],
         "workdir": str(workdir), "delivery": block,
         # The repository's own conventions, as pointers: the writer reads them before
         # the first line, the way the reviewers read them before judging style.
@@ -450,12 +481,87 @@ def prepare(args) -> int:
     })
     print("\n" + t("review.package_ready", path=package))
     print(t("deliver.cli.branch_at", branch=name, path=workdir, base=base_sha[:12]))
+    print(f"  {t('deliver.report.shape').lower()}: {shape} · {rules['plan']}"
+          + (t("deliver.cli.plan_gate") if rules["gate"] else ""))
     print(t("deliver.cli.baseline", reds=len(base_reads["base_reds"] or []),
             executed=base_reads["executed"], predicted=base_reads["predicted"]))
     print("\n" + t("review.invoke_workflow") + "\n")
-    print("Workflow({name: 'deliver', args: <the object in " + str(package / "workflow-args.json") + ">})")
+    print("Workflow({name: 'deliver', args: <the object in " + str(package / "workflow-args.json") + "> + stage: 'measure'})")
+    print(f"deliver.py plan --package {package} --measure <the measure it returned>")
     print("\n" + t("deliver.cli.then_conclude", path=package))
     return 0
+
+
+# --- the plan and its gate ---------------------------------------------------------------
+
+def digest(data) -> str:
+    return hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def render_plan(man: dict, measure: dict) -> str:
+    """The plan a person reads before a line is written: what was measured, what will
+    be touched, what will prove it. One fact per line, each with an address."""
+    L = lambda key: t(f"deliver.report.{key}")  # noqa: E731
+    rules = SHAPES[man["shape"]]
+    lines = [f"{L('plan'):9}{man['item']['id']} · {man['shape']} · {man['plan_depth']}"
+             + (f" · {t('deliver.report.gate_pending')}" if rules["gate"] else ""),
+             f"{L('base'):9}{man['base']['name']}@{man['base']['sha'][:7]}   "
+             f"{L('branch')} {man['branch']['name']}",
+             f"{'':9}budget {man['budget']['max_files']} files · {man['budget']['max_lines']} lines", ""]
+    lines.append(L("premises"))
+    for p in measure.get("premises") or []:
+        lines.append(f"{SYMBOL[p['state']]} {p['text']} — {p.get('evidence') or '?'}"
+                     + (" · central" if p.get("central") else ""))
+    lines += ["", f"{L('diff'):9}" + ", ".join(measure.get("files") or []) or "?"]
+    lines += ["", L("proof")]
+    for m in measure.get("mutations") or []:
+        lines.append(f"  {m['file']}:{m['line']} `{m['from']}`→`{m['to']}` → {m['test']} red"
+                     + (f" · stays green: {', '.join(m['stays_green'])}" if m.get("stays_green") else ""))
+    if measure.get("proving_tests"):
+        lines.append(f"  red on base, green on branch: {', '.join(measure['proving_tests'])}")
+    if measure.get("guarding_tests"):
+        lines.append(f"  stays green: {', '.join(measure['guarding_tests'])}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def plan(args) -> int:
+    package = pathlib.Path(args.package)
+    man = read_json(package / "deliver-manifest.json")
+    measure = read_json(pathlib.Path(args.measure))
+    write_json(package / "measure.json", measure)
+    rules = SHAPES[man["shape"]]
+    record = {"shape": man["shape"], "depth": man["plan_depth"], "gate": rules["gate"],
+              "digest": digest(measure), "rendered_at": today()}
+    write_json(package / "plan.json", record)
+    (package / "plan.md").write_text(render_plan(man, measure), encoding="utf-8")
+    print((package / "plan.md").read_text(encoding="utf-8"))
+    print(t("deliver.cli.plan_at", path=package / "plan.md", shape=man["shape"],
+            depth=man["plan_depth"],
+            gate=t("deliver.cli.plan_gate") if rules["gate"] else t("deliver.cli.plan_no_gate")))
+    return 0
+
+
+def approve(args) -> int:
+    from common import owner
+    package = pathlib.Path(args.package)
+    who = (args.by or owner() or "").strip()
+    if not who:
+        raise UsageError(t("deliver.cli.approval_needs_name"))
+    plan_record = read_json(package / "plan.json")
+    write_json(package / "approval.json", {"by": who, "at": today(), "digest": plan_record["digest"]})
+    print(t("deliver.cli.approved", by=who, path=package / "approval.json"))
+    return 0
+
+
+def approval_of(package: pathlib.Path) -> str | None:
+    """Who approved the plan as it stands — None when nobody did, or when the
+    measurement changed after the approval."""
+    plan_path, ok_path = package / "plan.json", package / "approval.json"
+    if not (plan_path.exists() and ok_path.exists()):
+        return None
+    plan_record, ok = read_json(plan_path), read_json(ok_path)
+    return ok.get("by") if ok.get("digest") == plan_record.get("digest") else None
 
 
 def _agent_prefix() -> str:
@@ -510,7 +616,21 @@ def conclude(args) -> int:
     roots = block["test_roots"] if kind == "coverage-gap" else block["source_roots"] + block["test_roots"]
 
     files, added, removed = changed_files(workdir, man["base"]["sha"])
-    budget = block.get("budget") or {}
+    budget = man.get("budget") or block.get("budget") or {}
+    shape = man.get("shape") or "debt"
+    # The plan is rendered here too when nobody did, so the record always holds one;
+    # the gate reads the approval against the measurement as it stands.
+    if not (package / "plan.json").exists():
+        write_json(package / "plan.json", {"shape": shape, "depth": man.get("plan_depth", "measure"),
+                                           "gate": SHAPES[shape]["gate"], "digest": digest(measure),
+                                           "rendered_at": today()})
+        (package / "plan.md").write_text(render_plan(man, measure), encoding="utf-8")
+    elif read_json(package / "plan.json").get("digest") != digest(measure):
+        write_json(package / "plan.json", dict(read_json(package / "plan.json"), digest=digest(measure)))
+    plan_record = {"shape": shape, "depth": man.get("plan_depth", "measure"),
+                   "gate": SHAPES[shape]["gate"], "approved_by": approval_of(package),
+                   "budget": {"max_files": int(budget.get("max_files", 0)),
+                              "max_lines": int(budget.get("max_lines", 0))}}
     diff = {"files": files, "added": added, "removed": removed,
             "outside_scope": scope_guard(files, allowed, roots),
             "within_budget": len(files) <= budget.get("max_files", 10 ** 9)
@@ -523,7 +643,8 @@ def conclude(args) -> int:
     mutations, suite_out = [], ""
     red_on_base = green_on_branch = None
     lint = {"state": "not_run", "reason": t("review.suite_not_run")}
-    if not central_failed and files:
+    gate_shut = plan_record["gate"] and not plan_record["approved_by"]
+    if not central_failed and files and not gate_shut:
         # The mutation by hand: wrong at the named line, the suite, the named test red,
         # the line put back. Kept whole in the record, revert included.
         # One suite run per DISTINCT mutation: an item that wants three tests red under
@@ -591,6 +712,7 @@ def conclude(args) -> int:
         "branch": {"name": man["branch"]["name"], "sha": git(workdir, "rev-parse", "HEAD")},
         "premises": premises,
         "lint": lint,
+        "plan": plan_record,
         "proof": {"red_on_base": red_on_base, "green_on_branch": green_on_branch,
                   "mutations": [{k: v for k, v in m.items() if k != "why"} for m in mutations],
                   "refutation": ({"verdict": refutation["verdict"], "reason": refutation["reason"]}
@@ -671,8 +793,11 @@ SYMBOL = {"holds": "✔", "fails": "✘", "not_assessable": "?", "red": "✔", "
 def render(record: dict, mutations: list[dict]) -> str:
     """One fact per line, each with an address. No prose around it."""
     L = lambda key: t(f"deliver.report.{key}")  # noqa: E731
-    lines = [f"{L('item'):9}{record['item']['id']} · {record['item']['kind']} · "
+    pl = record.get("plan") or {}
+    lines = [f"{L('item'):9}{record['item']['id']} · {pl.get('shape', '?')} · {record['item']['kind']} · "
              f"{t('deliver.state.' + record['state'])}"]
+    if pl.get("gate"):
+        lines.append(f"{'':9}{t('deliver.report.gate_open', by=pl['approved_by']) if pl.get('approved_by') else t('deliver.report.gate_pending')}")
     if record["state"] != DELIVERED:
         lines.append(f"{'':9}{record['reason']} → {t('deliver.owner.' + record['owner'])}")
     lines += [f"{L('base'):9}{record['base']['name']}@{record['base']['sha'][:7]}   "
@@ -721,6 +846,14 @@ def main() -> int:
     a.add_argument("--branch")
     a.add_argument("--package")
     a.add_argument("--fix", help="a review package whose author_fix routes become the item")
+    a.add_argument("--shape", choices=sorted(SHAPES), help="the item's shape; or --type")
+    a.add_argument("--type", help="the tracker's type name, mapped by prumo.yml `tracker.shapes`")
+    pl = sub.add_parser("plan")
+    pl.add_argument("--package", required=True)
+    pl.add_argument("--measure", required=True)
+    ap = sub.add_parser("approve")
+    ap.add_argument("--package", required=True)
+    ap.add_argument("--by")
     b = sub.add_parser("conclude")
     b.add_argument("--package", required=True)
     b.add_argument("--measure", required=True)
@@ -735,6 +868,10 @@ def main() -> int:
             return prepare(args)
         if args.command == "conclude":
             return conclude(args)
+        if args.command == "plan":
+            return plan(args)
+        if args.command == "approve":
+            return approve(args)
         unmark()
         print(t("review.marker_removed", path=marker()))
         return 0

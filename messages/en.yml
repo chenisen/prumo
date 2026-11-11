@@ -90,12 +90,21 @@ deliver:
     mutation_survived: 'the mutation at {file}:{line} left the suite green — the test does not prove the guard'
     new_red: 'new red by name: {names}'
     outside_scope: 'lines outside the scope: {paths}'
+    plan_not_approved: 'the plan asks a person''s approval and has none — `{command}`'
     premise_failed: 'central premise fails — {premise} ({evidence})'
     refuted: 'the sceptic read the test and it does not prove the guard — {reason}'
     suite_incomplete: 'the suite ran {executed} of {predicted} — not green'
     suite_not_run: 'the suite did not run: {reason}'
     test_not_red_on_base: '`{test}` was not red on the base — no proof'
   cli:
+    approval_needs_name: 'an approval needs a name — pass --by, or set TASK_REVIEW_RESPONSAVEL'
+    approved: 'plan approved by {by}: {path}'
+    plan_at: 'plan: {path} ({shape}, {depth}{gate})'
+    plan_gate: ', a person approves before the write'
+    plan_no_gate: ''
+    shape_not_deliverable: 'an {shape} is not delivered — it is decomposed; the plan says into what'
+    kind_not_for_shape: 'kind `{kind}` does not deliver a {shape} — allowed: {kinds}'
+    hotfix_base_missing: 'the profile declares no `delivery.hotfix_base` — a hotfix has no branch to be cut from'
     baseline: 'baseline: {reds} red by name · {executed}/{predicted} executed'
     branch_at: 'branch `{branch}` at {path}, cut from {base}'
     delivery_block_draft: 'a `delivery:` draft for `{repo}` — paste it into the profile and confirm it:'
@@ -116,6 +125,10 @@ deliver:
     person: person
     profile: profile owner
   report:
+    plan: PLAN
+    shape: SHAPE
+    gate_open: approved by {by}
+    gate_pending: waiting for a person's approval
     base: BASE
     branch: BRANCH
     diff: DIFF
@@ -441,6 +454,7 @@ run:
   ask_missing: 'no ask on disk — the whole route runs only on the person''s own words, written to a file'
   bound: '{kind} package bound: {path}'
   fix_door: 'the author_fix routes are a new delivery, on your words: {text}'
+  plan_stop: 'the plan at {path} waits for a person — read it, then: {command}'
   next: 'next: {text}'
   started: 'run of {item} on {repo}: {path}'
   stop: 'stop: {klass} — {fact}'

@@ -125,6 +125,22 @@ real = os.path.realpath(target or "")
 if not worktree or not real.startswith(worktree.rstrip("/") + "/"):
     print("outside the worktree " + worktree); sys.exit(0)
 rel = os.path.relpath(real, worktree)
+# A plan whose shape asks a person's approval, and has none that matches it, admits no
+# write: the gate is a file, and the guard reads it.
+try:
+    pkg = m.get("package") or ""
+    plan = json.load(open(os.path.join(pkg, "plan.json"), encoding="utf-8"))
+    if plan.get("gate"):
+        try:
+            ok = json.load(open(os.path.join(pkg, "approval.json"), encoding="utf-8"))
+        except Exception:
+            ok = {}
+        if ok.get("digest") != plan.get("digest"):
+            print("before a person approved the plan: " + rel); sys.exit(0)
+except FileNotFoundError:
+    pass
+except Exception:
+    pass
 # Before the measurement named anything, nothing may be written: the surveyor reads,
 # and a write with no named file to land in is a write nobody measured.
 if not allowed:

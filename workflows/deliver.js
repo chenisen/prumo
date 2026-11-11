@@ -121,7 +121,7 @@ const REFUTATION_SCHEMA = {
 
 const common = [
   `Repository: ${repo} · working directory: ${workdir}`,
-  `Item ${item.id} · kind ${item.kind}`,
+  `Item ${item.id} · shape ${input.shape ?? '?'} · plan depth ${input.plan_depth ?? '?'} · kind ${item.kind}`,
   `Delivery block of the profile: ${JSON.stringify(delivery)}`,
   embed('item.md', 'The item'),
   embed('profile.yml', 'Repository profile'),

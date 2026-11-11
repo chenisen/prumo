@@ -77,7 +77,7 @@ PROFILE = {
     "delivery": {"branch_format": "{item}-{slug}", "commit_format": "{item} - {message}",
                  "worktree": False, "budget": {"max_files": 2, "max_lines": 60},
                  "source_roots": ["src"], "test_roots": ["tests"],
-                 "mutation": {"command": None, "note": None},
+                 "mutation": {"command": None, "note": None}, "hotfix_base": "main",
                  "kinds": ["coverage-gap", "behaviour-change"]},
 }
 
@@ -142,10 +142,11 @@ class Spine(unittest.TestCase):
         common.cfg.cache_clear()
         self.tmp.cleanup()
 
-    def prepare(self, kind=None, fix=None, package="pkg"):
+    def prepare(self, kind=None, fix=None, package="pkg", shape="debt"):
         args = argparse.Namespace(repo="repo-x", item=None if fix else "ITEM-1",
                                   item_file=str(self.root / "item.md"), kind=kind,
-                                  branch=None, package=str(self.root / package), fix=fix)
+                                  branch=None, package=str(self.root / package), fix=fix,
+                                  shape=None if fix else shape, type=None)
         with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(deliver.prepare(args), 0)
         return self.root / package
@@ -179,6 +180,8 @@ class Spine(unittest.TestCase):
         (self.repo / "src" / "a.py").write_text(SOURCE + "# pending\n", encoding="utf-8")
         with self.assertRaises(common.UsageError), contextlib.redirect_stdout(io.StringIO()):
             self.prepare()
+
+    # ---- see also: the shape tests above
 
     def test_a_proving_test_is_delivered_committed_and_handed_to_review(self):
         package = self.prepare()
@@ -286,6 +289,43 @@ class Spine(unittest.TestCase):
         current = subprocess.run(("git", "branch", "--show-current"), cwd=self.repo,
                                  capture_output=True, text=True).stdout.strip()
         self.assertEqual(current, branch)
+
+    def test_a_hotfix_waits_for_a_person_and_runs_nothing_until_then(self):
+        """The shape asks a gate. Without the approval file the suite and the mutation
+        do not run and the record says who is owed; with it, the delivery goes through,
+        on the base the profile names for a hotfix, with half the budget."""
+        import contextlib, io
+        (self.repo / "src" / "a.py").write_text(BUGGY, encoding="utf-8")
+        git(self.repo, "add", "-A"); git(self.repo, "commit", "-q", "-m", "buggy base")
+        package = self.prepare(kind="behaviour-change", shape="hotfix")
+        man = json.loads((package / "deliver-manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual((man["shape"], man["gate"], man["base"]["name"]), ("hotfix", True, "main"))
+        self.assertEqual(man["budget"], {"max_files": 1, "max_lines": 30})
+        measure = {"premises": [], "files": ["src/a.py", "tests/test_guard.py"], "mutations": [],
+                   "proving_tests": ["test_guard_refuses"]}
+        (package / "m.json").write_text(json.dumps(measure), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            deliver.plan(argparse.Namespace(package=str(package), measure=str(package / "m.json")))
+        self.assertIn("hotfix", (package / "plan.md").read_text(encoding="utf-8"))
+        code, rec = self.conclude(package, PROVING_TEST, measure_data=measure, source=SOURCE)
+        self.assertEqual((rec["state"], rec["owner"]), ("blocked", "person"))
+        self.assertIsNone(rec["proof"]["red_on_base"], "nothing ran behind a shut gate")
+        self.assertFalse((package / "run-suite-branch.txt").exists())
+        with contextlib.redirect_stdout(io.StringIO()):
+            deliver.approve(argparse.Namespace(package=str(package), by="someone"))
+        code, rec = self.conclude(package, PROVING_TEST, measure_data=measure, source=SOURCE)
+        self.assertEqual(rec["plan"]["approved_by"], "someone")
+        # two files against a budget of one: the shape's half, not the profile's whole
+        self.assertEqual(rec["state"], "blocked")
+        self.assertIn("1", rec["reason"])
+
+    def test_an_epic_is_not_delivered(self):
+        with self.assertRaises(common.UsageError):
+            self.prepare(shape="epic")
+
+    def test_a_kind_the_shape_does_not_allow_is_refused(self):
+        with self.assertRaises(common.UsageError):
+            self.prepare(kind="coverage-gap", shape="bug")
 
     def test_a_file_outside_the_named_ones_is_outside_the_scope(self):
         package = self.prepare()

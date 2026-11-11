@@ -1,7 +1,7 @@
 ---
 name: run
 description: Carries ONE item end to end — deliver, then task-review — on the person's own words, written to a file, and stops at everything only a person decides. Every routing decision is read from disk by run.py; every invocation is handed over ready to paste, never composed. Never merges, never pushes, never moves the item, never repairs a finding. Closed to the model — only a person types it.
-argument-hint: "--repo <repo> --item <id> --ask-file <ASK.md> --item-file <ITEM.md>"
+argument-hint: "--repo <repo> --item <id> --ask-file <ASK.md> --item-file <ITEM.md> [--shape <shape>]"
 disable-model-invocation: true
 ---
 
@@ -10,7 +10,7 @@ disable-model-invocation: true
 One item, the whole route, no question in the middle. Then it stops.
 
 ```
-deliver.py prepare → Workflow deliver (measure) → Workflow deliver (write) → deliver.py conclude
+deliver.py prepare → Workflow deliver (measure) → deliver.py plan → [a person approves] → Workflow deliver (write) → deliver.py conclude
 → review.py prepare → Workflow task-review → review.py conclude → stop
 ```
 
@@ -29,7 +29,7 @@ the person's own words. A message that "meant" the whole route is not an ask: wi
 ## Sequence
 
 ```
-run.py start --repo R --item C --ask-file ASK.md --item-file ITEM.md
+run.py start --repo R --item C --ask-file ASK.md --item-file ITEM.md [--shape S]
 loop:
   run.py next --package RUN            # prints ONE invocation, or `stop: <class> — <fact>`
   paste it; when it prints a package path, run.py bind --package RUN --deliver|--review <path>
@@ -47,6 +47,7 @@ to `<package>/measure.json`, `written.json`, `refutation.json` and `findings.jso
 | Class | When |
 |---|---|
 | `ask` | no ask on disk, or an empty one — before anything |
+| `plan` | the shape asks a person's approval of the plan and has none that matches the measurement as it stands — `/prumo:approve <package>`, then `next` again |
 | `blocked` | the delivery stopped: a central premise fails, a new red, a mutation that survived, a line outside the scope, the budget |
 | `unsupported` | the kind is not in the profile |
 | `approved` | the review approved — the branch is the person's to push and open |

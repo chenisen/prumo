@@ -243,6 +243,13 @@ class Tracker:
     format: str
     heading: str
     url: str
+    # The tracker's item types, by the name the tracker gives them, mapped to the six
+    # shapes the method knows. The names are the installation's; the shapes are the
+    # prumo's. A type not mapped here is a stop, never a guess.
+    shapes: tuple = ()
+
+    def shape_of(self, type_name: str | None):
+        return dict(self.shapes).get(type_name) if type_name is not None else None
 
     def item_url(self, id_) -> str:
         return self.url.format(id=id_) if self.url else ""
@@ -525,9 +532,19 @@ def build(data: dict, source: pathlib.Path | None = None) -> Config:
         raise InvalidConfiguration(
             f"`tracker.format` must be one of {', '.join(FORMATS)} "
             f"(found: {pr['format']!r})")
+    shapes = data.get("tracker", {}).get("shapes") or {}
+    if not isinstance(shapes, dict) or not all(isinstance(k, str) and isinstance(v, str)
+                                               for k, v in shapes.items()):
+        raise InvalidConfiguration("`tracker.shapes` must map type names to shapes")
+    from shape import SHAPES
+    for k, v in shapes.items():
+        if v not in SHAPES:
+            raise InvalidConfiguration(
+                f"`tracker.shapes[{k!r}]` is `{v}`, not one of: {', '.join(SHAPES)}")
     tracker = Tracker(type=tracker_type, article=pr["article"], item=pr["item"],
                       item_plural=pr["item_plural"], format=pr["format"],
-                      heading=pr["heading"], url=pr.get("url") or "")
+                      heading=pr["heading"], url=pr.get("url") or "",
+                      shapes=tuple(sorted(shapes.items())))
 
     # --- agnosticism (optional)
     ag = data.get("agnosticism") or {}
