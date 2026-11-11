@@ -40,6 +40,7 @@ def record(**override):
         "diff": {"files": ["tests/test_a.py"], "added": 30, "removed": 0,
                  "outside_scope": [], "within_budget": True},
         "skipped": [],
+        "measured": {"note": "n", "base": None, "suite": None, "lint": None, "mutations": []},
         "waiver": None,
     }
     base.update(override)

@@ -212,6 +212,29 @@ class Spine(Fixture):
         self.assertFalse(deliver.marker().exists())
         self.assertTrue((self.root / "reports" / "repo-x" / "ITEM-1-deliver").is_dir())
 
+    def test_the_record_names_every_run_the_script_made_beside_what_the_writer_declared(self):
+        """The writer has no shell and says so in `skipped`; the script runs the suite, the
+        lint and the mutants afterwards. A reviewer once read the two side by side as a
+        contradiction and blocked a sound delivery, so the record names each run as a
+        file, and says in words which of the two decides."""
+        package = self.prepare()
+        code, rec = self.conclude(package, PROVING_TEST)
+        self.assertEqual(code, 0, rec)
+        self.assertEqual(rec["skipped"], ["the boundary at 9"])
+        self.assertEqual(rec["proof"]["mutations"][0]["run"], "run-suite-mutation-1.txt")
+        self.assertEqual(rec["lint"]["run"], "run-lint.txt")
+        self.assertEqual(rec["measured"]["suite"], "run-suite-branch.txt")
+        self.assertEqual(rec["measured"]["base"], "run-suite-base.txt")
+        self.assertEqual(rec["measured"]["lint"], "run-lint.txt")
+        self.assertEqual(rec["measured"]["mutations"], ["run-suite-mutation-1.txt"])
+        self.assertIn("measured", rec["measured"]["note"])
+        for name in ("run-suite-mutation-1.txt", "run-lint.txt", "run-suite-branch.txt"):
+            self.assertTrue((package / name).is_file(), name)
+        report = (package / "report.md").read_text(encoding="utf-8")
+        self.assertIn("run-suite-mutation-1.txt", report)
+        self.assertIn(rec["measured"]["note"], report)
+        self.assertNotIn("suite finished", rec["lint"]["reason"])
+
     def test_a_test_that_does_not_prove_the_guard_is_blocked_and_nothing_is_committed(self):
         package = self.prepare()
         code, rec = self.conclude(package, WEAK_TEST)

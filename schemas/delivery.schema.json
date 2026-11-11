@@ -13,7 +13,8 @@
     "baseline",
     "diff",
     "skipped",
-    "waiver"
+    "waiver",
+    "measured"
   ],
   "properties": {
     "repo": {
@@ -158,6 +159,13 @@
                   "red",
                   null
                 ]
+              },
+              "run": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "the captured run of the suite under this mutant, beside the package; null when it did not run"
               }
             }
           }
@@ -325,7 +333,7 @@
     },
     "skipped": {
       "type": "array",
-      "description": "what the writer declared it did not check or deliberately left out",
+      "description": "what the WRITER declared it did not check or deliberately left out — written before the script ran anything; see `measured` for what the script then executed",
       "items": {
         "type": "string"
       }
@@ -400,6 +408,13 @@
         },
         "reason": {
           "type": "string"
+        },
+        "run": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the captured output of the lint check, beside the package; null when it did not run"
         }
       }
     },
@@ -471,6 +486,46 @@
           "blocked",
           "unsupported"
         ]
+      }
+    },
+    "measured": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "what the SCRIPT executed after the writer finished, each as the captured run beside the package. `skipped` is the writer's word and is written BEFORE any of this ran: a note there saying the suite, the lint or a mutant was not run is the writer's, not the record's, and these runs are what decides.",
+      "required": [
+        "note",
+        "suite",
+        "lint",
+        "mutations"
+      ],
+      "properties": {
+        "note": {
+          "type": "string"
+        },
+        "base": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "suite": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mutations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     }
   },

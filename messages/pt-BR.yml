@@ -158,6 +158,9 @@ deliver:
     proof: PROVA
     sceptic: cético
     skipped: PULADO
+    measured: MEDIDO
+  record:
+    measured_note: "o que o escritor declarou antes de o script rodar. Os runs do script estão em `measured`, e decidem"
   state:
     blocked: BLOQUEADO
     delivered: ENTREGUE
@@ -236,6 +239,8 @@ evidence:
     o padrão para medir a saída.
   green_output_and_code: 'a suíte terminou sem falha: código de saída 0 e a saída não casa com
     `padrao_de_falha`'
+  lint_green_output_and_code: 'o lint terminou sem falha: código de saída 0 e a saída não casa com `failure_pattern`'
+  lint_green_exit_code_only: 'o lint terminou com código de saída 0; o perfil não declara `failure_pattern`, então a saída não foi lida'
   invalid_failure_pattern: o perfil declara `padrao_de_falha` inválido ({error}) — sem ele a saída
     não se lê, e código de saída não basta
   not_executed: '  (não executado: passe --executar)'

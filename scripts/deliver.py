@@ -235,21 +235,24 @@ def run_lint(profile: dict, cwd: pathlib.Path, package: pathlib.Path) -> dict:
     from evidence import authorise, resolve, run_command
     check = (profile.get("checks") or {}).get("lint") or {}
     if not check.get("command"):
-        return {"state": "not_run", "reason": t("evidence.not_in_allowlist")}
+        return {"state": "not_run", "reason": t("evidence.not_in_allowlist"), "run": None}
     ok, reason = authorise(check["command"], profile)
     if not ok:
-        return {"state": "not_run", "reason": reason}
+        return {"state": "not_run", "reason": reason, "run": None}
     r = run_command(resolve(check["command"], profile, cwd), cwd, limit=None)
     (package / "run-lint.txt").write_text(r.get("output", r.get("reason", "")), encoding="utf-8")
     if not r.get("ran"):
-        return {"state": "not_run", "reason": r.get("reason", "")}
+        return {"state": "not_run", "reason": r.get("reason", ""), "run": None}
     pattern = check.get("failure_pattern")
     failed_in_text = bool(pattern and re.search(pattern, r.get("output") or ""))
+    # The run file is named in the record: a reader who doubts the state opens the
+    # output, instead of trusting a sentence — or the writer's note that it never ran.
     if r["exit_code"] == 0 and not failed_in_text:
-        return {"state": "green", "reason": t("evidence.green_output_and_code") if pattern
-                else t("evidence.green_exit_code_only")}
+        return {"state": "green", "reason": t("evidence.lint_green_output_and_code") if pattern
+                else t("evidence.lint_green_exit_code_only"), "run": "run-lint.txt"}
     return {"state": "red", "reason": (r.get("output") or "").strip().splitlines()[-1][:200]
-            if (r.get("output") or "").strip() else t("evidence.red_no_baseline")}
+            if (r.get("output") or "").strip() else t("evidence.red_no_baseline"),
+            "run": "run-lint.txt"}
 
 
 def with_base_versions(workdir: pathlib.Path, base_sha: str, files: list[str]):
@@ -850,9 +853,9 @@ def conclude(args) -> int:
     if kind == "refactor" and not (measure.get("guarding_tests") or []):
         central_failed = True
 
-    mutations, suite_out = [], ""
+    mutations, suite_out, suite_ran = [], "", False
     red_on_base = green_on_branch = guarding = None
-    lint = {"state": "not_run", "reason": t("review.suite_not_run")}
+    lint = {"state": "not_run", "reason": t("review.suite_not_run"), "run": None}
     gate_shut = plan_record["gate"] and not plan_record["approved_by"]
     if not central_failed and files and not gate_shut:
         # The mutation by hand: wrong at the named line, the suite, the named test red,
@@ -864,7 +867,7 @@ def conclude(args) -> int:
             groups.setdefault((m["file"], m["line"], m["from"], m["to"]), []).append(m)
         for n, ((file, line, src, dst), wanted) in enumerate(groups.items(), 1):
             why = apply_mutation(workdir, {"file": file, "line": line, "from": src, "to": dst})
-            reds, ran, reverted = [], False, False
+            reds, ran, reverted, run_file = [], False, False, None
             if why is None:
                 r = run_suite(profile, workdir, package, f"mutation-{n}")
                 # A mutation suite that did not finish proves nothing either way: a
@@ -873,6 +876,7 @@ def conclude(args) -> int:
                 executed, predicted = progress(r.get("output", ""), check.get("progress_pattern"))
                 finished = predicted is None or (executed is not None and executed >= predicted)
                 ran = bool(r.get("ran")) and finished
+                run_file = f"run-suite-mutation-{n}.txt" if r.get("ran") else None
                 reds = red_names(r.get("output", ""), check.get("red_name_pattern")) or []
                 revert(workdir, file)
                 reverted = not git(workdir, "diff", "--name-only", "--", file)
@@ -880,7 +884,7 @@ def conclude(args) -> int:
                 entry = {"file": file, "line": line, "from": src, "to": dst, "test": m["test"],
                          "result": "not_run", "reverted": reverted,
                          "stays_green": list(m.get("stays_green") or []),
-                         "stays_green_result": None}
+                         "stays_green_result": None, "run": run_file}
                 if why is None:
                     entry["result"] = ("red" if any(m["test"] in name for name in reds)
                                        else "green") if ran else "not_run"
@@ -907,7 +911,7 @@ def conclude(args) -> int:
                                                            for name in on_base) for p in proving)
                                       else "green") if r.get("ran") else "not_run"}
         suite = run_suite(profile, workdir, package, "branch")
-        suite_out = suite.get("output", "")
+        suite_out, suite_ran = suite.get("output", ""), bool(suite.get("ran"))
         on_branch = red_names(suite_out, check.get("red_name_pattern")) or [] if suite.get("ran") else []
         if proving and suite.get("ran"):
             green_on_branch = {"test": ", ".join(proving),
@@ -940,7 +944,18 @@ def conclude(args) -> int:
                   "refutation": ({"verdict": refutation["verdict"], "reason": refutation["reason"]}
                                  if refutation else None)},
         "baseline": baseline, "diff": diff,
+        # The writer's word, verbatim, and written BEFORE the script ran anything. A
+        # reviewer once read "mutations were reasoned, not executed" here, beside the
+        # mutations the script had executed, and blocked the delivery as contradicting
+        # itself. The record now says which is which: `measured` names every run the
+        # script made, as a file beside the package, so the note and the proof never
+        # compete for the same sentence.
         "skipped": list(written.get("skipped") or []),
+        "measured": {"note": t("deliver.record.measured_note"),
+                     "base": "run-suite-base.txt" if (package / "run-suite-base.txt").exists() else None,
+                     "suite": "run-suite-branch.txt" if suite_ran else None,
+                     "lint": lint.get("run"),
+                     "mutations": [m["run"] for m in mutations if m.get("run")]},
         "waiver": block.get("waiver"),
     }
     import jsonschema
@@ -1056,8 +1071,13 @@ def render(record: dict, mutations: list[dict]) -> str:
     d = record["diff"]
     lines += ["", f"{L('diff'):9}{len(d['files'])} files · +{d['added']} −{d['removed']}"
                   + (f" · outside: {', '.join(d['outside_scope'])}" if d["outside_scope"] else "")]
+    measured = record.get("measured") or {}
+    runs = [r for r in (measured.get("base"), measured.get("suite"), measured.get("lint"),
+                        *(measured.get("mutations") or [])) if r]
+    if runs:
+        lines += ["", f"{L('measured'):9}{', '.join(runs)}"]
     if record["skipped"]:
-        lines += ["", L("skipped")] + [f"? {s}" for s in record["skipped"]]
+        lines += ["", L("skipped") + " — " + measured.get("note", "")] + [f"? {s}" for s in record["skipped"]]
     lines += ["", f"{L('next'):9}{record['next']}", ""]
     return "\n".join(lines)
 

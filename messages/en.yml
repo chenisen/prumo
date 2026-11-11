@@ -154,6 +154,9 @@ deliver:
     proof: PROOF
     sceptic: sceptic
     skipped: SKIPPED
+    measured: MEASURED
+  record:
+    measured_note: "what the writer declared before the script ran. The script's runs are under `measured`, and decide"
   state:
     blocked: BLOCKED
     delivered: DELIVERED
@@ -232,6 +235,8 @@ evidence:
     pattern so that the output gets measured.
   green_output_and_code: 'the suite finished without failure: exit code 0 and the output does
     not match `padrao_de_falha`'
+  lint_green_output_and_code: 'the lint finished without failure: exit code 0 and the output does not match `failure_pattern`'
+  lint_green_exit_code_only: 'the lint finished with exit code 0; the profile declares no `failure_pattern`, so the output was not read'
   invalid_failure_pattern: the profile declares an invalid `padrao_de_falha` ({error}) — without
     it the output cannot be read, and an exit code is not enough
   not_executed: '  (not executed: pass --executar)'
