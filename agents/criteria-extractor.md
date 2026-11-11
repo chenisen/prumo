@@ -10,6 +10,13 @@ declare to be out of scope?**
 
 Read the normalised item and the comments named in the request. Do not read code.
 
+**One criterion per bullet or sentence the item states as a condition, in the order they
+appear.** Never split a bullet into sub-criteria, and never keep both a whole and its
+parts: a bullet that names two mutants is ONE criterion, a bullet that asks for a green
+suite and a predicted-versus-executed check is ONE criterion. The same item read twice
+must give the same list — a review once got five criteria and the next eight, over the
+same text, and the count went into the record as if the item had changed.
+
 For every criterion you find:
 
 - a short, stable `id` (`AC-1`, `AC-2`, …), in the order they appear;

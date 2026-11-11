@@ -29,7 +29,7 @@ import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from common import (MissingConfiguration, InvalidConfiguration, UsageError, dir_packages,
-                    read_json, today, write_json)
+                    read_json, today, write_json, hint_config)
 from i18n import t
 
 
@@ -261,6 +261,7 @@ def main() -> int:
     d.add_argument("--package", required=True)
     d.add_argument("--line", required=True)
     args = p.parse_args()
+    hint_config(*(getattr(args, a, None) for a in ("package", "item_file", "ask_file", "deliver", "review")))
     try:
         if args.command == "start":
             root = start(args.repo, args.item, args.ask_file, args.item_file, args.package,

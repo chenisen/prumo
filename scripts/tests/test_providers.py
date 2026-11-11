@@ -33,6 +33,30 @@ def without(chave, de=None):
 
 
 class TestNothingIsAssumed(unittest.TestCase):
+    def test_the_file_is_found_above_a_path_the_invocation_named(self):
+        """A review run from inside the plugin's own `scripts/` found no `prumo.yml`
+        above the cwd, while the package it was given sat under the workspace that
+        holds the file."""
+        import os, providers
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as elsewhere:
+            root = pathlib.Path(tmp)
+            (root / "prumo.yml").write_text("x: 1")
+            (root / ".prumo" / "packages" / "p").mkdir(parents=True)
+            saved, cwd = list(providers.HINTS), os.getcwd()
+            env = os.environ.pop(providers.ENV_CONFIG, None)
+            try:
+                os.chdir(elsewhere)
+                with mock.patch.object(providers, "REPO_ROOT", pathlib.Path(elsewhere)):
+                    providers.HINTS.clear()
+                    self.assertIsNone(providers._find_file())
+                    providers.hint(None, root / ".prumo" / "packages" / "p")
+                    self.assertEqual(providers._find_file(), root / "prumo.yml")
+            finally:
+                os.chdir(cwd)
+                providers.HINTS[:] = saved
+                if env is not None:
+                    os.environ[providers.ENV_CONFIG] = env
+
     def test_no_file_is_refused(self):
         with tempfile.TemporaryDirectory() as t, \
              mock.patch.dict("os.environ", {"PRUMO_CONFIG": str(pathlib.Path(t) / "nao-existe")}):

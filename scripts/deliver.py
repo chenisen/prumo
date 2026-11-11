@@ -36,7 +36,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from common import (MissingConfiguration, InvalidConfiguration, UsageError, cfg,
                     dir_packages, dir_repositories, dir_reports, load_profile,
                     profile_path, read_json, slug, today, waiver_in_force, write_json,
-                    casa_algum)
+                    casa_algum, capabilities_after_preflight, hint_config)
 from i18n import t
 from shape import SHAPES, resolve as resolve_shape, budget_for, UnknownShape
 import hashlib
@@ -479,7 +479,7 @@ def prepare(args) -> int:
 
     _py("preflight.py", "--repo", args.repo, "--package", str(package),
         "--origin", "branch", "--item-read", check=False)
-    cap = read_json(package / "capabilities.json")
+    cap = capabilities_after_preflight(package)
     if cap["impediments"]:
         for impediment in cap["impediments"]:
             print(t("review.impediment", reason=impediment))
@@ -884,10 +884,15 @@ def conclude(args) -> int:
                 revert(workdir, file)
                 reverted = not git(workdir, "diff", "--name-only", "--", file)
             for m in wanted:
+                # The whole red set under the mutant, minus the base's, travels too: a
+                # mutant that reached eighteen tests the item never named is a fact
+                # about the repository — those tests already depended on the guard —
+                # and the record used to keep only the one name it was asked about.
                 entry = {"file": file, "line": line, "from": src, "to": dst, "test": m["test"],
                          "result": "not_run", "reverted": reverted,
                          "stays_green": list(m.get("stays_green") or []),
-                         "stays_green_result": None, "run": run_file}
+                         "stays_green_result": None, "run": run_file,
+                         "reds": sorted(set(reds) - set(man["baseline"]["base_reds"] or [])) if ran else []}
                 if why is None:
                     entry["result"] = ("red" if any(m["test"] in name for name in reds)
                                        else "green") if ran else "not_run"
@@ -1060,6 +1065,7 @@ def render(record: dict, mutations: list[dict]) -> str:
                      f"→ {m['test']} {m['result']}" + (" · reverted" if m["reverted"] else "")
                      + (f" · stays green: {', '.join(m['stays_green'])} {m['stays_green_result']}"
                         if m.get("stays_green") else "")
+                     + (f" · {len(m['reds'])} red beyond the base" if m.get("reds") else "")
                      + (f" · {m['why']}" if m.get("why") else ""))
     lint = record.get("lint") or {}
     if lint.get("state") != "not_run":
@@ -1118,6 +1124,7 @@ def main() -> int:
     c = sub.add_parser("release", help=t("review.help_release"))
     c.add_argument("--package", help="the delivery's package: its worktree is removed too; the branch stays")
     args = p.parse_args()
+    hint_config(*(getattr(args, a, None) for a in ("package", "item_file", "fix", "story", "review")))
     try:
         if args.command == "prepare":
             if not args.fix and not args.story and not (args.item and args.item_file):

@@ -232,7 +232,7 @@ def build_report(package: pathlib.Path) -> str:
         for c in criteria:
             record = c.get("record") or (
                 f"— _{t('report.criterion_note')}: {escape(c['note'])}_" if c.get("note") else "—")
-            rows.append(f"| {escape(c.get('text', c['id']))[:90]} | `{c['state']}` | {record} |")
+            rows.append(f"| {escape(c.get('text', c['id']))} | `{c['state']}` | {record} |")
         return "\n".join(rows)
 
     def sec_proof():

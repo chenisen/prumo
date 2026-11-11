@@ -355,20 +355,38 @@ class Config:
     legacy_keys: tuple = ()
 
 
-def _find_file(start: pathlib.Path | None = None) -> pathlib.Path | None:
-    """Env var, then the prumo's own root, then walking up from the cwd.
+# Paths an invocation named — its package, its item file — registered by the script's
+# `main()` before anything reads the configuration. A review run from inside the
+# plugin's own `scripts/` directory found no `prumo.yml` above the cwd and stopped on a
+# configuration impediment, while the package it was given sat two levels under the
+# workspace that holds the file. The invocation's own paths are the better guess.
+HINTS: list[pathlib.Path] = []
 
-    Walking up from the cwd is what allows a per-workspace installation without touching
-    the prumo checkout: `prumo.yml` lives at the root of whoever uses it."""
+
+def hint(*paths) -> None:
+    """Register paths the invocation named, to walk up from before the cwd."""
+    for p in paths:
+        if p:
+            HINTS.append(pathlib.Path(str(p)).expanduser())
+
+
+def _find_file(start: pathlib.Path | None = None) -> pathlib.Path | None:
+    """Env var, then the prumo's own root, then walking up from the paths the
+    invocation named, then from the cwd.
+
+    Walking up is what allows a per-workspace installation without touching the prumo
+    checkout: `prumo.yml` lives at the root of whoever uses it."""
     if (env := os.environ.get(ENV_CONFIG)):
         p = pathlib.Path(env).expanduser()
         return p if p.exists() else None
     if (here := REPO_ROOT / FILE_NAME).exists():
         return here
-    current = (start or pathlib.Path.cwd()).resolve()
-    for directory in [current, *current.parents]:
-        if (candidate := directory / FILE_NAME).exists():
-            return candidate
+    starts = [start] if start else [*HINTS, pathlib.Path.cwd()]
+    for origin in starts:
+        current = pathlib.Path(origin).resolve()
+        for directory in [current, *current.parents]:
+            if (candidate := directory / FILE_NAME).exists():
+                return candidate
     return None
 
 

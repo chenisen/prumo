@@ -30,7 +30,7 @@ import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from common import (MissingConfiguration, InvalidConfiguration, dir_packages, dir_reports, forge, tracker, UsageError, profile_path, load_profile, write_json,
-                   today, read_json, slug, cfg)
+                   today, read_json, slug, cfg, capabilities_after_preflight, hint_config)
 from i18n import t
 
 ROOT = pathlib.Path(__file__).resolve().parent
@@ -254,6 +254,15 @@ def merge_criteria(current: list[dict], readings: list[dict]) -> tuple[list[dict
     return current, sorted(set(verdicts) - known)
 
 
+def report_dir_name(item: str | None, origin: str) -> str:
+    """`<item>-<origin>`, unless the origin already starts with the item — a branch the
+    prumo delivered is named `<item>-<slug>` by the profile, and the report once landed
+    under `50557-50557-…`. A directory name, not a message: the same in every language,
+    or the same review filed twice lands in two folders depending on who ran it."""
+    item, s = slug(item or "no-item"), slug(origin)
+    return s if s == item or s.startswith(f"{item}-") else f"{item}-{s}"
+
+
 def delivery_record_for(package: pathlib.Path, head_sha: str) -> dict | None:
     """The record a delivery left, when it is about THIS head. A record about another
     commit is somebody else's proof: it is kept in the package for the reader and
@@ -328,7 +337,7 @@ def prepare(args) -> int:
         pre.append("--proposal-read")
     _py("preflight.py", *pre, check=False)
 
-    cap = read_json(package / "capabilities.json")
+    cap = capabilities_after_preflight(package)
     if cap["impediments"]:
         for impediment in cap["impediments"]:
             print(t("review.impediment", reason=impediment))
@@ -590,7 +599,7 @@ def conclude(args) -> int:
     # A directory name, not a message: it stays the same in every language, or the same
     # review filed twice lands in two folders depending on who ran it.
     item = man["item"]["id"] or "no-item"
-    destination = dir_reports() / man["repo"] / f"{item}-{slug(man['origin'])}"
+    destination = dir_reports() / man["repo"] / report_dir_name(man["item"]["id"], man["origin"])
     destination.mkdir(parents=True, exist_ok=True)
     target = destination / f"review-{today()}.md"
     shutil.copy2(package / "report.md", target)
@@ -716,6 +725,8 @@ def main() -> int:
     sub.add_parser("release", help=t("review.help_release"))
 
     args = p.parse_args()
+    hint_config(getattr(args, "package", None), getattr(args, "item_file", None),
+                getattr(args, "delivery", None), getattr(args, "workflow_result", None))
     if args.command == "release":
         unmark()
         print(t("review.marker_removed", path=marker()))

@@ -222,6 +222,7 @@ class Spine(Fixture):
         self.assertEqual(code, 0, rec)
         self.assertEqual(rec["skipped"], ["the boundary at 9"])
         self.assertEqual(rec["proof"]["mutations"][0]["run"], "run-suite-mutation-1.txt")
+        self.assertEqual(rec["proof"]["mutations"][0]["reds"], ["test_guard_refuses"])
         self.assertEqual(rec["lint"]["run"], "run-lint.txt")
         self.assertEqual(rec["measured"]["suite"], "run-suite-branch.txt")
         self.assertEqual(rec["measured"]["base"], "run-suite-base.txt")

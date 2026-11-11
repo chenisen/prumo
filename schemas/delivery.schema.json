@@ -166,6 +166,13 @@
                   "null"
                 ],
                 "description": "the captured run of the suite under this mutant, beside the package; null when it did not run"
+              },
+              "reds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "every test red under this mutant that is not red on the base, by name — the named test is what the item asked about; the rest is what the mutant also reached"
               }
             }
           }

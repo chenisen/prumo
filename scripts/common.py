@@ -31,6 +31,26 @@ def cfg():
     return load_config()
 
 
+def hint_config(*paths) -> None:
+    """Paths the invocation named, for the configuration lookup to walk up from. Must
+    run before the first `cfg()`: the result is cached."""
+    from providers import hint
+    hint(*paths)
+
+
+def capabilities_after_preflight(package: pathlib.Path) -> dict:
+    """What the preflight wrote — or a stop in words when it wrote nothing. The
+    preflight's exit code 1 means "an impediment", read from the file; but a preflight
+    that died before writing (no `prumo.yml` above the cwd, say) left no file, and the
+    caller used to fall over reading it, with a traceback where the impediment's own
+    sentence had just been printed."""
+    path = pathlib.Path(package) / "capabilities.json"
+    if not path.is_file():
+        from i18n import t
+        raise UsageError(t("review.preflight_wrote_nothing", path=path))
+    return read_json(path)
+
+
 def dir_repositories() -> pathlib.Path:
     return cfg().paths.repositories
 

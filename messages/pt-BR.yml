@@ -455,6 +455,7 @@ review:
     e não há token no ambiente.
   help_release: remove um marcador vazado por queda no meio da revisão
   impediment: 'IMPEDIMENTO: {reason}'
+  preflight_wrote_nothing: 'o preflight não escreveu {path}: a mensagem dele acima diz por quê, e a revisão não começa sem isso'
   impediment_open: a revisão não começa com impedimento aberto
   invoke_workflow: 'Invoque o workflow com:'
   marker_removed: 'marcador removido: {path}'

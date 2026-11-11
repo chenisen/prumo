@@ -369,6 +369,22 @@ class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
             out = decide({"repo": "r", "item": "I", "deliver_package": str(d), "review_package": str(root / "r")}, root)
             self.assertIn(f"--delivery {d}", out["text"])
 
+    def test_a_preflight_that_wrote_nothing_is_a_stop_in_words(self):
+        import tempfile
+        import common
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(common.UsageError) as ctx:
+                common.capabilities_after_preflight(pathlib.Path(tmp))
+            self.assertIn("capabilities.json", str(ctx.exception))
+
+    def test_the_report_directory_does_not_repeat_the_item_the_origin_carries(self):
+        import review
+        self.assertEqual(review.report_dir_name("50557", "50557-debito-tecnico-criar-testes"),
+                         "50557-debito-tecnico-criar-testes")
+        self.assertEqual(review.report_dir_name("50557", "feature/uuid-guard"), "50557-feature-uuid-guard")
+        self.assertEqual(review.report_dir_name("50557", "505570-other"), "50557-505570-other")
+        self.assertEqual(review.report_dir_name(None, "x"), "no-item-x")
+
     def test_conclude_absorbs_the_workflow_s_whole_result_and_the_extractor_s_list(self):
         """Five files were written by hand between the workflow and `conclude`, on every
         review; and the extractor ran — or was forgotten — in the harness's memory. The
