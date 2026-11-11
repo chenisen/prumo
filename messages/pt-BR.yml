@@ -479,9 +479,11 @@ review:
     `{package}` em {root}; o custo desta execução NÃO foi medido'
   workflow_args_at: "Os argumentos do workflow estão em {path} — {files} arquivos do pacote,\n    {kb}KB, já embutidos para que os revisores não os leiam um a um. Leia e passe o\n    objeto inteiro."
   criteria_unmatched: '{n} leitura(s) de critério nomearam id que a lista do item não tem e foram descartadas: {ids}. Os revisores respondem com os ids do extrator, ao pé da letra'
-  then_conclude: 'Depois: review.py conclude --package {path} --findings <arquivo>'
+  then_conclude: 'Depois: review.py conclude --package {path} --workflow-result <o objeto que o workflow devolveu, gravado em arquivo>'
+  help_workflow_result: 'o objeto que o workflow devolveu, gravado como JSON: achados, cobertura, convenções, scripts, critérios lidos e critérios extraídos — um arquivo no lugar de cinco'
   three_acts: 'Três atos externos, cada um com o SEU sim — nenhum acontece sozinho:'
 run:
+  save_result: 'grave o objeto que o workflow devolve em {path}'
   ask_empty: '{path} está vazio — um pedido em branco não é palavra de ninguém'
   ask_missing: 'sem pedido em disco — a rota inteira só roda com as palavras da própria pessoa, escritas em arquivo'
   bound: 'pacote de {kind} ligado: {path}'

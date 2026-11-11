@@ -369,6 +369,39 @@ class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
             out = decide({"repo": "r", "item": "I", "deliver_package": str(d), "review_package": str(root / "r")}, root)
             self.assertIn(f"--delivery {d}", out["text"])
 
+    def test_conclude_absorbs_the_workflow_s_whole_result_and_the_extractor_s_list(self):
+        """Five files were written by hand between the workflow and `conclude`, on every
+        review; and the extractor ran — or was forgotten — in the harness's memory. The
+        workflow now extracts first and returns everything in one object."""
+        import json, tempfile
+        import review
+        result = {"findings": [{"id": "COR-1"}], "coverage": {"checked": ["x"], "reviewers_without_return": 0},
+                  "conventions_observed": [], "scripts_manual": [],
+                  "criteria": [{"id": "AC-1", "state": "met", "record": "line 37"}],
+                  "criteria_extracted": {"criteria": [{"id": "AC-1", "text": "five tests",
+                                                       "state": "not_verifiable", "record": None}],
+                                         "out_of_scope": ["other middlewares"], "note": None}}
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = pathlib.Path(tmp)
+            readings = review.absorb_workflow_result(pkg, result)
+            for name in ("findings.json", "coverage.json", "conventions_observed.json",
+                         "scripts_manual.json", "criteria.json", "out-of-scope.json"):
+                self.assertTrue((pkg / name).is_file(), name)
+            self.assertEqual(json.loads((pkg / "criteria.json").read_text())[0]["id"], "AC-1")
+            self.assertEqual(json.loads((pkg / "out-of-scope.json").read_text()),
+                             {"out_of_scope": ["other middlewares"]})
+            self.assertEqual(readings, result["criteria"])
+            # a list already in the package — confirmed by a person — is never overwritten
+            (pkg / "criteria.json").write_text(json.dumps([{"id": "AC-1", "text": "theirs",
+                                                            "state": "met", "record": "qa"}]))
+            review.absorb_workflow_result(pkg, result)
+            self.assertEqual(json.loads((pkg / "criteria.json").read_text())[0]["text"], "theirs")
+        workflow = (PRUMO_ROOT / "workflows" / "task-review.js").read_text(encoding="utf-8")
+        self.assertIn("phase('Criteria')", workflow)
+        self.assertIn("criteria_extracted: extracted", workflow)
+        self.assertIn("VERBATIM", workflow)
+        self.assertLess(workflow.index("phase('Criteria')"), workflow.index("phase('Review')"))
+
     def test_a_reviewer_s_reason_is_a_note_and_an_unknown_id_is_reported(self):
         """Four criteria once passed gate 3 on "a person has to confirm them" sitting in
         `record`; and a whole reading once fell on the floor because the reviewers

@@ -220,8 +220,11 @@ def _review_step(run: dict, r: str, repo: str, stop, invoke) -> dict:
         if any(x.get("type") == "author_fix" for x in v.get("routes") or []):
             fact += f" · {t('run.fix_door', text=f'deliver.py prepare --repo {repo} --fix {r}')}"
         return stop("intervention", fact)
+    if _exists(r, "workflow-result.json"):
+        return invoke(f"review.py conclude --package {r} --workflow-result {r}/workflow-result.json")
     if not _exists(r, "findings.json"):
-        return invoke(f"Workflow({{name: '{_wf('task-review')}', args: <{r}/workflow-args.json>}})")
+        return invoke(f"Workflow({{name: '{_wf('task-review')}', args: <{r}/workflow-args.json>}})"
+                      + f" → {t('run.save_result', path=f'{r}/workflow-result.json')}")
     return invoke(f"review.py conclude --package {r} --findings {r}/findings.json"
                   + (f" --criteria {r}/criteria-verdicts.json" if _exists(r, "criteria-verdicts.json") else ""))
 

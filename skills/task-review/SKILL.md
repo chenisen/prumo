@@ -117,11 +117,15 @@ Workflow.
 review.py prepare --repo R [--proposal N | --branch B] --item C
                   --item-file ITEM.md [--proposal-file DESC.md]   # F0 F1 F2 F3
 Workflow({name: 'prumo:task-review', args: {...}})                # F4 F5 F8 — the name carries the agents' prefix
-review.py conclude --package P --findings A [--scripts-manual R]
-                   [--conventions C]                              # F7 F9 F11 F12
+review.py conclude --package P --workflow-result W                # F7 F9 F11 F12
 ```
 
 `prepare` prints the workflow invocation already assembled, with the activation plan.
+`W` is the object the workflow returned, saved as a JSON file: `conclude` splits it into
+`findings.json`, `coverage.json`, `conventions_observed.json`, `scripts_manual.json`, the
+reviewers' criterion readings and — when the package carried no `criteria.json` — the
+extractor's list. The five separate flags (`--findings`, `--coverage`, …) still work for
+a file written by hand.
 
 **A branch the prumo delivered carries its own proof.** `prepare --delivery <package>`
 takes the delivery's `delivery.json` into the review as `delivery-record.json`. When the
@@ -136,7 +140,7 @@ another commit is kept for the reader and counts for nothing.
 | **F0** preflight | `preflight.py` | `capabilities.json` — what THIS environment can do |
 | **F1** resolve | `resolver.py` | `manifest.json` — base, SHAs, item |
 | **F2** package | `package.py` | `diff.patch`, `slices/`, `change.json`, `profile.yml` |
-| **F2b** criteria | agent `criteria-extractor` | `criteria.json` |
+| **F2b** criteria | agent `criteria-extractor`, run by the workflow as its first stage when the package carries no `criteria.json` | `criteria.json`, written by `conclude` from the workflow's result |
 | **F3** triage | `triage.py` | `classes.json`, `size.json`, `plan.json` |
 | **F4, F5, F8** | the workflow | verified findings and manual scripts |
 | **F6** evidence | `evidence.py --role suite --run` | `evidence.json` — **one round, only the profile's allowlist** |

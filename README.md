@@ -398,7 +398,7 @@ script cannot invoke it:
 review.py prepare --repo R [--proposal N | --branch B] --item C
                   --item-file ITEM.md [--proposal-file PROPOSAL.md]
 Workflow({name: 'prumo:task-review', args: {...}})    # prepare prints this, filled in, with the plugin's prefix
-review.py conclude --package P --findings A [--scripts-manual S]
+review.py conclude --package P --workflow-result W    # the object the workflow returned, saved as JSON
 ```
 
 **The mandatory reading is a gate, and it comes before everything.** The review does not

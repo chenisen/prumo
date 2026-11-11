@@ -205,6 +205,28 @@ def copy_delivery(source: pathlib.Path, package: pathlib.Path) -> list[str]:
     return runs
 
 
+WORKFLOW_FILES = (("findings", "findings.json"), ("scripts_manual", "scripts_manual.json"),
+                  ("conventions_observed", "conventions_observed.json"), ("coverage", "coverage.json"))
+
+
+def absorb_workflow_result(package: pathlib.Path, result: dict) -> list[dict]:
+    """The object the workflow returned, split into the files the judge reads. Five
+    files used to be written by hand between the workflow and `conclude`, one per
+    key, on every review; the one forgotten was always `coverage`, and a slice nobody
+    read then passed unnoticed. The extractor's list lands as `criteria.json` only when
+    the package has none — a list a person already confirmed is never overwritten.
+    Returns the reviewers' criterion readings, for `merge_criteria`."""
+    for key, name in WORKFLOW_FILES:
+        if key in result:
+            write_json(package / name, result[key])
+    extracted = result.get("criteria_extracted") or {}
+    if extracted.get("criteria") is not None and not (package / "criteria.json").exists():
+        write_json(package / "criteria.json", extracted["criteria"])
+        write_json(package / "out-of-scope.json",
+                   {"out_of_scope": extracted.get("out_of_scope") or []})
+    return list(result.get("criteria") or [])
+
+
 def merge_criteria(current: list[dict], readings: list[dict]) -> tuple[list[dict], list[str]]:
     """The reviewers' reading of each criterion over the extractor's list.
 
@@ -465,20 +487,25 @@ def _agent_tokens(cost_per_agent: dict, suffix: str):
 
 def conclude(args) -> int:
     package = pathlib.Path(args.package)
+    readings: list[dict] = []
+    if getattr(args, "workflow_result", None):
+        readings = absorb_workflow_result(package, read_json(pathlib.Path(args.workflow_result)))
     for name, source in (("findings.json", args.findings),
                          ("scripts_manual.json", args.scripts_manual),
                          ("conventions_observed.json", args.conventions),
                          ("coverage.json", args.coverage)):
         if source:
             write_json(package / name, read_json(pathlib.Path(source)))
-    # The reviewers' reading of each criterion, with its record, over the extractor's
-    # list: a state travels only with a record, and an id the item never had is dropped.
     if getattr(args, "criteria", None):
+        readings = read_json(pathlib.Path(args.criteria)) or []
+    # The reviewers' reading of each criterion, with its record, over the extractor's
+    # list: a state travels only with a record, and an id the item never had is reported.
+    if readings:
         path = package / "criteria.json"
         current = read_json(path) if path.exists() else []
         if isinstance(current, dict):
             current = current.get("criteria") or []
-        current, unmatched = merge_criteria(current, read_json(pathlib.Path(args.criteria)) or [])
+        current, unmatched = merge_criteria(current, readings)
         if unmatched:
             print(t("review.criteria_unmatched", n=len(unmatched), ids=", ".join(unmatched)))
         write_json(path, current)
@@ -678,6 +705,7 @@ def main() -> int:
 
     b = sub.add_parser("conclude")
     b.add_argument("--package", required=True)
+    b.add_argument("--workflow-result", help=t("review.help_workflow_result"))
     b.add_argument("--findings")
     b.add_argument("--scripts-manual")
     b.add_argument("--conventions", help=t("review.help_conventions"))

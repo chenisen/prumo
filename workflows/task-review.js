@@ -3,6 +3,7 @@ export const meta = {
   description: 'Reviews a delivery already triaged: reviewers in parallel, a sceptical verifier and a manual plan',
   whenToUse: 'Called by the task-review skill after F0–F3. Do not invoke it directly: with no package on disk there is nothing to review.',
   phases: [
+    { title: 'Criteria', detail: "the item's acceptance criteria, extracted once with stable ids, when the package carries none" },
     { title: 'Review', detail: 'the reviewers triage activated, each over its own slice' },
     { title: 'Verification', detail: 'one sceptic per blocking finding, in a clean context' },
     { title: 'Manual plan', detail: 'a script for what no test reaches' },
@@ -201,6 +202,64 @@ const embed = (name, label) => inlined[name]
 // The INVARIANT part comes first and the varying part last, so the prefix cache has the
 // longest possible run to match on. The slice path is the only thing that differs
 // between reviewers, so it goes at the end.
+// F2b lives HERE, not in the harness's memory. `criteria.json` cannot exist when
+// `prepare` runs — it is an agent's output — and for a while it was the person driving
+// the review who had to remember to run the extractor between `prepare` and this
+// workflow. Twice it was forgotten and the judge ran with ledger 1 empty; once it was
+// run in parallel with the reviewers, who then numbered the criteria their own way and
+// every reading fell on the floor. The extractor runs first, its list goes into every
+// reviewer's context with the ids the readings must use, and the list is returned so
+// that `conclude --workflow-result` writes it beside the package.
+const EXTRACT_SCHEMA = {
+  type: 'object',
+  required: ['criteria', 'out_of_scope'],
+  additionalProperties: false,
+  properties: {
+    criteria: {
+      type: 'array',
+      items: {
+        type: 'object', required: ['id', 'text', 'state', 'record'], additionalProperties: false,
+        properties: { id: { type: 'string' }, text: { type: 'string' },
+                      state: { enum: ['not_verifiable'] }, record: { type: 'null' },
+                      evidence: { type: 'array' } },
+      },
+    },
+    out_of_scope: { type: 'array', items: { type: 'string' } },
+    note: { type: ['string', 'null'] },
+  },
+}
+
+phase('Criteria')
+let extracted = null
+if (inlined['criteria.json']) {
+  log('criteria already in the package — the extractor is not paid twice')
+} else if (!inlined['item.md']) {
+  log('WARNING: no item in the package — nothing to extract criteria from; ledger 1 stays empty')
+} else {
+  extracted = await agent([
+    'Extract the acceptance criteria and the out-of-scope list of the item below.',
+    `THE ITEM UNDER REVIEW, and no other: ${bundle}/manifest.json names it. Do not read`,
+    'any other package, report or item on disk, and do not read code.',
+    'One criterion per bullet or sentence the item states as a condition, in the order',
+    'they appear, ids `AC-1`, `AC-2`, … Never split a bullet into sub-criteria and never',
+    'keep both a whole and its parts: a bullet naming two mutants is ONE criterion.',
+    'Keep the text in the item\'s own words and language. `state` is always',
+    '`not_verifiable` and `record` is null: whether it was met is decided by whoever',
+    'reads the code, later.',
+    'If the item carries no legible criterion at all, return an empty list and say so',
+    'in `note`.',
+    embed('item.md', 'Normalised item (description + comments)'),
+  ].join('\n'), { agentType: agentFor('criteria-extractor'), label: 'criteria-extractor',
+                  phase: 'Criteria', schema: EXTRACT_SCHEMA })
+  if (extracted) {
+    inlined['criteria.json'] = JSON.stringify(extracted.criteria, null, 2)
+    inlined['out-of-scope.json'] = JSON.stringify({ out_of_scope: extracted.out_of_scope }, null, 2)
+    log(`${extracted.criteria.length} criteria extracted; ${extracted.out_of_scope.length} out of scope`)
+  } else {
+    log('WARNING: the extractor returned nothing — the reviewers read the item without a criteria list')
+  }
+}
+
 const context = (slice) => [
   `Package: ${bundle}`,
   embed('manifest.json', 'Manifest'),
@@ -208,6 +267,10 @@ const context = (slice) => [
   embed('profile.yml', 'Repository profile'),
   embed('classes.json', 'Triaged classes'),
   embed('criteria.json', 'Criteria from the item'),
+  inlined['criteria.json']
+    ? 'Answer `criteria` with the ids of that list, VERBATIM (`AC-1`, `AC-2`, …), one '
+      + 'reading per id you could decide. A reading under any other id is dropped.'
+    : '',
   embed('item.md', 'Normalised item (description + comments)'),
   embed('proposal.md', "The proposal's own description, as its author wrote it"),
   embed('out-of-scope.json', 'Out of scope as declared by the item'),
@@ -496,5 +559,5 @@ const scripts = templatable
   : null
 
 return { findings: final, coverage, conventions_observed: conventionsObserved,
-         criteria: criteriaVerdicts,
+         criteria: criteriaVerdicts, criteria_extracted: extracted,
          scripts_manual: scripts ? scripts.scripts_manual : [] }

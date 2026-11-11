@@ -477,9 +477,11 @@ review:
     {root}; this run''s cost was NOT measured'
   workflow_args_at: "The workflow arguments are in {path} — {files} package files, {kb}KB,\n    already inlined so the reviewers do not read them one by one. Read it and pass the\n    object whole."
   criteria_unmatched: "{n} criterion reading(s) named an id the item's list never had and were dropped: {ids}. The reviewers must answer with the extractor's ids, verbatim"
-  then_conclude: 'Then: review.py conclude --package {path} --findings <file>'
+  then_conclude: 'Then: review.py conclude --package {path} --workflow-result <the object the workflow returned, saved as a file>'
+  help_workflow_result: 'the object the workflow returned, saved as a JSON file: findings, coverage, conventions, scripts, the criteria read and the criteria extracted — one file in place of five'
   three_acts: 'Three external acts, each with its OWN yes — none happens on its own:'
 run:
+  save_result: 'save the object the workflow returns at {path}'
   ask_empty: '{path} is empty — a blank ask is nobody''s words'
   ask_missing: 'no ask on disk — the whole route runs only on the person''s own words, written to a file'
   bound: '{kind} package bound: {path}'
