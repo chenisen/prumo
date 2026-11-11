@@ -49,6 +49,7 @@ FOREIGN_RULES = (
     (r"^reports/", "a review report — it belongs to the installation that produced it"),
     (r"(^|/)runs\.jsonl$", "a run record — one installation's history"),
     (r"(^|/)\.task-review-ativo$", "run state, not source"),
+    (r"(^|/)\.prumo-deliver-ativo$", "run state, not source"),
     (r"(^|/)\.env(\.|$)", "an environment file — it carries values, not names"),
     (r"(^|/)CLAUDE\.md$", "another project's instructions to its harness"),
     (r"(^|/)settings\.local\.json$", "one machine's harness settings"),

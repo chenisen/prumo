@@ -104,7 +104,12 @@ def method_files() -> list[pathlib.Path]:
 
 
 def rule_1_no_repository_name() -> list[str]:
-    repos = sorted((d.name for d in dir_repositories().iterdir() if d.is_dir()), key=len, reverse=True)
+    # A repository is a git checkout — the same reading `setup.py` makes when it counts
+    # them. A plain directory under the root (a harness's own folder, a notes folder) is
+    # not a repository, and its name is not a coupling: until 2026-11-11 one such folder
+    # made every mention of itself in the method fail this rule, in silence about why.
+    repos = sorted((d.name for d in dir_repositories().iterdir()
+                    if d.is_dir() and (d / ".git").exists()), key=len, reverse=True)
     failures = []
     for p in method_files():
         text = p.read_text(encoding="utf-8", errors="ignore")

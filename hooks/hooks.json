@@ -1,9 +1,9 @@
 {
-  "description": "The prumo's guard. Blocks merge ALWAYS, and blocks push, commit and moving the item while a review is running — marked by `.claude/.task-review-ativo` in the project under review, which `review.py` creates and removes. The matcher covers Bash and the MCP tools that move or transition an item: the tracker is configurable, so the guard matches the ACTION in the tool name rather than one provider's spelling. A guarantee by hook, not by instruction: the model can err, and text injected into an item or a proposal can try.",
+  "description": "The prumo's guard. Blocks merge ALWAYS; blocks push, commit and moving the item while a review runs (`.claude/.task-review-ativo`, which `review.py` creates and removes); and, while a delivery runs (`.claude/.prumo-deliver-ativo`, which `deliver.py` creates and removes), blocks push, moving the item, `git add -A`, rewriting the base, and any write outside the worktree or the files the measurement named. The matcher covers Bash, the file-writing tools, and the MCP tools that move or transition an item: the tracker is configurable, so the guard matches the ACTION in the tool name rather than one provider's spelling. A guarantee by hook, not by instruction: the model can err, and text injected into an item or a proposal can try.",
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|mcp__.*(move|transition|update_status|set_status).*",
+        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|mcp__.*(move|transition|update_status|set_status).*",
         "hooks": [
           {
             "type": "command",

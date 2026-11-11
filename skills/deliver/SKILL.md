@@ -65,22 +65,26 @@ Scripts under `${CLAUDE_PLUGIN_ROOT}/scripts/`. Two commands, with the workflow 
 
 ```
 deliver.py prepare  --repo R --item C --item-file ITEM.md [--kind K] [--branch B]
-    F0 preflight    git, the suite's tool, a clean tree, the profile's delivery block
+    F0 preflight    git, the suite's tool, the profile's delivery block
     F1 resolve      remote base, SHA, the item, the kind
-    F2 measure      premises → measure.json                     [agent: premise-surveyor]
-    F3 baseline     reds on the base, by name → baseline.json
-    F4 worktree     branch <branch_format> from the base, isolated worktree, marker on
+    F4 branch       <branch_format> from the base — a worktree, or the checkout if clean
+    F3 baseline     the suite on the branch while it still IS the base; reds by name
+    marker on
 Workflow({name: 'deliver', args: {...}})                        # prepare prints it filled
-    F5 write        code and test, inside the named files        [agent: change-writer]
-    F6 prove        red on base / mutation, suite, baseline      [script]
-    F7 refute       tries to knock the proof down                [agent: proof-skeptic]
-deliver.py conclude --package P
-    F8 judge        delivered | blocked | unsupported            (pure function)
-    F9 render       the record, the short report, the next command — publishes nothing
+    F2 measure      premises, the files, the mutation → measure.json  [agent: premise-surveyor]
+                    a central premise that fails ends the workflow here
+    F5 write        the test (and, by kind, the code) inside the named files [agent: change-writer]
+    F7 refute       tries to knock the proof down                       [agent: proof-skeptic]
+deliver.py conclude --package P --measure M --written W [--refutation R]
+    F6 prove        scope guard, mutation by hand, the suite, baseline by name   [script]
+    F8 judge        delivered | blocked | unsupported                 (pure function)
+    F9 record       delivery.json, the short report, the commit, the next command
+    marker off
 ```
 
-`prepare` stops at F2 when a central premise fails, and at F3 when the suite does not
-finish on the base. `conclude` removes the marker.
+`prepare` stops when the tree is dirty, the kind is not in the profile, or the suite does
+not finish on the base. `conclude` commits only a delivery that stands; a blocked tree is
+left as it is, for a person to read.
 
 **Who executes is the script**, through the profile's allowlist (`checks.suite.command`,
 `delivery.mutation.command`). An agent runs nothing. A wrapper can swallow an exit code,

@@ -82,6 +82,7 @@ config:
     at it.'
 deliver:
   blocked:
+    baseline_not_assessable: 'no `red_name_pattern` in the profile — the baseline cannot be compared by name'
     budget_exceeded: '{files} files and {lines} lines; the profile allows {max_files} and {max_lines} — split the item or waive it'
     mutation_survived: 'the mutation at {file}:{line} left the suite green — the test does not prove the guard'
     new_red: 'new red by name: {names}'
@@ -90,6 +91,15 @@ deliver:
     suite_incomplete: 'the suite ran {executed} of {predicted} — not green'
     suite_not_run: 'the suite did not run: {reason}'
     test_not_red_on_base: '`{test}` was not red on the base — no proof'
+  cli:
+    baseline: 'baseline: {reds} red by name · {executed}/{predicted} executed'
+    branch_at: 'branch `{branch}` at {path}, cut from {base}'
+    delivery_block_draft: 'a `delivery:` draft for `{repo}` — paste it into the profile and confirm it:'
+    mutation_file_missing: '{file} is not in the tree'
+    mutation_text_missing: '{file}:{line} does not contain `{text}`'
+    then_conclude: 'Then: deliver.py conclude --package {path} --measure <file> --written <file>'
+    tree_dirty: '{path} has pending changes — somebody''s work in progress; commit or stash it first'
+    worktree_exists: '{path} already exists — a branch of that name is under way'
   next: 'next, by a person: {command}'
   not_assessable:
     no_delivery_block: 'profile `{repo}` has no `delivery:` block — run `{command}` and confirm it'

@@ -41,6 +41,9 @@ def authorise(command: str, profile: dict) -> tuple[bool, str]:
     if COMPOSITION.search(command):
         return False, t("evidence.shell_composition")
     allowed = {(c or {}).get("command") for c in (profile.get("checks") or {}).values()}
+    # A delivery's mutation command is part of the same allowlist: declared in the
+    # profile, run by the script, never composed.
+    allowed.add(((profile.get("delivery") or {}).get("mutation") or {}).get("command"))
     allowed.discard(None)
     if command not in allowed:
         return False, t("evidence.not_in_allowlist")
@@ -95,6 +98,51 @@ def read_suite(result: dict, check: dict) -> tuple[str, str]:
     if baseline:
         return "red_not_attributable", t("evidence.red_with_baseline", baseline=baseline)
     return "red_attributable", t("evidence.red_no_baseline")
+
+
+def red_names(output: str, pattern: str | None) -> list[str] | None:
+    """The reds, by NAME, read from the output through the profile's pattern. No pattern
+    means no names — `None`, not an empty list: an empty list says "nothing is red", and
+    that is a claim nobody measured."""
+    if not pattern:
+        return None
+    try:
+        names = re.findall(pattern, output or "")
+    except re.error:
+        return None
+    return sorted({(n[0] if isinstance(n, tuple) else n) for n in names})
+
+
+def progress(output: str, pattern: str | None) -> tuple[int | None, int | None]:
+    """(executed, predicted) from the output's last progress line, or (None, None)."""
+    if not pattern:
+        return None, None
+    try:
+        found = re.findall(pattern, output or "")
+    except re.error:
+        return None, None
+    if not found or len(found[-1]) != 2:
+        return None, None
+    executed, predicted = found[-1]
+    return int(executed), int(predicted)
+
+
+def compare_reds(base_output: str, branch_output: str, check: dict) -> dict:
+    """The baseline, compared by name and never by count. `new_reds` is what the branch
+    turned red; `vanished_reds` is what it turned green, recorded and never charged.
+    Without a name pattern both are `None` — declared, not guessed — and the progress
+    line is read on its own, because a suite that did not finish is not green whatever
+    its names say."""
+    base = red_names(base_output, check.get("red_name_pattern"))
+    branch = red_names(branch_output, check.get("red_name_pattern"))
+    executed, predicted = progress(branch_output, check.get("progress_pattern"))
+    if base is None or branch is None:
+        return {"base_reds": base, "branch_reds": branch, "new_reds": None,
+                "vanished_reds": None, "executed": executed, "predicted": predicted}
+    return {"base_reds": base, "branch_reds": branch,
+            "new_reds": sorted(set(branch) - set(base)),
+            "vanished_reds": sorted(set(base) - set(branch)),
+            "executed": executed, "predicted": predicted}
 
 
 def main() -> int:

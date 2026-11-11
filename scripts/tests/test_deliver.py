@@ -46,7 +46,8 @@ def record(**override):
     return base
 
 
-PROFILE = {"delivery": {"kinds": ["coverage-gap"],
+PROFILE = {"profile": "repo-x",
+           "delivery": {"kinds": ["coverage-gap"],
                         "budget": {"max_files": 4, "max_lines": 120}}}
 
 

@@ -198,6 +198,27 @@ def derive(repo: str, repo_dir: pathlib.Path) -> tuple[dict, list[str]]:
     return profile, pending
 
 
+def delivery_draft(repo_dir: pathlib.Path, profile: dict) -> dict:
+    """The `delivery:` block, drafted from what the tree shows. Nothing here is a
+    default the capability would fall back on: the block is handed to a person, who
+    confirms it into the profile — or the capability stays `not_assessable`."""
+    fam = detect_family(repo_dir)
+    tests = [p.split("/**")[0].rstrip("/") for p in existing(repo_dir, fam.get("tests") or [])]
+    sources = [d.name for d in repo_dir.iterdir()
+               if d.is_dir() and d.name in ("app", "src", "lib", "pkg", "internal")]
+    return {
+        "branch_format": "{item}-{slug}",
+        "commit_format": "{item} - {message}",
+        "worktree": False,
+        "budget": {"max_files": 4, "max_lines": 120},
+        "source_roots": sources or ["<fill in>"],
+        "test_roots": tests or ["<fill in>"],
+        "mutation": {"command": None,
+                     "note": "null: the script edits the named line, runs the suite, reverts"},
+        "kinds": ["coverage-gap"],
+    }
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("repos", nargs="*")
@@ -205,7 +226,21 @@ def main() -> int:
     p.add_argument("--output", default=None)  # resolved later, once the config is loaded
     p.add_argument("--force", action="store_true",
                    help="overwrite an existing profile (without this, a confirmed one is refused)")
+    p.add_argument("--delivery", action="store_true",
+                   help="print a `delivery:` block draft for the profile, instead of a profile")
     args = p.parse_args()
+
+    if args.delivery:
+        from common import load_profile
+        for repo in args.repos:
+            repo_dir = dir_repositories() / repo
+            if not repo_dir.is_dir():
+                print("✗ " + t("preflight.repo_missing", repo=repo, root=dir_repositories()))
+                continue
+            print(t("deliver.cli.delivery_block_draft", repo=repo))
+            print(yaml.safe_dump({"delivery": delivery_draft(repo_dir, load_profile(repo))},
+                                 allow_unicode=True, sort_keys=False, width=100))
+        return 0
 
     targets = args.repos
     if args.all:
