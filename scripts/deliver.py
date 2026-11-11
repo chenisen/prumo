@@ -379,7 +379,27 @@ def prepare(args) -> int:
     package = pathlib.Path(args.package or (dir_packages() / f"{args.repo}-deliver-{int(time.time())}"))
     package.mkdir(parents=True, exist_ok=True)
     fix = pathlib.Path(args.fix) if getattr(args, "fix", None) else None
-    if fix:
+    story = pathlib.Path(args.story) if getattr(args, "story", None) else None
+    task = None
+    if story:
+        # A task of a story is a delivery of its own: its item is the task as the design
+        # wrote it, its branch the story's, its base that branch's head, its shape a bug's
+        # — reproduce, no gate, because the person approved the whole plan already.
+        design = read_json(story / "design.json")
+        task = next((x for x in design.get("tasks") or [] if x["id"] == args.task), None)
+        if task is None:
+            raise UsageError(t("deliver.cli.story_task_missing", task=args.task, path=story))
+        story_man = read_json(story / "deliver-manifest.json")
+        args.item = f"{story_man['item']['id']}-{task['id']}"
+        args.kind = args.kind or "behaviour-change"
+        args.shape = "bug"
+        args.branch = story_man["branch"]["name"]
+        text = [f"# {task['title']}", "", f"Task {task['id']} of {story_man['item']['id']} — {design.get('summary', '')}", ""]
+        text += [f"- {c}" for c in task["criteria"]]
+        text += ["", f"files: {', '.join(task['files'])}", f"proving tests: {', '.join(task['proving_tests'])}"]
+        (package / "item.md").write_text("\n".join(text) + "\n", encoding="utf-8")
+        write_json(package / "task.json", {"story": str(story), **task})
+    elif fix:
         # A fix delivers the routes a review opened, on the review's own branch: the
         # item is written from the findings, and the base is that branch's head, so the
         # red before the green is measured against what the review read.
@@ -414,7 +434,22 @@ def prepare(args) -> int:
         raise UsageError(str(e))
     rules = SHAPES[shape]
     if not rules["deliverable"]:
-        raise UsageError(t("deliver.cli.shape_not_deliverable", shape=shape))
+        # An epic is cut into stories and stops there: no branch, no suite, no marker.
+        shutil.copy2(profile_path(args.repo), package / "profile.yml")
+        manifest = {"repo": args.repo, "item": {"id": args.item, "kind": "none", "source": "tracker"},
+                    "shape": shape, "plan_depth": rules["plan"], "gate": rules["gate"],
+                    "budget": budget_for(block, shape), "deliverable": False}
+        write_json(package / "deliver-manifest.json", manifest)
+        write_json(package / "workflow-args.json", {
+            "package": str(package), "repo": args.repo, "item": manifest["item"],
+            "shape": shape, "plan_depth": rules["plan"], "delivery": block,
+            "conventions": list(profile.get("conventions") or []),
+            "agent_prefix": _agent_prefix(),
+            "inline": {"item.md": (package / "item.md").read_text(encoding="utf-8")}})
+        print("\n" + t("review.package_ready", path=package))
+        print("Workflow({name: 'deliver', args: <the object in " + str(package / "workflow-args.json") + "> + stage: 'design'})")
+        print(f"deliver.py plan --package {package} --design <the design it returned>")
+        return 0
     kind = args.kind or (rules["kinds"][0] if rules["kinds"] else "coverage-gap")
     if kind not in rules["kinds"]:
         raise UsageError(t("deliver.cli.kind_not_for_shape", kind=kind, shape=shape,
@@ -444,13 +479,19 @@ def prepare(args) -> int:
         if not base_sha:
             raise UsageError(t("resolver.branch_unresolved", branch=hotfix_base))
         base_name = hotfix_base
+    if story:
+        # the story's branch exists since the story's own prepare; its head is the base
+        base_sha = git(repo_dir, "rev-parse", "--verify", "-q", name, check=False)
+        if not base_sha:
+            raise UsageError(t("resolver.branch_unresolved", branch=name))
+        base_name = name
     if fix:
         base_sha = (git(repo_dir, "rev-parse", "--verify", "-q", name, check=False)
                     or git(repo_dir, "rev-parse", "--verify", "-q", f"origin/{name}", check=False))
         if not base_sha:
             raise UsageError(t("resolver.branch_unresolved", branch=name))
         base_name = name
-    workdir = cut_branch(repo_dir, block, name, base_sha, fresh=not fix)
+    workdir = cut_branch(repo_dir, block, name, base_sha, fresh=not (fix or story))
 
     # F3 — the baseline, by name, on the branch while it still IS the base.
     from evidence import compare_reds
@@ -483,6 +524,7 @@ def prepare(args) -> int:
         "package": str(package), "repo": args.repo, "item": manifest["item"],
         "shape": shape, "plan_depth": rules["plan"],
         "workdir": str(workdir), "delivery": block,
+        "task": task,
         # The repository's own conventions, as pointers: the writer reads them before
         # the first line, the way the reviewers read them before judging style.
         "conventions": list(profile.get("conventions") or []),
@@ -536,21 +578,111 @@ def render_plan(man: dict, measure: dict) -> str:
     return "\n".join(lines)
 
 
+def render_design(man: dict, design: dict) -> str:
+    L = lambda key: t(f"deliver.report.{key}")  # noqa: E731
+    rules = SHAPES[man["shape"]]
+    lines = [f"{L('plan'):9}{man['item']['id']} · {man['shape']} · {man['plan_depth']}"
+             + (f" · {t('deliver.report.gate_pending')}" if rules["gate"] else ""),
+             f"{'':9}{design.get('summary', '')}"]
+    if man.get("deliverable", True):
+        lines.append(f"{L('base'):9}{man['base']['name']}@{man['base']['sha'][:7]}   "
+                     f"{L('branch')} {man['branch']['name']}")
+    lines.append(f"{'':9}budget {man['budget']['max_files']} files · {man['budget']['max_lines']} lines"
+                 + (" · over every task" if design.get("tasks") else ""))
+    for x in design.get("tasks") or []:
+        lines += ["", f"{x['id']}  {x['title']}"
+                      + (f"  ← {', '.join(x['depends_on'])}" if x.get("depends_on") else "")]
+        lines += [f"  ✔ {c}" for c in x["criteria"]]
+        lines.append(f"  files: {', '.join(x['files'])}")
+        lines.append(f"  red on base, green after: {', '.join(x['proving_tests'])}")
+    for st in design.get("stories") or []:
+        lines += ["", f"story  {st['title']}"]
+        lines += [f"  ✔ {c}" for c in st["criteria"]]
+        lines.append(f"  not: {st['out_of_scope']}")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def plan(args) -> int:
     package = pathlib.Path(args.package)
     man = read_json(package / "deliver-manifest.json")
-    measure = read_json(pathlib.Path(args.measure))
-    write_json(package / "measure.json", measure)
     rules = SHAPES[man["shape"]]
+    import jsonschema
+    if getattr(args, "design", None):
+        design = read_json(pathlib.Path(args.design))
+        jsonschema.validate(design, read_json(ROOT.parent / "schemas" / "design.schema.json"))
+        write_json(package / "design.json", design)
+        subject, text = design, render_design(man, design)
+    else:
+        measure = read_json(pathlib.Path(args.measure))
+        write_json(package / "measure.json", measure)
+        subject, text = measure, render_plan(man, measure)
     record = {"shape": man["shape"], "depth": man["plan_depth"], "gate": rules["gate"],
-              "digest": digest(measure), "rendered_at": today()}
+              "digest": digest(subject), "rendered_at": today()}
     write_json(package / "plan.json", record)
-    (package / "plan.md").write_text(render_plan(man, measure), encoding="utf-8")
+    (package / "plan.md").write_text(text, encoding="utf-8")
     print((package / "plan.md").read_text(encoding="utf-8"))
     print(t("deliver.cli.plan_at", path=package / "plan.md", shape=man["shape"],
             depth=man["plan_depth"],
             gate=t("deliver.cli.plan_gate") if rules["gate"] else t("deliver.cli.plan_no_gate")))
     return 0
+
+
+def story_status(args) -> int:
+    """The story's record, from its tasks' records: delivered when every task is and
+    the sum of their diffs sits inside the story's budget; blocked otherwise, naming
+    the next task. Written as `delivery.json` so the route and the review read one
+    record per branch."""
+    package = pathlib.Path(args.package)
+    man = read_json(package / "deliver-manifest.json")
+    design = read_json(package / "design.json")
+    tasks = design.get("tasks") or []
+    records = {}
+    for x in tasks:
+        path = package / "tasks" / x["id"] / "delivery.json"
+        if path.exists():
+            records[x["id"]] = read_json(path)
+    done = [x["id"] for x in tasks if records.get(x["id"], {}).get("state") == "delivered"]
+    pending = [x for x in tasks if x["id"] not in done]
+    files = sorted({f for r in records.values() for f in r["diff"]["files"]})
+    lines = sum(r["diff"]["added"] + r["diff"]["removed"] for r in records.values())
+    budget = man["budget"]
+    state, reason, owner = DELIVERED, t("deliver.state.delivered"), None
+    if pending:
+        nxt = pending[0]["id"]
+        state = BLOCKED
+        bad = next((x["id"] for x in pending if records.get(x["id"], {}).get("state") in (BLOCKED, UNSUPPORTED)), None)
+        reason = (records[bad]["reason"] if bad else
+                  t("deliver.cli.story_tasks_pending", done=len(done), total=len(tasks), task=nxt))
+        owner = records[bad]["owner"] if bad else "author"
+    elif len(files) > budget["max_files"] or lines > budget["max_lines"]:
+        state, owner = BLOCKED, "person"
+        reason = t("deliver.cli.story_budget", lines=lines, files=len(files),
+                   max_lines=budget["max_lines"], max_files=budget["max_files"])
+    head = git(dir_repositories() / man["repo"], "rev-parse", "--verify", "-q", man["branch"]["name"], check=False) or man["branch"]["sha"]
+    record = {"repo": man["repo"], "item": man["item"], "base": man["base"],
+              "branch": {"name": man["branch"]["name"], "sha": head},
+              "premises": [], "lint": {"state": "not_run", "reason": t("review.suite_not_run")},
+              "plan": {"shape": man["shape"], "depth": man["plan_depth"], "gate": SHAPES[man["shape"]]["gate"],
+                       "approved_by": approval_of(package), "budget": budget},
+              "proof": {"red_on_base": None, "green_on_branch": None, "mutations": [], "guarding": None,
+                        "refutation": None},
+              "baseline": {"base_reds": [], "branch_reds": None, "new_reds": None, "vanished_reds": None,
+                           "predicted": None, "executed": None},
+              "diff": {"files": files, "added": lines, "removed": 0, "outside_scope": [],
+                       "within_budget": len(files) <= budget["max_files"] and lines <= budget["max_lines"]},
+              "skipped": [s for r in records.values() for s in r.get("skipped") or []],
+              "waiver": None, "state": state, "reason": reason, "owner": owner,
+              "next": NEXT.format(repo=man["repo"], branch=man["branch"]["name"], item=man["item"]["id"]),
+              "tasks": {x["id"]: records.get(x["id"], {}).get("state", "pending") for x in tasks}}
+    write_json(package / "delivery.json", record)
+    print(f"{t('deliver.report.item'):9}{man['item']['id']} · story · {t('deliver.state.' + state)}")
+    for x in tasks:
+        print(f"  {SYMBOL.get({'delivered': 'holds', 'blocked': 'fails'}.get(record['tasks'][x['id']], 'not_assessable'))} {x['id']}  {x['title']}  {record['tasks'][x['id']]}")
+    if state != DELIVERED:
+        print(f"{'':9}{reason}")
+    print(f"{t('deliver.report.next'):9}{record['next']}")
+    return 0 if state == DELIVERED else 1
 
 
 def approve(args) -> int:
@@ -701,8 +833,14 @@ def conclude(args) -> int:
             with with_base_versions(workdir, man["base"]["sha"], production):
                 r = run_suite(profile, workdir, package, "base-with-test")
             on_base = red_names(r.get("output", ""), check.get("red_name_pattern")) or []
+            # A test file that cannot even load against the base — it imports what the
+            # change adds — is reported by the runner under the file's name, not the
+            # test's. That is red on the base too: the module's name stands for its tests.
+            modules = [pathlib.Path(f).stem for f in files
+                       if casa_algum(f, [r_.rstrip("/") + "/**" for r_ in block["test_roots"]])]
             red_on_base = {"test": ", ".join(proving),
-                           "result": ("red" if all(any(p in name for name in on_base) for p in proving)
+                           "result": ("red" if all(any(p in name or any(m == name or name.endswith("." + m) or name.endswith("\\" + m) for m in modules)
+                                                           for name in on_base) for p in proving)
                                       else "green") if r.get("ran") else "not_run"}
         suite = run_suite(profile, workdir, package, "branch")
         suite_out = suite.get("output", "")
@@ -871,10 +1009,15 @@ def main() -> int:
     a.add_argument("--package")
     a.add_argument("--fix", help="a review package whose author_fix routes become the item")
     a.add_argument("--shape", choices=sorted(SHAPES), help="the item's shape; or --type")
+    a.add_argument("--story", help="a story's package: the item is one of its tasks")
+    a.add_argument("--task", help="the task id in that story's design")
     a.add_argument("--type", help="the tracker's type name, mapped by prumo.yml `tracker.shapes`")
     pl = sub.add_parser("plan")
     pl.add_argument("--package", required=True)
-    pl.add_argument("--measure", required=True)
+    pl.add_argument("--measure", help="the measure stage's return, for a measured plan")
+    pl.add_argument("--design", help="the design stage's return, for a story or an epic")
+    st = sub.add_parser("story")
+    st.add_argument("--package", required=True)
     ap = sub.add_parser("approve")
     ap.add_argument("--package", required=True)
     ap.add_argument("--by")
@@ -887,13 +1030,17 @@ def main() -> int:
     args = p.parse_args()
     try:
         if args.command == "prepare":
-            if not args.fix and not (args.item and args.item_file):
-                p.error("--item and --item-file, or --fix")
+            if not args.fix and not args.story and not (args.item and args.item_file):
+                p.error("--item and --item-file, or --fix, or --story with --task")
             return prepare(args)
         if args.command == "conclude":
             return conclude(args)
         if args.command == "plan":
+            if not (args.measure or args.design):
+                p.error("--measure or --design")
             return plan(args)
+        if args.command == "story":
+            return story_status(args)
         if args.command == "approve":
             return approve(args)
         unmark()

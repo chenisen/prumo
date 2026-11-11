@@ -48,10 +48,10 @@ what is judgement.
 | | |
 |---|---|
 | **22 Python scripts** | Resolve the base, assemble the package, triage the risk, judge; cut the branch, prove by mutation, hand over. No dependency beyond `yaml` and `jsonschema`. Both judges are pure functions: same input, same answer. |
-| **13 agents** | One question each. Ten read-only for the review — seven reviewers of one axis, a criteria extractor, a manual-verification planner, and a **sceptical verifier** that tries to *refute* every finding without having seen the reasoning behind it. Three for the delivery — a surveyor that measures, a writer with no shell, and a **sceptic** that never saw the writer. |
+| **14 agents** | One question each. Ten read-only for the review — seven reviewers of one axis, a criteria extractor, a manual-verification planner, and a **sceptical verifier** that tries to *refute* every finding without having seen the reasoning behind it. Four for the delivery — a surveyor that measures, a writer with no shell, a **sceptic** that never saw the writer, and a planner that cuts a story into tasks. |
 | **3 knowledge skills** | What the reviewers load to read a diff: five axes, OWASP/ASVS, personal data. Neutral of language, framework and project. |
 | **18 risk classes** | A guardrail has three states — `fired`, `did_not_fire`, `not_assessable`. |
-| **2 message catalogues** | 464 keys each. Everything a person reads, in the configured language. |
+| **2 message catalogues** | 468 keys each. Everything a person reads, in the configured language. |
 
 Three rules govern everything, and each has a test that fails when it is broken:
 
@@ -94,10 +94,10 @@ prumo/
 │   ├── agnosticism_check.py     fails the method when it names a technology
 │   ├── hygiene.py               fails a secret, or a rule that is not the prumo's own
 │   ├── setup.py                 writes a prumo.yml: asks five things, measures the rest
-│   └── tests/                   534 tests
+│   └── tests/                   541 tests
 │
-├── agents/                      THE LEAVES — 13 prompts: 10 read-only reviewers, a surveyor,
-│                                a writer with no shell, a sceptic
+├── agents/                      THE LEAVES — 14 prompts: 10 read-only reviewers, a surveyor,
+│                                a writer with no shell, a sceptic, a planner
 ├── skills/
 │   ├── task-review/SKILL.md     what Claude Code loads as `/prumo:task-review`
 │   ├── deliver/SKILL.md         the delivery's eleven rules and its sequence
@@ -117,7 +117,7 @@ prumo/
 │
 ├── messages/{en,pt-BR}.yml      every user-facing string
 ├── schemas/                     finding, criterion, triaged-class, verdict,
-│                                manual-script, the delivery record, and the profile contract
+│                                manual-script, the delivery record, the design, and the profile contract
 ├── templates/                   report and the three comments
 ├── reference/                   the 18 classes, the delivery kinds, the shapes, publication, playbooks, CI
 └── prumo.yml.example            the installation contract, commented
@@ -459,6 +459,13 @@ person approves it first, which kinds may deliver it, how much diff it buys and 
 hard the review reads it (`reference/shapes.md`). The plan is a file, rendered from
 the measurement; the approval is a file, written by `/prumo:approve`, closed to the
 model; the guard refuses every write while a required approval is missing.
+
+**A story is cut, then delivered task by task; an epic is cut and stops.** The
+`task-planner` returns the tasks — files, falsifiable criteria, proving tests, what each
+builds on — the person approves the plan, and each task is a delivery of its own on the
+story's branch, its base the branch's head; the story's record sums them inside the
+shape's budget and the branch is reviewed once. An epic's plan holds the stories it
+decomposes into, for a person to open; nothing is delivered from it.
 
 **Who writes does not approve.** `deliver` ends where `task-review` begins, and the two
 never share a context. The writer has no shell; the suite, the mutation and the baseline

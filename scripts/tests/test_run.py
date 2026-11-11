@@ -233,3 +233,103 @@ class TestTheRouteOverRealPackages(unittest.TestCase):
         self.assertIn(stop["class"], ("approved", "intervention"))
         log = (pkg / "orchestration.md").read_text(encoding="utf-8").splitlines()
         self.assertTrue(log[-1].startswith(("stop:", "parada:")), log[-1])
+
+
+class TestAStoryAndAnEpicAreRouted(unittest.TestCase):
+    """A story is designed, approved, delivered task by task on one branch, judged as
+    a whole and reviewed once; an epic is designed and stops. Every step is read from
+    what the packages hold."""
+
+    def setUp(self):
+        import json, tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        (self.root / "item.md").write_text("# s\n", encoding="utf-8")
+        self.d = self.root / "d"; self.d.mkdir()
+        self.r = self.root / "r"; self.r.mkdir()
+        self.run = {"repo": "repo-x", "item": "S-1", "deliver_package": str(self.d),
+                    "review_package": str(self.r), "shape": "story"}
+        self.json = json
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def put(self, where, name, data):
+        where.mkdir(parents=True, exist_ok=True)
+        (where / name).write_text(self.json.dumps(data), encoding="utf-8")
+
+    def decide(self):
+        from run import decide
+        return decide(self.run, self.root)
+
+    def story(self, gate_ok=True):
+        self.put(self.d, "deliver-manifest.json", {"shape": "story", "deliverable": True,
+                                                   "branch": {"name": "S-1-b"}, "item": {"id": "S-1"}})
+        self.put(self.d, "design.json", {"summary": "s", "stories": [], "checked": [],
+                                         "tasks": [{"id": "T1", "title": "a", "criteria": ["c"], "files": ["f"],
+                                                    "proving_tests": ["t"], "depends_on": []},
+                                                   {"id": "T2", "title": "b", "criteria": ["c"], "files": ["g"],
+                                                    "proving_tests": ["u"], "depends_on": ["T1"]}]})
+        self.put(self.d, "plan.json", {"gate": True, "digest": "d1"})
+        if gate_ok:
+            self.put(self.d, "approval.json", {"by": "x", "digest": "d1"})
+
+    def test_a_story_is_designed_then_planned_then_approved(self):
+        self.put(self.d, "deliver-manifest.json", {"shape": "story", "deliverable": True})
+        self.assertIn("stage: 'design'", self.decide()["text"])
+        self.put(self.d, "design.json", {"summary": "s", "tasks": [], "stories": [], "checked": []})
+        self.assertTrue(self.decide()["text"].startswith("deliver.py plan") and "--design" in self.decide()["text"])
+        self.story(gate_ok=False)
+        self.assertEqual(self.decide()["class"], "plan")
+
+    def test_the_tasks_are_prepared_in_the_design_s_order_under_the_story(self):
+        self.story()
+        out = self.decide()["text"]
+        self.assertTrue(out.startswith(f"deliver.py prepare --repo repo-x --story {self.d} --task T1"), out)
+        self.assertIn(f"--package {self.d / 'tasks' / 'T1'}", out)
+        self.put(self.d / "tasks" / "T1", "deliver-manifest.json", {"shape": "bug", "item": {"id": "S-1-T1"}})
+        self.put(self.d / "tasks" / "T1", "delivery.json", {"state": "delivered", "branch": {"name": "S-1-b"}})
+        self.assertIn("--task T2", self.decide()["text"])
+
+    def test_a_task_in_progress_is_walked_like_any_delivery(self):
+        self.story()
+        self.put(self.d / "tasks" / "T1", "deliver-manifest.json", {"shape": "bug"})
+        self.assertIn("stage: 'measure'", self.decide()["text"])
+        self.put(self.d / "tasks" / "T1", "measure.json", {"premises": []})
+        self.put(self.d / "tasks" / "T1", "plan.json", {"gate": False, "digest": "x"})
+        self.assertIn("stage: 'write'", self.decide()["text"])
+
+    def test_a_blocked_task_stops_the_story_naming_it(self):
+        self.story()
+        self.put(self.d / "tasks" / "T1", "deliver-manifest.json", {"shape": "bug"})
+        self.put(self.d / "tasks" / "T1", "delivery.json", {"state": "blocked", "reason": "new red",
+                                                             "branch": {"name": "S-1-b"}})
+        out = self.decide()
+        self.assertEqual((out["kind"], out["class"]), ("stop", "blocked"))
+        self.assertIn("T1", out["text"])
+
+    def test_every_task_delivered_asks_for_the_story_s_record_then_the_review(self):
+        self.story()
+        for t_ in ("T1", "T2"):
+            self.put(self.d / "tasks" / t_, "deliver-manifest.json", {"shape": "bug"})
+            self.put(self.d / "tasks" / t_, "delivery.json", {"state": "delivered", "branch": {"name": "S-1-b"}})
+        self.assertTrue(self.decide()["text"].startswith(f"deliver.py story --package {self.d}"))
+        self.put(self.d, "delivery.json", {"state": "delivered", "branch": {"name": "S-1-b"},
+                                           "tasks": {"T1": "delivered", "T2": "delivered"}})
+        self.assertTrue(self.decide()["text"].startswith("review.py prepare --repo repo-x --branch S-1-b --item S-1"))
+        self.put(self.r, "manifest.json", {})
+        self.put(self.r, "verdict.json", {"verdict": "APPROVED"})
+        self.assertEqual(self.decide()["class"], "approved")
+
+    def test_an_epic_is_decomposed_and_stops(self):
+        self.run["shape"] = "epic"
+        self.put(self.d, "deliver-manifest.json", {"shape": "epic", "deliverable": False})
+        self.assertIn("stage: 'design'", self.decide()["text"])
+        self.put(self.d, "design.json", {"summary": "e", "tasks": [], "checked": [],
+                                         "stories": [{"title": "s1", "criteria": ["c"], "out_of_scope": "x"}]})
+        self.put(self.d, "plan.json", {"gate": True, "digest": "d1"})
+        self.assertEqual(self.decide()["class"], "plan")
+        self.put(self.d, "approval.json", {"by": "x", "digest": "d1"})
+        out = self.decide()
+        self.assertEqual((out["kind"], out["class"]), ("stop", "decomposed"))
+        self.assertIn("plan.md", out["text"])

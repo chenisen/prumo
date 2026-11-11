@@ -12,6 +12,11 @@ One item, the whole route, no question in the middle. Then it stops.
 ```
 deliver.py prepare → Workflow deliver (measure) → deliver.py plan → [a person approves] → Workflow deliver (write) → deliver.py conclude
 → review.py prepare → Workflow task-review → review.py conclude → stop
+
+a story:  prepare → Workflow deliver (design) → deliver.py plan --design → [a person approves]
+          → for each task, in order: prepare --story --task → measure → plan → write → conclude
+          → deliver.py story → the review of the branch, once → stop
+an epic:  prepare → Workflow deliver (design) → deliver.py plan --design → [a person approves] → stop: decomposed
 ```
 
 **This skill is closed to the model.** Only a person types it, so the ask it receives is
@@ -47,6 +52,7 @@ to `<package>/measure.json`, `written.json`, `refutation.json` and `findings.jso
 | Class | When |
 |---|---|
 | `ask` | no ask on disk, or an empty one — before anything |
+| `decomposed` | an epic: the plan holds its stories, for a person to open as items; nothing is delivered |
 | `plan` | the shape asks a person's approval of the plan and has none that matches the measurement as it stands — `/prumo:approve <package>`, then `next` again |
 | `blocked` | the delivery stopped: a central premise fails, a new red, a mutation that survived, a line outside the scope, the budget |
 | `unsupported` | the kind is not in the profile |

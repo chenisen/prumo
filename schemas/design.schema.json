@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "A design — the tasks a story decomposes into, or the stories an epic does",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["summary", "tasks", "stories", "checked"],
+  "properties": {
+    "summary": {"type": "string"},
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "title", "criteria", "files", "proving_tests", "depends_on"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"},
+          "title": {"type": "string", "minLength": 1},
+          "criteria": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "files": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "proving_tests": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "depends_on": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "stories": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["title", "criteria", "out_of_scope"],
+        "properties": {"title": {"type": "string", "minLength": 1},
+                       "criteria": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+                       "out_of_scope": {"type": "string"}}
+      }
+    },
+    "checked": {"type": "array", "items": {"type": "string"}}
+  }
+}

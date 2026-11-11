@@ -34,7 +34,7 @@ AGENTS = ["criteria-extractor", "scope-coherence-reviewer", "correctness-proof-r
           "domain-rules-reviewer", "contract-compat-reviewer", "security-privacy-reviewer",
           "architecture-reviewer", "performance-ops-reviewer", "finding-verifier",
           "manual-verification-planner",
-          "premise-surveyor", "change-writer", "proof-skeptic"]
+          "premise-surveyor", "change-writer", "proof-skeptic", "task-planner"]
 
 # Patterns that give coupling away. A repository name is discovered from disk, never
 # written here. The UNIVERSAL ones hold in any installation: they name technology, not a

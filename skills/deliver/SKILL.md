@@ -145,6 +145,27 @@ blocks); and, for a `behaviour-change`, the **red on the base** — the base's p
 files restored under the new test, the proving tests required red, the writer's files
 put back, the suite run again and required green.
 
+## A story, an epic
+
+A `story` is cut before it is measured: the `design` stage of the workflow runs the
+`task-planner`, which returns the tasks — each with its files, its falsifiable criteria,
+its proving tests and what it builds on — and `deliver.py plan --design` renders them
+as the plan a person approves. Then each task is a delivery of its own:
+
+```
+deliver.py prepare --repo R --story <story package> --task T1 --package <story package>/tasks/T1
+```
+
+Its item is the task as the design wrote it, its shape a bug's — reproduce, no gate,
+because the person approved the whole plan — its branch the story's, its base that
+branch's head. The surveyor confirms the design's files and proving tests against the
+code and replaces nothing. When every task is delivered, `deliver.py story --package
+<story package>` writes the story's own record from its tasks' — delivered when all
+are, inside the shape's budget over every task — and the branch goes to the review once.
+
+An `epic` is designed and never cut: no branch, no suite, no marker. Its plan holds the
+stories it decomposes into, each an item for the tracker, and the plan is where it ends.
+
 ## A fix
 
 ```

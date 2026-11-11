@@ -460,6 +460,18 @@
           }
         }
       }
+    },
+    "tasks": {
+      "type": "object",
+      "description": "a story's record only: each task's state",
+      "additionalProperties": {
+        "enum": [
+          "pending",
+          "delivered",
+          "blocked",
+          "unsupported"
+        ]
+      }
     }
   },
   "$defs": {

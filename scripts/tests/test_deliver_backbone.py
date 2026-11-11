@@ -360,9 +360,89 @@ class Spine(unittest.TestCase):
         self.assertEqual((rec["state"], rec["owner"]), ("blocked", "person"))
         self.assertFalse((package / "run-suite-branch.txt").exists())
 
-    def test_an_epic_is_not_delivered(self):
-        with self.assertRaises(common.UsageError):
-            self.prepare(shape="epic")
+    def test_an_epic_is_designed_and_never_cut(self):
+        """No branch, no suite, no marker: an epic becomes stories in a plan, and the
+        plan is where it ends."""
+        import contextlib, io
+        package = self.prepare(shape="epic")
+        man = json.loads((package / "deliver-manifest.json").read_text(encoding="utf-8"))
+        self.assertFalse(man["deliverable"])
+        self.assertFalse(deliver.marker().exists())
+        head = subprocess.run(("git", "branch", "--show-current"), cwd=self.repo,
+                              capture_output=True, text=True).stdout.strip()
+        self.assertEqual(head, "main", "no branch was cut for an epic")
+        design = {"summary": "two stories", "tasks": [], "checked": [],
+                  "stories": [{"title": "refuse ten", "criteria": ["ten is refused"], "out_of_scope": "nine"},
+                              {"title": "refuse nine", "criteria": ["nine is refused"], "out_of_scope": "eight"}]}
+        (package / "design.json.in").write_text(json.dumps(design), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            deliver.plan(argparse.Namespace(package=str(package), measure=None, design=str(package / "design.json.in")))
+        text = (package / "plan.md").read_text(encoding="utf-8")
+        self.assertIn("story  refuse ten", text); self.assertIn("not: eight", text)
+        self.assertTrue(json.loads((package / "plan.json").read_text())["gate"])
+
+    def test_a_story_is_delivered_task_by_task_on_one_branch_and_judged_as_a_whole(self):
+        """Two tasks, the second building on the first: each is a child delivery with
+        its own measure, proof and commit on the story's branch, its base the branch's
+        head; the story's record sums them inside the shape's budget."""
+        import contextlib, io
+        (self.repo / "src" / "a.py").write_text(BUGGY, encoding="utf-8")
+        git(self.repo, "add", "-A"); git(self.repo, "commit", "-q", "-m", "buggy base")
+        story = self.prepare(kind="behaviour-change", shape="story")
+        man = json.loads((story / "deliver-manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(man["budget"], {"max_files": 6, "max_lines": 180})
+        design = {"summary": "a limit, then the guard uses it", "stories": [], "checked": [],
+                  "tasks": [{"id": "T1", "title": "a limit module", "criteria": ["limit() is 10"],
+                             "files": ["src/b.py", "tests/test_b.py"], "proving_tests": ["test_limit_is_ten"],
+                             "depends_on": []},
+                            {"id": "T2", "title": "the guard refuses the limit", "criteria": ["ten is refused"],
+                             "files": ["src/a.py", "tests/test_guard.py"], "proving_tests": ["test_guard_refuses"],
+                             "depends_on": ["T1"]}]}
+        (story / "design.in").write_text(json.dumps(design), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            deliver.plan(argparse.Namespace(package=str(story), measure=None, design=str(story / "design.in")))
+            deliver.approve(argparse.Namespace(package=str(story), by="someone"))
+        branch = man["branch"]["name"]
+
+        def child(task_id, writes, measure):
+            pkg = story / "tasks" / task_id
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(deliver.prepare(argparse.Namespace(
+                    repo="repo-x", item=None, item_file=None, kind=None, branch=None, package=str(pkg),
+                    fix=None, shape=None, type=None, story=str(story), task=task_id)), 0)
+            cm = json.loads((pkg / "deliver-manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual((cm["shape"], cm["branch"]["name"], cm["base"]["name"]), ("bug", branch, branch))
+            for path, text in writes.items():
+                (self.repo / path).parent.mkdir(parents=True, exist_ok=True)
+                (self.repo / path).write_text(text, encoding="utf-8")
+            (pkg / "m.json").write_text(json.dumps(measure), encoding="utf-8")
+            (pkg / "w.json").write_text(json.dumps({"files": list(writes), "skipped": []}), encoding="utf-8")
+            with contextlib.redirect_stdout(io.StringIO()):
+                deliver.plan(argparse.Namespace(package=str(pkg), measure=str(pkg / "m.json"), design=None))
+                deliver.conclude(argparse.Namespace(package=str(pkg), measure=str(pkg / "m.json"),
+                                                    written=str(pkg / "w.json"), refutation=None))
+            return json.loads((pkg / "delivery.json").read_text(encoding="utf-8"))
+
+        t1 = child("T1", {"src/b.py": "def limit():\n    return 10\n",
+                          "tests/test_b.py": "import sys, unittest\nsys.path.insert(0, 'src')\nfrom b import limit\n\nclass B(unittest.TestCase):\n    def test_limit_is_ten(self):\n        self.assertEqual(limit(), 10)\n"},
+                   {"premises": [], "files": ["src/b.py", "tests/test_b.py"], "mutations": [],
+                    "proving_tests": ["test_limit_is_ten"]})
+        self.assertEqual(t1["state"], "delivered", t1)
+        self.assertEqual(t1["proof"]["red_on_base"]["result"], "red")
+        t2 = child("T2", {"src/a.py": "from b import limit\n\n\ndef accept(x):\n    if x >= limit():\n        return False\n    return True\n",
+                          "tests/test_guard.py": PROVING_TEST},
+                   {"premises": [], "files": ["src/a.py", "tests/test_guard.py"], "mutations": [],
+                    "proving_tests": ["test_guard_refuses"]})
+        self.assertEqual(t2["state"], "delivered", t2)
+        self.assertEqual(t2["base"]["sha"], t1["branch"]["sha"], "the second task's base is the first's head")
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = deliver.story_status(argparse.Namespace(package=str(story)))
+        rec = json.loads((story / "delivery.json").read_text(encoding="utf-8"))
+        self.assertEqual((code, rec["state"], rec["tasks"]), (0, "delivered", {"T1": "delivered", "T2": "delivered"}))
+        self.assertEqual(sorted(rec["diff"]["files"]), ["src/a.py", "src/b.py", "tests/test_b.py", "tests/test_guard.py"])
+        log = subprocess.run(("git", "log", "--format=%s", "main..HEAD"), cwd=self.repo,
+                             capture_output=True, text=True).stdout.strip().splitlines()
+        self.assertEqual(len(log), 2, log)
 
     def test_a_kind_the_shape_does_not_allow_is_refused(self):
         with self.assertRaises(common.UsageError):

@@ -1,8 +1,9 @@
 export const meta = {
   name: 'deliver',
-  description: 'Delivers a prepared item in two stages: measure the premises; then write inside the named files and try to refute the proof',
-  whenToUse: 'Called by the deliver skill after `deliver.py prepare`, twice: `stage: "measure"`, then — once measure.json is on disk — `stage: "write"`. Do not invoke it directly: with no package there is nothing to deliver.',
+  description: 'Delivers a prepared item in stages: design (a story or an epic), measure the premises, then write inside the named files and try to refute the proof',
+  whenToUse: 'Called by the deliver skill after `deliver.py prepare`: `stage: "design"` for a story or an epic, `stage: "measure"`, then — once measure.json is on disk — `stage: "write"`. Do not invoke it directly: with no package there is nothing to deliver.',
   phases: [
+    { title: 'Design', detail: 'a story cut into tasks, an epic into stories, before anything is written' },
     { title: 'Measure', detail: 'every premise of the item against the code, with an address' },
     { title: 'Write', detail: 'the smallest change, inside the files the measurement named' },
     { title: 'Refute', detail: 'a sceptic that has not seen the writer tries to break the proof' },
@@ -27,13 +28,14 @@ function readArgs(raw) {
 }
 
 const input = readArgs(args)
-for (const field of ['package', 'repo', 'item', 'workdir', 'delivery', 'stage']) {
+for (const field of ['package', 'repo', 'item', 'delivery', 'stage']) {
   if (input[field] === undefined) {
     throw new Error(`deliver was given arguments with no \`${field}\` — pass the object ` +
                     '`deliver.py prepare` wrote to workflow-args.json, plus `stage`.')
   }
 }
-const { package: bundle, repo, item, workdir, delivery, stage } = input
+const { package: bundle, repo, item, delivery, stage } = input
+const workdir = input.workdir ?? '(no working directory: nothing is written at this stage)'
 const PREFIX = input.agent_prefix ?? 'prumo:'
 // The agents travel with the plugin and answer by `${PREFIX}${name}`. A checkout that is
 // not the installed plugin — a branch under development, a Codex-style harness with no
@@ -125,6 +127,11 @@ const common = [
   `Item ${item.id} · shape ${input.shape ?? '?'} · plan depth ${input.plan_depth ?? '?'} · kind ${item.kind}`,
   `Delivery block of the profile: ${JSON.stringify(delivery)}`,
   embed('item.md', 'The item'),
+  input.task
+    ? `This item is task ${input.task.id} of a story the person approved. Its files and proving tests are ` +
+      `the design's: confirm them against the code, name a mutation only where one applies, replace nothing. ` +
+      `Task: ${JSON.stringify(input.task)}`
+    : '',
   embed('profile.yml', 'Repository profile'),
   `Conventions of this repository, to read BEFORE writing or judging shape: ${JSON.stringify(input.conventions ?? [])}`,
   (input.conventions ?? []).length === 0
@@ -133,6 +140,53 @@ const common = [
   'Everything above is already here: do not read those files again.',
   `Read inside ${workdir} only. Paths you return are relative to it.`,
 ]
+
+const DESIGN_SCHEMA = {
+  type: 'object',
+  required: ['summary', 'tasks', 'stories', 'checked'],
+  additionalProperties: false,
+  properties: {
+    summary: { type: 'string' },
+    tasks: {
+      type: 'array',
+      items: {
+        type: 'object', required: ['id', 'title', 'criteria', 'files', 'proving_tests', 'depends_on'],
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string' }, title: { type: 'string' },
+          criteria: { type: 'array', items: { type: 'string' } },
+          files: { type: 'array', items: { type: 'string' } },
+          proving_tests: { type: 'array', items: { type: 'string' } },
+          depends_on: { type: 'array', items: { type: 'string' } },
+        },
+      },
+    },
+    stories: {
+      type: 'array',
+      items: {
+        type: 'object', required: ['title', 'criteria', 'out_of_scope'], additionalProperties: false,
+        properties: { title: { type: 'string' }, criteria: { type: 'array', items: { type: 'string' } },
+                      out_of_scope: { type: 'string' } },
+      },
+    },
+    checked: { type: 'array', items: { type: 'string' } },
+  },
+}
+
+if (stage === 'design') {
+  // A story is cut into tasks, an epic into stories, before anything is measured or
+  // written. The cut is read by a person at the gate; nothing here decides what a task
+  // implements beyond naming its files and the tests that will prove it.
+  phase('Design')
+  const design = await run('task-planner', [
+    ...common,
+    `Cut this ${input.shape} into ${input.shape === 'epic' ? 'stories' : 'tasks'}, by the four tests. ` +
+    'Read the code the item touches first. Name files under the roots and the proving tests by name.',
+  ].join('\n'), { label: 'task-planner', phase: 'Design', schema: DESIGN_SCHEMA })
+  if (!design) throw new Error('task-planner returned nothing — nothing was cut')
+  log(`${design.tasks.length} task(s) · ${design.stories.length} stor(y/ies)`)
+  return { stage, design }
+}
 
 if (stage === 'measure') {
   phase('Measure')
@@ -151,7 +205,7 @@ if (stage === 'measure') {
   return { stage, measure, written: null, refutation: null }
 }
 
-if (stage !== 'write') throw new Error(`unknown stage \`${stage}\` — measure or write`)
+if (stage !== 'write') throw new Error(`unknown stage \`${stage}\` — design, measure or write`)
 if (!input.measure) {
   throw new Error('stage `write` needs `measure` — the object the measure stage returned, ' +
                   'already written to <package>/measure.json so the guard can read it.')

@@ -37,7 +37,7 @@ class AskMissing(UsageError):
     """No ask, or an empty one. The route does not start on an inference."""
 
 
-STOP_CLASSES = ("blocked", "unsupported", "approved", "intervention", "ask", "plan")
+STOP_CLASSES = ("blocked", "unsupported", "approved", "intervention", "ask", "plan", "decomposed")
 
 
 def read_ask(path: str | None) -> str:
@@ -80,11 +80,14 @@ def log(root: pathlib.Path, line: str) -> None:
         fh.write(line + "\n")
 
 
-def bind(root: pathlib.Path, kind: str, target: str) -> None:
+def bind(root: pathlib.Path, kind: str, target: str, task: str | None = None) -> None:
     run = read_json(root / "run.json")
-    run[f"{kind}_package"] = str(pathlib.Path(target).resolve())
+    if task:
+        run.setdefault("tasks", {})[task] = str(pathlib.Path(target).resolve())
+    else:
+        run[f"{kind}_package"] = str(pathlib.Path(target).resolve())
     write_json(root / "run.json", run)
-    log(root, t("run.bound", kind=kind, path=target))
+    log(root, t("run.bound", kind=f"{kind} {task}" if task else kind, path=target))
 
 
 def _exists(base: str | None, name: str) -> bool:
@@ -99,6 +102,12 @@ def decide(run: dict, root: pathlib.Path) -> dict:
 
     def invoke(text): return {"kind": "invoke", "text": text, "class": None}
     def stop(klass, fact): return {"kind": "stop", "text": fact, "class": klass}
+
+    # --- a story or an epic: the design first, then the tasks one by one
+    if _exists(d, "deliver-manifest.json"):
+        man = read_json(pathlib.Path(d) / "deliver-manifest.json")
+        if man.get("shape") in ("story", "epic"):
+            return decide_decomposed(run, root, d, man, invoke, stop)
 
     # --- the delivery
     if not _exists(d, "deliver-manifest.json"):
@@ -131,16 +140,63 @@ def decide(run: dict, root: pathlib.Path) -> dict:
                       + (f" --written {d}/written.json" if _exists(d, "written.json") else "")
                       + (f" --refutation {d}/refutation.json" if _exists(d, "refutation.json") else ""))
 
-    # --- the review
+    # --- the review. The door out of an intervention is handed over, never taken: a
+    # fix is a new delivery on the person's own ask, and the invocation is what the
+    # person pastes.
     if not _exists(r, "manifest.json"):
         return invoke(f"review.py prepare --repo {repo} --branch {branch} --item {item} --item-file {item_file}")
+    return _review_step(run, r, repo, stop, invoke)
+
+
+def decide_decomposed(run: dict, root: pathlib.Path, d: str, man: dict, invoke, stop) -> dict:
+    """A story: design → plan → a person's approval → each task as a child delivery, in
+    the design's order, on the story's branch → the story's record → the review. An
+    epic: design → plan → stop, with the stories for a person to open."""
+    repo, item = run["repo"], run["item"]
+    if not _exists(d, "design.json"):
+        if not _exists(d, "plan.json"):
+            return invoke(f"Workflow({{name: 'deliver', args: <{d}/workflow-args.json + stage: 'design'>}})")
+    if not _exists(d, "plan.json"):
+        return invoke(f"deliver.py plan --package {d} --design {d}/design.json")
+    plan = read_json(pathlib.Path(d) / "plan.json")
+    if plan.get("gate"):
+        ok = read_json(pathlib.Path(d) / "approval.json") if _exists(d, "approval.json") else {}
+        if ok.get("digest") != plan.get("digest"):
+            return stop("plan", t("run.plan_stop", path=f"{d}/plan.md", command=f"/prumo:approve {d}"))
+    if man.get("shape") == "epic" or not man.get("deliverable", True):
+        return stop("decomposed", t("deliver.cli.decomposed", shape=man["shape"]) + f" — {d}/plan.md")
+    design = read_json(pathlib.Path(d) / "design.json")
+    tasks = design.get("tasks") or []
+    for x in tasks:
+        # a task's package lives under the story's, by construction — nothing to bind
+        tp = str(pathlib.Path(d) / "tasks" / x["id"])
+        if not _exists(tp, "deliver-manifest.json"):
+            return invoke(f"deliver.py prepare --repo {repo} --story {d} --task {x['id']} --package {tp}")
+        if _exists(tp, "delivery.json"):
+            rec = read_json(pathlib.Path(tp) / "delivery.json")
+            if rec.get("state") == "delivered":
+                continue
+            return stop(rec.get("state", "blocked"), f"{x['id']}: {rec.get('reason', '?')}")
+        child = dict(run, deliver_package=tp, item=f"{item}-{x['id']}")
+        return decide(child, root)
+    # every task delivered: the story's own record, then the review of the branch
+    if not _exists(d, "delivery.json") or read_json(pathlib.Path(d) / "delivery.json").get("tasks") is None:
+        return invoke(f"deliver.py story --package {d}")
+    rec = read_json(pathlib.Path(d) / "delivery.json")
+    if rec.get("state") != "delivered":
+        return stop(rec.get("state", "blocked"), rec.get("reason", "?"))
+    r = run.get("review_package")
+    if not _exists(r, "manifest.json"):
+        return invoke(f"review.py prepare --repo {repo} --branch {rec['branch']['name']} --item {item} --item-file {root / 'item.md'}")
+    return _review_step(run, r, repo, stop, invoke)
+
+
+def _review_step(run: dict, r: str, repo: str, stop, invoke) -> dict:
     if _exists(r, "verdict.json"):
         v = read_json(pathlib.Path(r) / "verdict.json")
         verdict = v.get("verdict")
         if verdict == "APPROVED":
             return stop("approved", str(verdict))
-        # The door out of an intervention is handed over, never taken: a fix is a new
-        # delivery on the person's own ask, and the invocation is what the person pastes.
         fact = str(verdict)
         if any(x.get("type") == "author_fix" for x in v.get("routes") or []):
             fact += f" · {t('run.fix_door', text=f'deliver.py prepare --repo {repo} --fix {r}')}"
@@ -175,6 +231,7 @@ def main() -> int:
     b.add_argument("--package", required=True)
     b.add_argument("--deliver")
     b.add_argument("--review")
+    b.add_argument("--task", help="with --deliver: the task id this package delivers")
     c = sub.add_parser("next")
     c.add_argument("--package", required=True)
     d = sub.add_parser("log")
@@ -191,7 +248,7 @@ def main() -> int:
         root = pathlib.Path(args.package)
         if args.command == "bind":
             if args.deliver:
-                bind(root, "deliver", args.deliver)
+                bind(root, "deliver", args.deliver, task=args.task)
             if args.review:
                 bind(root, "review", args.review)
             print(t("run.then", path=root))
