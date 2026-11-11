@@ -1,11 +1,12 @@
 # prumo
 
-[![tests](https://img.shields.io/badge/tests-275%20green-brightgreen)](#running-the-checks)
+[![tests](https://img.shields.io/badge/tests-486%20green-brightgreen)](#running-the-checks)
 [![licence](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
 
 Reviews a **whole delivery** as one package — the item that asked for it, the context it
 was built in, and the code it produced — and closes with a two-valued verdict:
-**APPROVED** or **INTERVENTION REQUIRED**.
+**APPROVED** or **INTERVENTION REQUIRED**. And, since 2.0, **delivers** one item as the
+smallest change that pays for it, proved by mutation, and hands the branch to that review.
 
 There is one question only:
 
@@ -33,6 +34,7 @@ explicit authorisation.
   - [Coming from a Portuguese install](#coming-from-a-portuguese-install)
 - [Using it](#using-it)
 - [The method, briefly](#the-method-briefly)
+- [Capabilities](#capabilities)
 - [What it never does](#what-it-never-does)
 - [Running the checks](#running-the-checks)
 
@@ -45,11 +47,11 @@ what is judgement.
 
 | | |
 |---|---|
-| **20 Python scripts** | Resolve the base, assemble the package, triage the risk, judge. No dependency beyond `yaml` and `jsonschema`. The judge is a pure function: same input, same verdict. |
-| **10 read-only agents** | One question each. Seven reviewers of one axis, a criteria extractor, a manual-verification planner, and a **sceptical verifier** that tries to *refute* every finding without having seen the reasoning behind it. |
+| **22 Python scripts** | Resolve the base, assemble the package, triage the risk, judge; cut the branch, prove by mutation, hand over. No dependency beyond `yaml` and `jsonschema`. Both judges are pure functions: same input, same answer. |
+| **13 agents** | One question each. Ten read-only for the review — seven reviewers of one axis, a criteria extractor, a manual-verification planner, and a **sceptical verifier** that tries to *refute* every finding without having seen the reasoning behind it. Three for the delivery — a surveyor that measures, a writer with no shell, and a **sceptic** that never saw the writer. |
 | **3 knowledge skills** | What the reviewers load to read a diff: five axes, OWASP/ASVS, personal data. Neutral of language, framework and project. |
 | **18 risk classes** | A guardrail has three states — `fired`, `did_not_fire`, `not_assessable`. |
-| **2 message catalogues** | 313 keys each. Everything a person reads, in the configured language. |
+| **2 message catalogues** | 441 keys each. Everything a person reads, in the configured language. |
 
 Three rules govern everything, and each has a test that fails when it is broken:
 
@@ -69,7 +71,7 @@ prumo/
 │   ├── plugin.json              what the harness registers: skill, agents, hook
 │   └── marketplace.json         the storefront `/plugin marketplace add` reads
 │
-├── scripts/                     THE BACKBONE — 20 modules, no model runs here
+├── scripts/                     THE BACKBONE — 22 modules, no model runs here
 │   ├── providers.py             prumo.yml: paths, tracker, forge, language
 │   ├── i18n.py                  message catalogues; a missing key raises
 │   ├── common.py                the 18 classes, shared helpers
@@ -81,6 +83,8 @@ prumo/
 │   ├── judge.py                 F7 — pure function: gates, routes, verdict
 │   ├── render.py                F9 — report and comments
 │   ├── review.py                the two entry points: `prepare` and `conclude`
+│   ├── deliver.py               the delivery: cut the branch, prove by mutation, judge, hand over
+│   ├── run.py                   the route: every next step read from disk, every stop classed
 │   ├── delta.py, closure.py     the loops: re-judgement and item resolutions
 │   ├── telemetry.py, metrics.py measured cost, never estimated
 │   ├── derive_profile.py        bootstraps a profile for a new repository
@@ -89,25 +93,31 @@ prumo/
 │   ├── agnosticism_check.py     fails the method when it names a technology
 │   ├── hygiene.py               fails a secret, or a rule that is not the prumo's own
 │   ├── setup.py                 writes a prumo.yml: asks five things, measures the rest
-│   └── tests/                   297 tests
+│   └── tests/                   494 tests
 │
-├── agents/                      THE LEAVES — 10 read-only prompts
+├── agents/                      THE LEAVES — 13 prompts: 10 read-only reviewers, a surveyor,
+│                                a writer with no shell, a sceptic
 ├── skills/
 │   ├── task-review/SKILL.md     what Claude Code loads as `/prumo:task-review`
+│   ├── deliver/SKILL.md         the delivery's eleven rules and its sequence
+│   ├── run/SKILL.md             the route, closed to the model
 │   ├── five-axis-review/        correctness, readability, architecture, security, performance
 │   ├── owasp-asvs/              OWASP Top 10:2025 + API Top 10 against ASVS 5.0
 │   ├── personal-data/           what is personal data and which destinations are barred
 │
-├── workflows/task-review.js     the reviewer fan-out, the verifier, the manual plan
+├── workflows/
+│   ├── task-review.js           the reviewer fan-out, the verifier, the manual plan
+│   └── deliver.js               measure; then write and refute — two stages, one file
 ├── hooks/
-│   ├── review-guard.sh          blocks merge always; push/commit while a review runs
+│   ├── review-guard.sh          blocks merge always; push/commit while a review runs;
+│                                push, `add -A`, the base, and writes outside the named files while a delivery runs
 │   └── hooks.json               registers the hook — you edit no settings.json
 │
 ├── messages/{en,pt-BR}.yml      every user-facing string
 ├── schemas/                     finding, criterion, triaged-class, verdict,
-│                                manual-script, and the profile contract
+│                                manual-script, the delivery record, and the profile contract
 ├── templates/                   report and the three comments
-├── reference/                   the 18 classes, publication, playbooks, CI
+├── reference/                   the 18 classes, the delivery kinds, publication, playbooks, CI
 └── prumo.yml.example            the installation contract, commented
 ```
 
@@ -429,15 +439,53 @@ comes out `null` with a reason** — a zero would make an expensive review look 
 
 ---
 
+## Capabilities
+
+Three, and each one answers a single question. A new capability is a new question, with
+its own skill, its own record and its own tests — never a flag on an existing one.
+
+| Capability | Question | Entry | Ends with |
+|---|---|---|---|
+| **task-review** | is what the item asked for delivered in this proposal? | `/prumo:task-review <item url>` | APPROVED or INTERVENTION REQUIRED |
+| **deliver** | what is the smallest change that delivers this item, and what proves it? | `deliver.py prepare` → `Workflow deliver` (measure, write) → `deliver.py conclude` | `delivered`, `blocked` or `unsupported`, and the `task-review` invocation ready to paste |
+| **run** | carry this item end to end, on my own words, and stop where only I decide | `/prumo:run --ask-file ASK.md …` — closed to the model | the review's verdict, or a stop with its class |
+
+**Who writes does not approve.** `deliver` ends where `task-review` begins, and the two
+never share a context. The writer has no shell; the suite, the mutation and the baseline
+are run by a script through the profile's allowlist; a sceptic that never saw the writer
+reads the proof; and the judge is a pure function over the record.
+
+**Delivery kinds are closed recipes.** `reference/delivery-kinds.md` holds them — today
+`coverage-gap` only: a guard with no test, proved by a mutation the script makes by hand
+and reverts. A kind the profile does not list is `unsupported`, and the run stops rather
+than improvises.
+
+**The whole route runs only on the person's words.** `run` is closed to the model's
+invocation and refuses to start without the ask on disk; every step after that is read
+from the packages by `run.py next` and pasted, never composed.
+
+---
+
 ## What it never does
+
+Across every capability:
 
 - **Merge.** The hook blocks it, always.
 - **Move an item between columns.**
-- **Write into the repository under review.** Only into the reports directory.
+- **Push.** A branch leaves the machine by a person's hand.
 - **Publish without authorisation.** The item comment, the proposal comment and the
   Approve are three external acts, each with its own yes.
-- **Fix.** The author fixes.
 - **Approve what it could not assess.** See the third guardrail state.
+
+And per capability:
+
+- **task-review** writes nothing into the repository under review, and never fixes — the
+  author fixes.
+- **deliver** writes only inside the files the measurement named, on a branch cut from
+  the base, and never judges its own work: its end is the review's beginning. A blocked
+  tree is left as it is, for a person to read.
+- **run** never decides what comes next, never repairs a finding, and never starts on an
+  inference.
 
 ---
 
@@ -445,7 +493,7 @@ comes out `null` with a reason** — a zero would make an expensive review look 
 
 ```bash
 cd scripts
-python3 -m unittest discover -s tests          # 275 tests
+python3 -m unittest discover -s tests          # 486 tests
 python3 -m unittest discover -s tests -t .     # must collect the SAME number
 python3 i18n.py --check                        # catalogues, key by key
 python3 agnosticism_check.py                   # the four rules
