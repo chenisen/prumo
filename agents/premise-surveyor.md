@@ -33,8 +33,10 @@ JSON only:
   "files": ["<the files the writer may touch — the test file first>"],
   "mutations": [
     {"file": "<file>", "line": <n>, "from": "<exact text on that line>",
-     "to": "<the text that turns the guard wrong>", "test": "<the test name the writer must use>"}
+     "to": "<the text that turns the guard wrong>", "test": "<the test name the writer must use>",
+     "stays_green": ["<tests the item says must stay green under this mutant>"]}
   ],
+  "proving_tests": ["<behaviour-change only: the tests that must be red on the base and green after>"],
   "checked": ["<what you read>"]
 }
 ```
@@ -49,7 +51,15 @@ JSON only:
   character for character from that line. When the item itself names the mutants it
   wants, give one entry per mutant, each a single-line replacement, each naming the test
   that must go red under it.
-- `files` holds only what this kind allows: for `coverage-gap`, the test file alone.
+- `stays_green` is the other half of a mutant: when the item says a test must stay green
+  under it — the passage test under a guard that was switched off — name it. A mutant
+  that turns it red is wider than the guard, and the script blocks on that.
+- For `behaviour-change`: the production file and line where the behaviour is wrong or
+  missing, the test file that will prove it, and `proving_tests` — the names the writer
+  must use, which the script requires red on the base and green on the branch. A
+  mutation is optional here; the red-before-green is the proof.
+- `files` holds only what this kind allows: for `coverage-gap`, the test file alone; for
+  `behaviour-change`, the production files the fix needs plus the test file.
 
 ## Voice
 

@@ -146,6 +146,35 @@ class TestStops(unittest.TestCase):
         proof = dict(record()["proof"], refutation={"verdict": "uncertain", "reason": "could not trace"})
         self.assertEqual(judge(record(proof=proof))["state"], "delivered")
 
+    def test_a_red_lint_blocks(self):
+        """The profile's lint check runs over the tree the writer left; a red there
+        would cost a whole review cycle to find."""
+        self.assert_blocked(record(lint={"state": "red", "reason": "FAIL tests/test_a.py"}),
+                            "deliver.blocked.lint_red", "author", reason="FAIL tests/test_a.py")
+
+    def test_a_mutant_that_turns_a_stays_green_test_red_is_too_wide(self):
+        proof = dict(record()["proof"])
+        proof["mutations"] = [dict(proof["mutations"][0], stays_green=["t_passage"],
+                                   stays_green_result="red")]
+        self.assert_blocked(record(proof=proof), "deliver.blocked.mutation_too_wide", "author",
+                            file="src/a.py", line=41, test="t_passage")
+
+    def test_a_behaviour_change_without_a_red_on_the_base_is_not_proven(self):
+        rec = record(item={"id": "ITEM-1", "kind": "behaviour-change", "source": "tracker"})
+        profile = {"profile": "repo-x", "delivery": {"kinds": ["coverage-gap", "behaviour-change"],
+                                                   "budget": {"max_files": 4, "max_lines": 120}}}
+        out = judge(rec, profile=profile)
+        self.assertEqual(out["state"], "blocked")
+        self.assertEqual(out["reason"], t("deliver.blocked.no_red_on_base"))
+
+    def test_a_behaviour_change_red_on_base_and_green_on_branch_is_delivered(self):
+        proof = dict(record()["proof"], red_on_base={"test": "t_x", "result": "red"},
+                     green_on_branch={"test": "t_x", "result": "green"}, mutations=[])
+        rec = record(item={"id": "ITEM-1", "kind": "behaviour-change", "source": "tracker"}, proof=proof)
+        profile = {"profile": "repo-x", "delivery": {"kinds": ["behaviour-change"],
+                                                   "budget": {"max_files": 4, "max_lines": 120}}}
+        self.assertEqual(judge(rec, profile=profile)["state"], "delivered")
+
     def test_a_line_outside_the_scope_blocks(self):
         rec = record(diff={"files": ["tests/test_a.py", "src/z.py"], "added": 31,
                            "removed": 0, "outside_scope": ["src/z.py"], "within_budget": True})

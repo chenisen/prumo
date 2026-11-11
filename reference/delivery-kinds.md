@@ -19,13 +19,35 @@ suite runs, how a red is named — all of it comes from the profile.
 | **Done when** | the mutation went red, the revert left the tree clean, no new red by name, the diff is inside `test_roots` and inside the budget |
 | **Blocked when** | the guard is not where the item says; a test already covers it (the item's premise fails); the mutation survived — the test does not prove the guard |
 
+A mutant has two halves. `test` is what must go red; `stays_green` is what the item says
+must not — the passage test under a guard switched off. A mutant that turns a
+`stays_green` test red is wider than the guard it was meant to kill, and the delivery is
+blocked for it.
+
 The mutation is written to the record with the file, the line, what was changed into
-what, which test went red, and that it was reverted. A mutation the script could not
+what, which test went red, which stayed green, and that it was reverted. A mutation the script could not
 apply — the line moved, the pattern did not match — is `not_assessable`, declared, and
 the run stops: a coverage delivery without its mutation is a test nobody proved.
 
-## Kinds not yet here
+## `behaviour-change` — the code does the wrong thing, or not the thing
 
-Named so the gap is visible, each waiting for its own recipe and its own tests:
-`behaviour-change` (red test on the base, green on the branch), `dead-code`,
-`static-analysis-debt`, `duplicated-rule`, `stale-dependency`. None runs today.
+| | |
+|---|---|
+| **Trigger** | the item names a behaviour the code lacks or gets wrong, with the input and the expected answer |
+| **Premises the surveyor measures** | where the behaviour lives at `file:line`; what the code answers today; which test file proves it; `proving_tests` — the names the writer must use |
+| **What the writer may touch** | the production files the measurement named, and the test file |
+| **Proof** | **red before green**: the script restores the base's version of the production files, runs the suite with the new test in place, and requires every proving test **red**; then restores the writer's files and runs the suite again, requiring them green by name against the baseline |
+| **Done when** | red on the base, green on the branch, no new red by name, the diff inside the named files and the budget, the profile's lint green |
+| **Blocked when** | the proving test is green on the base — it does not prove the change; a line outside the named files; a new red elsewhere |
+
+An `author_fix` route a review opened is this kind: `deliver.py prepare --fix <review
+package>` writes the item from the routes' findings, stays on the review's branch, and
+takes the branch's head as the base — the red before the green is measured against what
+the review read.
+
+## Every kind
+
+The profile's lint check, when it declares one, runs over the tree the writer left and
+blocks on red. A kind not listed here — `dead-code`, `static-analysis-debt`,
+`duplicated-rule`, `stale-dependency` — is `unsupported` until it has a recipe and its
+tests.

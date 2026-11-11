@@ -50,7 +50,7 @@ to `<package>/measure.json`, `written.json`, `refutation.json` and `findings.jso
 | `blocked` | the delivery stopped: a central premise fails, a new red, a mutation that survived, a line outside the scope, the budget |
 | `unsupported` | the kind is not in the profile |
 | `approved` | the review approved — the branch is the person's to push and open |
-| `intervention` | the review opened routes — each with an owner; repairing one is a new ask, never this run's |
+| `intervention` | the review opened routes — each with an owner; repairing an `author_fix` one is a new ask, through `deliver.py prepare --fix <review package>`, never this run's |
 
 A stop names its class and its fact, and `orchestration.md` under the run's package ends
 on that line. A stopped run is a result: it is read, not retried.
@@ -58,9 +58,8 @@ on that line. A stopped run is a result: it is read, not retried.
 ## What it never does
 
 Merge, push, move the item, approve, repair a finding, run a step `next` did not print,
-or start without the ask. `--fix` — repairing an `author_fix` route as a new delivery —
-waits for a kind that writes production code; until then an `intervention` stop is where
-the person picks up.
+or start without the ask. An `intervention` stop is where the person picks up: the fix
+is a delivery of its own, asked for in the person's words.
 
 ## Report
 

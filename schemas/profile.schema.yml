@@ -169,7 +169,7 @@ properties:
       kinds:
         type: array
         description: the kinds THIS repository accepts, from reference/delivery-kinds.md; anything else is unsupported
-        items: {enum: [coverage-gap]}
+        items: {enum: [coverage-gap, behaviour-change]}
       waiver: {$ref: "#/$defs/waiver"}
 
   anchors:

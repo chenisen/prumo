@@ -105,7 +105,13 @@ def deliver_judge(record: dict, profile: dict, reference: str | None = None) -> 
     if red and red.get("result") != "red":
         return stop(BLOCKED, t("deliver.blocked.test_not_red_on_base", test=red["test"]),
                     "author")
+    if kind == "behaviour-change" and not red:
+        return stop(BLOCKED, t("deliver.blocked.no_red_on_base"), "author")
     for m in proof.get("mutations") or []:
+        if m.get("stays_green_result") == "red":
+            return stop(BLOCKED, t("deliver.blocked.mutation_too_wide", file=m["file"],
+                                   line=m["line"], test=", ".join(m.get("stays_green") or [])),
+                        "author")
         if m["result"] == "not_run":
             return stop(BLOCKED, t("deliver.not_assessable.mutation_not_applied",
                                    file=m["file"], line=m["line"],
@@ -118,6 +124,10 @@ def deliver_judge(record: dict, profile: dict, reference: str | None = None) -> 
     if refutation.get("verdict") == "does_not_prove":
         return stop(BLOCKED, t("deliver.blocked.refuted", reason=refutation.get("reason", "")),
                     "author")
+
+    lint = record.get("lint") or {}
+    if lint.get("state") == "red":
+        return stop(BLOCKED, t("deliver.blocked.lint_red", reason=lint.get("reason", "")), "author")
 
     diff = record["diff"]
     if diff.get("outside_scope"):
@@ -198,6 +208,62 @@ def run_suite(profile: dict, cwd: pathlib.Path, package: pathlib.Path, label: st
     return result
 
 
+def run_lint(profile: dict, cwd: pathlib.Path, package: pathlib.Path) -> dict:
+    """The profile's lint check, read like the suite: the output first, the exit code
+    second. No command declared is `not_run`, said in words — never green."""
+    from evidence import authorise, run_command
+    check = (profile.get("checks") or {}).get("lint") or {}
+    if not check.get("command"):
+        return {"state": "not_run", "reason": t("evidence.not_in_allowlist")}
+    ok, reason = authorise(check["command"], profile)
+    if not ok:
+        return {"state": "not_run", "reason": reason}
+    r = run_command(check["command"], cwd, limit=None)
+    (package / "run-lint.txt").write_text(r.get("output", r.get("reason", "")), encoding="utf-8")
+    if not r.get("ran"):
+        return {"state": "not_run", "reason": r.get("reason", "")}
+    pattern = check.get("failure_pattern")
+    failed_in_text = bool(pattern and re.search(pattern, r.get("output") or ""))
+    if r["exit_code"] == 0 and not failed_in_text:
+        return {"state": "green", "reason": t("evidence.green_output_and_code") if pattern
+                else t("evidence.green_exit_code_only")}
+    return {"state": "red", "reason": (r.get("output") or "").strip().splitlines()[-1][:200]
+            if (r.get("output") or "").strip() else t("evidence.red_no_baseline")}
+
+
+def with_base_versions(workdir: pathlib.Path, base_sha: str, files: list[str]):
+    """Context: the base's version of `files` in the tree, the writer's put back after.
+    A file the base does not hold is removed for the duration — a behaviour change
+    that adds a file is proven red by the test failing to import it."""
+    import contextlib
+
+    @contextlib.contextmanager
+    def _ctx():
+        saved = {}
+        for f in files:
+            path = workdir / f
+            saved[f] = path.read_text(encoding="utf-8") if path.is_file() else None
+            in_base = bool(git(workdir, "cat-file", "-e", f"{base_sha}:{f}", check=False)
+                           or subprocess.run(("git", "cat-file", "-e", f"{base_sha}:{f}"),
+                                             cwd=workdir, capture_output=True).returncode == 0)
+            if in_base:
+                git(workdir, "checkout", base_sha, "--", f)
+            elif path.exists():
+                path.unlink()
+        try:
+            yield
+        finally:
+            for f, text in saved.items():
+                path = workdir / f
+                if text is None:
+                    if path.exists():
+                        path.unlink()
+                else:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(text, encoding="utf-8")
+    return _ctx()
+
+
 def apply_mutation(workdir: pathlib.Path, m: dict) -> str | None:
     """Turn the guarded line wrong. Returns None when applied, else why not — a line
     that moved or a text that is not there is declared, never approximated."""
@@ -236,7 +302,34 @@ def branch_name(block: dict, item: str, item_text: str, given: str | None) -> st
     return block["branch_format"].format(item=item, slug=slug(title, 40))
 
 
-def cut_branch(repo_dir: pathlib.Path, block: dict, name: str, base_sha: str) -> pathlib.Path:
+def fix_item(review: pathlib.Path) -> tuple[str, str, str]:
+    """The item a fix delivers: the `author_fix` routes a review opened, each with the
+    finding behind it. Returns (item id, origin, item text)."""
+    man = read_json(review / "manifest.json")
+    verdict = read_json(review / "verdict.json")
+    findings = {f["id"]: f for f in (read_json(review / "findings.json")
+                                     if (review / "findings.json").exists() else [])}
+    routes = [r for r in verdict.get("routes") or [] if r.get("type") == "author_fix"]
+    if not routes:
+        raise UsageError(t("deliver.cli.fix_no_routes", path=review))
+    item = str(man["item"]["id"] or "no-item")
+    lines = [f"# {t('deliver.cli.fix_item', item=item)}", ""]
+    for r in routes:
+        for fid in r.get("items") or []:
+            f = findings.get(fid)
+            if f:
+                where = "; ".join(f"{e.get('file')}:{e.get('line')}" for e in f.get("evidence") or [])
+                lines += [f"- **{fid}** {f['claim']} — {where}",
+                          f"  consequence: {f.get('consequence', '')}"]
+                if f.get("form"):
+                    lines.append(f"  form: {f['form']}")
+            else:
+                lines.append(f"- **{fid}** {r.get('details') or r.get('closes_when') or ''}")
+    return item, man.get("origin") or "", "\n".join(lines) + "\n"
+
+
+def cut_branch(repo_dir: pathlib.Path, block: dict, name: str, base_sha: str,
+               fresh: bool = True) -> pathlib.Path:
     """A clean tree is a precondition, not a courtesy: a pending change nobody made here
     is somebody's work in progress. In a worktree the branch lives beside the checkout
     and the checkout is never touched; without one, the branch is checked out in place
@@ -250,18 +343,38 @@ def cut_branch(repo_dir: pathlib.Path, block: dict, name: str, base_sha: str) ->
                 exclude.write_text(text.rstrip("\n") + "\n.worktrees/\n", encoding="utf-8")
         if workdir.exists():
             raise UsageError(t("deliver.cli.worktree_exists", path=workdir))
-        git(repo_dir, "worktree", "add", "-b", name, str(workdir), base_sha)
+        if fresh:
+            git(repo_dir, "worktree", "add", "-b", name, str(workdir), base_sha)
+        else:
+            git(repo_dir, "worktree", "add", str(workdir), name)
         return workdir
     if git(repo_dir, "status", "--porcelain"):
         raise UsageError(t("deliver.cli.tree_dirty", path=repo_dir))
-    git(repo_dir, "checkout", "-q", "-B", name, base_sha)
+    if fresh:
+        git(repo_dir, "checkout", "-q", "-B", name, base_sha)
+    else:
+        git(repo_dir, "checkout", "-q", name)
     return repo_dir
 
 
 def prepare(args) -> int:
     package = pathlib.Path(args.package or (dir_packages() / f"{args.repo}-deliver-{int(time.time())}"))
     package.mkdir(parents=True, exist_ok=True)
-    read_item(args.item_file, package)
+    fix = pathlib.Path(args.fix) if getattr(args, "fix", None) else None
+    if fix:
+        # A fix delivers the routes a review opened, on the review's own branch: the
+        # item is written from the findings, and the base is that branch's head, so the
+        # red before the green is measured against what the review read.
+        fix_id, fix_origin, text = fix_item(fix)
+        args.item = args.item or fix_id
+        args.kind = args.kind or "behaviour-change"
+        args.branch = args.branch or (fix_origin if fix_origin and not fix_origin.startswith("refs/")
+                                      and fix_origin != "HEAD" else None)
+        if not args.branch:
+            raise UsageError(t("deliver.cli.fix_needs_branch", origin=fix_origin))
+        (package / "item.md").write_text(text, encoding="utf-8")
+    else:
+        read_item(args.item_file, package)
 
     _py("preflight.py", "--repo", args.repo, "--package", str(package),
         "--origin", "branch", "--item-read", check=False)
@@ -286,11 +399,19 @@ def prepare(args) -> int:
     repo_dir = dir_repositories() / args.repo
     git(repo_dir, "fetch", "-q", "origin", check=False)
     base_sha = man["base"]["sha"]
+    base_name = man["base"]["name"]
 
-    # F4 — the branch, cut from the base before anything is written.
+    # F4 — the branch, cut from the base before anything is written. A fix continues
+    # the branch it was asked about, and that branch's head is its base.
     name = branch_name(block, args.item, (package / "item.md").read_text(encoding="utf-8"),
                        args.branch)
-    workdir = cut_branch(repo_dir, block, name, base_sha)
+    if fix:
+        base_sha = (git(repo_dir, "rev-parse", "--verify", "-q", name, check=False)
+                    or git(repo_dir, "rev-parse", "--verify", "-q", f"origin/{name}", check=False))
+        if not base_sha:
+            raise UsageError(t("resolver.branch_unresolved", branch=name))
+        base_name = name
+    workdir = cut_branch(repo_dir, block, name, base_sha, fresh=not fix)
 
     # F3 — the baseline, by name, on the branch while it still IS the base.
     from evidence import compare_reds
@@ -306,7 +427,7 @@ def prepare(args) -> int:
 
     manifest = {
         "repo": args.repo, "item": {"id": args.item, "kind": kind, "source": "tracker"},
-        "base": {"name": man["base"]["name"], "sha": base_sha},
+        "base": {"name": base_name, "sha": base_sha},
         "branch": {"name": name, "sha": git(workdir, "rev-parse", "HEAD")},
         "workdir": str(workdir), "in_worktree": bool(block.get("worktree")),
         "previous_head": man["head_sha"],
@@ -397,6 +518,8 @@ def conclude(args) -> int:
     central_failed = any(p["central"] and p["state"] == "fails" for p in premises)
 
     mutations, suite_out = [], ""
+    red_on_base = green_on_branch = None
+    lint = {"state": "not_run", "reason": t("review.suite_not_run")}
     if not central_failed and files:
         # The mutation by hand: wrong at the named line, the suite, the named test red,
         # the line put back. Kept whole in the record, revert included.
@@ -421,15 +544,35 @@ def conclude(args) -> int:
                 reverted = not git(workdir, "diff", "--name-only", "--", file)
             for m in wanted:
                 entry = {"file": file, "line": line, "from": src, "to": dst, "test": m["test"],
-                         "result": "not_run", "reverted": reverted}
+                         "result": "not_run", "reverted": reverted,
+                         "stays_green": list(m.get("stays_green") or []),
+                         "stays_green_result": None}
                 if why is None:
                     entry["result"] = ("red" if any(m["test"] in name for name in reds)
                                        else "green") if ran else "not_run"
+                    if ran and entry["stays_green"]:
+                        entry["stays_green_result"] = ("red" if any(
+                            g in name for g in entry["stays_green"] for name in reds) else "green")
                 else:
                     entry["why"] = why
                 mutations.append(entry)
+        # Red before green: the base's production files under the new test.
+        proving = list(measure.get("proving_tests") or [])
+        production = [f for f in files if casa_algum(f, [r.rstrip("/") + "/**" for r in block["source_roots"]])]
+        if kind == "behaviour-change" and proving and production:
+            with with_base_versions(workdir, man["base"]["sha"], production):
+                r = run_suite(profile, workdir, package, "base-with-test")
+            on_base = red_names(r.get("output", ""), check.get("red_name_pattern")) or []
+            red_on_base = {"test": ", ".join(proving),
+                           "result": ("red" if all(any(p in name for name in on_base) for p in proving)
+                                      else "green") if r.get("ran") else "not_run"}
         suite = run_suite(profile, workdir, package, "branch")
         suite_out = suite.get("output", "")
+        if proving and suite.get("ran"):
+            on_branch = red_names(suite_out, check.get("red_name_pattern")) or []
+            green_on_branch = {"test": ", ".join(proving),
+                               "result": "red" if any(p in name for p in proving for name in on_branch) else "green"}
+        lint = run_lint(profile, workdir, package)
 
     base_out = (package / "run-suite-base.txt").read_text(encoding="utf-8") \
         if (package / "run-suite-base.txt").exists() else ""
@@ -444,7 +587,8 @@ def conclude(args) -> int:
         "repo": man["repo"], "item": man["item"], "base": man["base"],
         "branch": {"name": man["branch"]["name"], "sha": git(workdir, "rev-parse", "HEAD")},
         "premises": premises,
-        "proof": {"red_on_base": None, "green_on_branch": None,
+        "lint": lint,
+        "proof": {"red_on_base": red_on_base, "green_on_branch": green_on_branch,
                   "mutations": [{k: v for k, v in m.items() if k != "why"} for m in mutations],
                   "refutation": ({"verdict": refutation["verdict"], "reason": refutation["reason"]}
                                  if refutation else None)},
@@ -534,10 +678,18 @@ def render(record: dict, mutations: list[dict]) -> str:
     for p in record["premises"] or []:
         lines.append(f"{SYMBOL[p['state']]} {p['text']} — {p.get('evidence') or '?'}")
     lines += ["", L("proof")]
+    rb = record["proof"].get("red_on_base")
+    if rb:
+        lines.append(f"{SYMBOL[rb['result']]} red on base: {rb['test']} {rb['result']}")
     for m in mutations:
         lines.append(f"{SYMBOL[m['result']]} {m['file']}:{m['line']} `{m['from']}`→`{m['to']}` "
                      f"→ {m['test']} {m['result']}" + (" · reverted" if m["reverted"] else "")
+                     + (f" · stays green: {', '.join(m['stays_green'])} {m['stays_green_result']}"
+                        if m.get("stays_green") else "")
                      + (f" · {m['why']}" if m.get("why") else ""))
+    lint = record.get("lint") or {}
+    if lint.get("state") != "not_run":
+        lines.append(f"{SYMBOL['holds' if lint['state'] == 'green' else 'fails']} lint {lint['state']} — {lint['reason']}")
     ref = record["proof"].get("refutation")
     if ref:
         lines.append(f"{SYMBOL.get({'proves': 'holds', 'does_not_prove': 'fails'}.get(ref['verdict'], 'not_assessable'))} "
@@ -560,11 +712,12 @@ def main() -> int:
     sub = p.add_subparsers(dest="command", required=True)
     a = sub.add_parser("prepare")
     a.add_argument("--repo", required=True)
-    a.add_argument("--item", required=True)
-    a.add_argument("--item-file", required=True, help=t("review.help_item_file"))
+    a.add_argument("--item")
+    a.add_argument("--item-file", help=t("review.help_item_file"))
     a.add_argument("--kind")
     a.add_argument("--branch")
     a.add_argument("--package")
+    a.add_argument("--fix", help="a review package whose author_fix routes become the item")
     b = sub.add_parser("conclude")
     b.add_argument("--package", required=True)
     b.add_argument("--measure", required=True)
@@ -574,6 +727,8 @@ def main() -> int:
     args = p.parse_args()
     try:
         if args.command == "prepare":
+            if not args.fix and not (args.item and args.item_file):
+                p.error("--item and --item-file, or --fix")
             return prepare(args)
         if args.command == "conclude":
             return conclude(args)

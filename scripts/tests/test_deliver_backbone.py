@@ -37,6 +37,8 @@ RUNNER = textwrap.dedent('''\
     ''')
 
 SOURCE = "def accept(x):\n    if x >= 10:\n        return False\n    return True\n"
+BUGGY = "def accept(x):\n    if x > 10:\n        return False\n    return True\n"
+LINT = "import sys, pathlib\nbad = [p for p in pathlib.Path('tests').glob('*.py') if 'LINT_BAD' in p.read_text()]\nprint('FAIL ' + ', '.join(map(str, bad)) if bad else 'PASS')\nsys.exit(1 if bad else 0)\n"
 EXISTING_TEST = textwrap.dedent('''\
     import sys, unittest
     sys.path.insert(0, "src")
@@ -63,7 +65,9 @@ PROFILE = {
     "proof_registry": {"type": "absent", "root": None, "note": None},
     "base": {"branch": "main"}, "living_docs": [],
     "checks": {**{r: {"command": None, "required": False}
-                  for r in ("secrets", "static", "lint", "dependencies")},
+                  for r in ("secrets", "static", "dependencies")},
+               "lint": {"command": "python3 lint.py", "required": True,
+                        "failure_pattern": r"(?m)^FAIL"},
                "suite": {"command": "python3 run_tests.py", "required": True,
                          "red_name_pattern": r"(?m)^FAIL: (\S+)",
                          "progress_pattern": r"(?m)^Ran (\d+) of (\d+)"}},
@@ -73,7 +77,8 @@ PROFILE = {
     "delivery": {"branch_format": "{item}-{slug}", "commit_format": "{item} - {message}",
                  "worktree": False, "budget": {"max_files": 2, "max_lines": 60},
                  "source_roots": ["src"], "test_roots": ["tests"],
-                 "mutation": {"command": None, "note": None}, "kinds": ["coverage-gap"]},
+                 "mutation": {"command": None, "note": None},
+                 "kinds": ["coverage-gap", "behaviour-change"]},
 }
 
 MEASURE = {
@@ -99,6 +104,7 @@ class Spine(unittest.TestCase):
         (self.repo / "src" / "a.py").write_text(SOURCE, encoding="utf-8")
         (self.repo / "tests" / "test_a.py").write_text(EXISTING_TEST, encoding="utf-8")
         (self.repo / "run_tests.py").write_text(RUNNER, encoding="utf-8")
+        (self.repo / "lint.py").write_text(LINT, encoding="utf-8")
         (self.repo / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
         git(self.repo, "init", "-q", "-b", "main")
         git(self.repo, "-c", "user.name=t", "-c", "user.email=t@t", "add", "-A")
@@ -136,19 +142,21 @@ class Spine(unittest.TestCase):
         common.cfg.cache_clear()
         self.tmp.cleanup()
 
-    def prepare(self):
-        args = argparse.Namespace(repo="repo-x", item="ITEM-1",
-                                  item_file=str(self.root / "item.md"), kind=None,
-                                  branch=None, package=str(self.root / "pkg"))
+    def prepare(self, kind=None, fix=None, package="pkg"):
+        args = argparse.Namespace(repo="repo-x", item=None if fix else "ITEM-1",
+                                  item_file=str(self.root / "item.md"), kind=kind,
+                                  branch=None, package=str(self.root / package), fix=fix)
         with contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(deliver.prepare(args), 0)
-        return self.root / "pkg"
+                self.assertEqual(deliver.prepare(args), 0)
+        return self.root / package
 
-    def conclude(self, package, test_text):
+    def conclude(self, package, test_text, measure_data=MEASURE, source=None):
         (self.repo / "tests" / "test_guard.py").write_text(test_text, encoding="utf-8")
+        if source is not None:
+            (self.repo / "src" / "a.py").write_text(source, encoding="utf-8")
         measure, written = package / "m.json", package / "w.json"
-        measure.write_text(json.dumps(MEASURE), encoding="utf-8")
-        written.write_text(json.dumps({"files": ["tests/test_guard.py"],
+        measure.write_text(json.dumps(measure_data), encoding="utf-8")
+        written.write_text(json.dumps({"files": list(measure_data["files"]),
                                        "skipped": ["the boundary at 9"]}), encoding="utf-8")
         args = argparse.Namespace(package=str(package), measure=str(measure),
                                   written=str(written), refutation=None)
@@ -204,6 +212,80 @@ class Spine(unittest.TestCase):
         self.assertEqual(log, "")
         self.assertTrue((self.repo / "tests" / "test_guard.py").exists())
         self.assertFalse(deliver.marker().exists())
+
+    def test_a_red_lint_blocks_the_delivery(self):
+        package = self.prepare()
+        code, rec = self.conclude(package, PROVING_TEST + "# LINT_BAD\n")
+        self.assertEqual(rec["state"], "blocked")
+        self.assertEqual(rec["lint"]["state"], "red")
+        self.assertEqual(rec["proof"]["mutations"][0]["result"], "red", "the proof still ran")
+
+    def test_a_mutant_that_also_kills_the_passage_test_is_too_wide(self):
+        """The item says the passage test must stay green under the mutant. A mutant
+        that turns the guard into `if True` refuses everything: red where it should,
+        and red where it must not."""
+        package = self.prepare()
+        wide = dict(MEASURE, mutations=[{"file": "src/a.py", "line": 2, "from": "x >= 10",
+                                         "to": "True", "test": "test_guard_refuses",
+                                         "stays_green": ["test_accept_small"]}])
+        code, rec = self.conclude(package, PROVING_TEST, measure_data=wide)
+        self.assertEqual(rec["state"], "blocked")
+        m = rec["proof"]["mutations"][0]
+        # refusing everything keeps the refusal test green and turns the passage red
+        self.assertEqual((m["result"], m["stays_green_result"]), ("green", "red"))
+        self.assertIn("test_accept_small", rec["reason"])
+
+    def test_a_behaviour_change_is_proven_red_on_the_base_and_green_on_the_branch(self):
+        """The base refuses only above ten; the item wants ten refused too. The test is
+        written for the wanted behaviour, goes red against the base's file, green against
+        the writer's, and the source the base had is put back in between — exactly."""
+        (self.repo / "src" / "a.py").write_text(BUGGY, encoding="utf-8")
+        git(self.repo, "add", "-A"); git(self.repo, "commit", "-q", "-m", "buggy base")
+        package = self.prepare(kind="behaviour-change")
+        measure = {"premises": [{"text": "ten is accepted today", "state": "holds",
+                                 "evidence": "src/a.py:2", "central": True}],
+                   "files": ["src/a.py", "tests/test_guard.py"], "mutations": [],
+                   "proving_tests": ["test_guard_refuses"]}
+        code, rec = self.conclude(package, PROVING_TEST, measure_data=measure, source=SOURCE)
+        self.assertEqual(code, 0, rec)
+        self.assertEqual(rec["proof"]["red_on_base"]["result"], "red")
+        self.assertEqual(rec["proof"]["green_on_branch"]["result"], "green")
+        self.assertEqual((self.repo / "src" / "a.py").read_text(encoding="utf-8"), SOURCE)
+        self.assertEqual(rec["diff"]["outside_scope"], [])
+
+    def test_a_behaviour_change_whose_test_is_green_on_the_base_is_blocked(self):
+        package = self.prepare(kind="behaviour-change")
+        measure = {"premises": [], "files": ["src/a.py", "tests/test_guard.py"], "mutations": [],
+                   "proving_tests": ["test_accept_small"]}
+        code, rec = self.conclude(package, PROVING_TEST, measure_data=measure, source=SOURCE + "\n")
+        self.assertEqual(rec["state"], "blocked")
+        self.assertEqual(rec["proof"]["red_on_base"]["result"], "green")
+
+    def test_a_fix_continues_the_reviewed_branch_and_takes_its_head_as_the_base(self):
+        """A review opened an `author_fix` route on the delivered branch. The fix is a
+        delivery whose item is the finding, whose branch is the reviewed one, and whose
+        base is that branch's head — never a new branch cut from the base."""
+        package = self.prepare()
+        code, rec = self.conclude(package, PROVING_TEST)
+        self.assertEqual(rec["state"], "delivered")
+        branch = rec["branch"]["name"]
+        head = subprocess.run(("git", "rev-parse", "HEAD"), cwd=self.repo,
+                              capture_output=True, text=True).stdout.strip()
+        review = self.root / "review"; review.mkdir()
+        (review / "manifest.json").write_text(json.dumps({"item": {"id": "ITEM-1"}, "origin": branch}))
+        (review / "verdict.json").write_text(json.dumps({"verdict": "INTERVENTION_REQUIRED", "routes": [
+            {"type": "author_fix", "items": ["COR-1"], "owner": "author", "closes_when": "push"}]}))
+        (review / "findings.json").write_text(json.dumps([{"id": "COR-1", "claim": "nine is not refused",
+            "evidence": [{"file": "src/a.py", "line": 2}], "consequence": "x", "form": None}]))
+        fix_pkg = self.prepare(fix=str(review), package="pkg-fix")
+        man = json.loads((fix_pkg / "deliver-manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(man["base"], {"name": branch, "sha": head})
+        self.assertEqual(man["branch"]["name"], branch)
+        self.assertEqual(man["item"]["kind"], "behaviour-change")
+        self.assertIn("nine is not refused", (fix_pkg / "item.md").read_text(encoding="utf-8"))
+        current = subprocess.run(("git", "branch", "--show-current"), cwd=self.repo,
+                                 capture_output=True, text=True).stdout.strip()
+        self.assertEqual(current, branch)
 
     def test_a_file_outside_the_named_ones_is_outside_the_scope(self):
         package = self.prepare()

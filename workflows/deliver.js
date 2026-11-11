@@ -81,9 +81,11 @@ const MEASURE_SCHEMA = {
         properties: {
           file: { type: 'string' }, line: { type: 'integer' },
           from: { type: 'string' }, to: { type: 'string' }, test: { type: 'string' },
+          stays_green: { type: 'array', items: { type: 'string' } },
         },
       },
     },
+    proving_tests: { type: 'array', items: { type: 'string' } },
     checked: { type: 'array', items: { type: 'string' } },
   },
 }

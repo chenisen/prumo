@@ -41,8 +41,11 @@ against it.
 
 ## The test
 
-Name each test exactly as `mutations[].test` in the measurement says: the script looks
-for those names in the red output. Each asserts the guard's **refusal** — the input the
+Name each test exactly as `mutations[].test` — or `proving_tests`, for a behaviour
+change — in the measurement says: the script looks for those names in the red output.
+For a behaviour change the test is written against the behaviour the item asks for, not
+the one the code has: the script runs it on the base and requires red before it accepts
+the green. Each asserts the guard's **refusal** — the input the
 guard rejects, and the rejection — and the item's remaining cases sit beside them. Use
 only tools that write files: do not run the suite, the formatter or git.
 

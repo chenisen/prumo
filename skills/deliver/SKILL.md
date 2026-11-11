@@ -118,6 +118,25 @@ fixed rule:
 
 `skipped` is mandatory: what the writer did not check is written, even when empty.
 
+Three more facts the record carries since 2.1: the profile's **lint** check over the
+tree the writer left (`red` blocks); for each mutant, the tests the item says must
+**stay green** under it (`red` there means the mutant is wider than the guard, and
+blocks); and, for a `behaviour-change`, the **red on the base** — the base's production
+files restored under the new test, the proving tests required red, the writer's files
+put back, the suite run again and required green.
+
+## A fix
+
+```
+deliver.py prepare --repo R --fix <review package> [--branch B]
+```
+
+The `author_fix` routes a review opened become the item, written from the findings
+behind them; the kind is `behaviour-change`; the branch is the review's own, and its
+head is the base — the red before the green is measured against what the review read.
+The rest of the sequence is the same, and it ends where every delivery ends: in the
+review's invocation.
+
 ## The report
 
 Short. One fact per line, each with an address. `✔` holds, `✘` fails, `?` not measured.

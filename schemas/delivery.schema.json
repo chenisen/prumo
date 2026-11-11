@@ -144,6 +144,20 @@
               },
               "reverted": {
                 "type": "boolean"
+              },
+              "stays_green": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "tests the item says must STAY green under this mutant — a mutant that turns one red is wider than the guard"
+              },
+              "stays_green_result": {
+                "enum": [
+                  "green",
+                  "red",
+                  null
+                ]
               }
             }
           }
@@ -324,6 +338,27 @@
     "next": {
       "type": "string",
       "description": "the invocation ready to paste, verbatim"
+    },
+    "lint": {
+      "description": "the profile's lint check over the tree the writer left; `not_run` when the profile declares none",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "reason"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "green",
+            "red",
+            "not_run"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
     }
   },
   "$defs": {
