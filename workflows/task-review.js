@@ -288,8 +288,9 @@ const context = (slice) => [
     : '',
   inlined['delivery-digest.json']
     ? embed('delivery-digest.json', "The harness's own digest of every run file, measured with the "
-        + 'profile\'s patterns: each run\'s reds BY NAME, executed × predicted, and `beyond_base` — '
-        + 'the tests a mutant turned red that the base run did not have. THIS says what a mutant '
+        + 'profile\'s patterns: the base run\'s reds BY NAME, and for every other run executed × '
+        + 'predicted, `beyond_base` — the tests it turned red that the base did not have — and '
+        + '`back_to_green`. THIS says what a mutant '
         + 'killed; the record\'s `test` field names the one test the script asked for, not the whole '
         + 'set, and the record\'s prose never decides. Do not open a run file when the digest answers.')
     : '',
@@ -305,7 +306,9 @@ const context = (slice) => [
     + '`conventions_observed`, each with the file that shows it. It is kept outside the '
     + 'repository so the next review starts less blind. Never phrase it in terms of this '
     + 'delivery, and never put an identifier in it. Nothing to say there is a valid answer.',
-  `Slice to read: ${bundle}/slices/${slice}.patch`,
+  inlined[`slices/${slice}.patch`]
+    ? embed(`slices/${slice}.patch`, 'Your slice of the diff — it is HERE, do not read the file')
+    : `Slice to read: ${bundle}/slices/${slice}.patch`,
 ].filter(Boolean).join('\n')
 
 phase('Review')

@@ -470,6 +470,7 @@ review:
   reading_missing: '{path} não existe — a leitura obrigatória não se declara apontando para o
     vazio'
   knowledge_at: 'conhecimento: {path} — {n} entradas ao longo de {reviews} revisão(ões)'
+  knowledge_harvested: 'esta revisão colheu: {detail}'
   knowledge_failed: 'o acúmulo de conhecimento não rodou: {error} (a revisão não é afetada)'
   record_at: 'registro: {path}'
   rendered: 'render: {path}'

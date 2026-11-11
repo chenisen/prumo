@@ -504,7 +504,11 @@ class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
             self.assertEqual(digest["base_run"], "run-suite-base.txt")
             m = digest["runs"]["run-suite-mutation-1.txt"]
             self.assertEqual(m["beyond_base"], ["B::it_refuses", "C::it_refuses_both"])
-            self.assertEqual((m["executed"], m["predicted"]), (11, 11))
+            self.assertEqual(m["back_to_green"], [])
+            self.assertEqual((m["executed"], m["predicted"], m["red_count"]), (11, 11, 3))
+            # the base names are listed once, on the base run; the others say what changed
+            self.assertEqual(digest["runs"]["run-suite-base.txt"]["reds"], ["A::old_red"])
+            self.assertNotIn("reds", m)
             self.assertEqual(digest["runs"]["run-suite-branch.txt"]["beyond_base"], [])
             self.assertEqual(digest["runs"]["run-lint.txt"], {"role": "lint", "failed": False})
             # the digest is a package file the reviewers get inline, never a pointer
@@ -514,8 +518,9 @@ class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
                              digest["runs"].keys())
             # no pattern: no names, and no claim that nothing is red
             bare = review.digest_runs(pkg, {"checks": {}})
-            self.assertIsNone(bare["runs"]["run-suite-mutation-1.txt"]["reds"])
+            self.assertIsNone(bare["runs"]["run-suite-base.txt"]["reds"])
             self.assertIsNone(bare["runs"]["run-suite-mutation-1.txt"]["beyond_base"])
+            self.assertIsNone(bare["runs"]["run-suite-mutation-1.txt"]["red_count"])
             self.assertIsNone(bare["runs"]["run-lint.txt"]["failed"])
             # a package without runs digests nothing and writes nothing
             empty = pathlib.Path(tmp) / "empty"; empty.mkdir()
@@ -554,6 +559,24 @@ class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
             odd = pathlib.Path(tmp) / "odd.json"
             odd.write_text(json.dumps({"findings": [], "result": {"findings": [{"id": "X"}]}}))
             self.assertEqual(review.workflow_result_from(odd)["findings"], [])
+
+    def test_a_slice_that_fits_travels_inline_and_the_reviewer_is_told_not_to_read_it(self):
+        """Each reviewer of an 85-line delivery read its slice twice, from the path the
+        prompt gave. A slice under the ceiling is carried like any other package file."""
+        import tempfile
+        import review
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = pathlib.Path(tmp); (pkg / "slices").mkdir()
+            (pkg / "slices" / "complete.patch").write_text("--- a\n+++ b\n+line\n")
+            (pkg / "slices" / "huge.patch").write_text("x" * (review.INLINE_CEILING + 1))
+            (pkg / "manifest.json").write_text("{}")
+            payload = review.inline_payload(pkg)
+            self.assertEqual(payload["slices/complete.patch"], "--- a\n+++ b\n+line\n")
+            self.assertNotIn("slices/huge.patch", payload)
+            self.assertIn("manifest.json", payload)
+        workflow = (PRUMO_ROOT / "workflows" / "task-review.js").read_text(encoding="utf-8")
+        self.assertIn("inlined[`slices/${slice}.patch`]", workflow)
+        self.assertIn("do not read the file", workflow)
 
     def test_the_suite_the_delivery_measured_on_this_head_is_evidence(self):
         import json, tempfile

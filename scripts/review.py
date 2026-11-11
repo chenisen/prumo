@@ -249,9 +249,18 @@ def digest_runs(package: pathlib.Path, profile: dict) -> dict | None:
             continue
         reds = red_names(text, suite.get("red_name_pattern"))
         executed, predicted = progress(text, suite.get("progress_pattern"))
-        entry = {"role": "suite", "reds": reds, "executed": executed, "predicted": predicted,
-                 "beyond_base": (sorted(set(reds) - set(base_reds))
-                                 if reds is not None and base_reds is not None else None)}
+        entry = {"role": "suite", "red_count": None if reds is None else len(reds),
+                 "executed": executed, "predicted": predicted}
+        # The base run carries its reds by name once; every other run says only what
+        # changed against it — `beyond_base`, what went red, and `back_to_green`, what
+        # stopped being red. Listing the base's twenty-two names under every mutant
+        # tripled the digest and said nothing the subtraction does not.
+        if path.name == BASE_RUN or digest["base_run"] is None:
+            entry["reds"] = reds
+        else:
+            known = reds is not None and base_reds is not None
+            entry["beyond_base"] = sorted(set(reds) - set(base_reds)) if known else None
+            entry["back_to_green"] = sorted(set(base_reds) - set(reds)) if known else None
         digest["runs"][path.name] = entry
     write_json(package / DIGEST_FILE, digest)
     return digest
@@ -514,14 +523,18 @@ def inline_payload(package: pathlib.Path) -> dict:
     the prompt, which is the same thing the agent would have discovered by reading a
     path that is not there, minus the round trip."""
     out = {}
-    for name in INLINE_FILES:
-        f = package / name
+    # The slices too, under the same ceiling: a reviewer handed a path to an 85-line
+    # patch spent two of its turns reading it — twice, measured on two reviews of the
+    # same delivery. A slice that fits is carried like any other package file, and the
+    # prompt tells the reviewer not to read it again. One that does not fit stays a path.
+    slices = sorted((package / "slices").glob("*.patch")) if (package / "slices").is_dir() else []
+    for f in [package / name for name in INLINE_FILES] + slices:
         if not f.is_file():
             continue
         text = f.read_text(encoding="utf-8")
         if len(text.encode("utf-8")) > INLINE_CEILING:
             continue
-        out[name] = text
+        out[str(f.relative_to(package))] = text
     return out
 
 
@@ -686,6 +699,8 @@ def conclude(args) -> int:
         learned = accrue(package, str(package / "conventions_observed.json"))
         print(t("review.knowledge_at", path=learned["reading"],
                 n=learned["entries"], reviews=learned["reviews"]))
+        print("  " + t("review.knowledge_harvested", detail=" · ".join(
+            f"{kind} {n}" for kind, n in (learned.get("harvested") or {}).items())))
     except Exception as e:                                  # noqa: BLE001 — see above
         print(t("review.knowledge_failed", error=e))
 

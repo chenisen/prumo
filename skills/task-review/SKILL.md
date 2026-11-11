@@ -136,9 +136,10 @@ against it, returning `criteria` with a record that states the fact; `conclude
 --criteria <file>` writes those readings over the extractor's list. A record about
 another commit is kept for the reader and counts for nothing. The delivery's captured
 runs (`run-*.txt`) travel too, under `delivery-runs/`, and `prepare` digests every one of
-them ONCE with the profile's patterns into `delivery-digest.json` — reds by name,
-executed × predicted, and `beyond_base`, the tests a mutant turned red that the base run
-did not have — inline for the reviewers and named to the verifier. The digest, never the
+them ONCE with the profile's patterns into `delivery-digest.json` — the base run's reds by
+name, and for every other run executed × predicted, `beyond_base`, the tests it turned red
+that the base did not have, and `back_to_green` — inline for the reviewers and named to
+the verifier. The digest, never the
 record's prose nor the one `test` a mutation names, says what a mutant killed: on the
 first real review with the runs attached, both reviewers raised from the prose that a
 mutant had turned one test red while its run held seventeen beyond the base.

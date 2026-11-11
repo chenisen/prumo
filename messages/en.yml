@@ -468,6 +468,7 @@ review:
   reading_empty: '{path} is empty — a blank file is not reading done'
   reading_missing: '{path} does not exist — mandatory reading is not declared by pointing at nothing'
   knowledge_at: 'knowledge: {path} — {n} entries over {reviews} review(s)'
+  knowledge_harvested: 'this review harvested: {detail}'
   knowledge_failed: 'the knowledge accrual did not run: {error} (the review is unaffected)'
   record_at: 'record: {path}'
   rendered: 'render: {path}'
