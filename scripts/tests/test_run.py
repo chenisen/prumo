@@ -492,7 +492,7 @@ class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
         import review
         profile = {"checks": {"suite": {"red_name_pattern": r"(?m)^\d+\) (\S+)",
                                         "progress_pattern": r"(\d+) / (\d+) \(\s*\d+%\)"},
-                              "lint": {"failure_pattern": r"(?m)^\s*(FAIL|Laravel Pint failed)"}}}
+                              "lint": {"failure_pattern": r"(?m)^\s*(FAIL|Linter failed)"}}}
         with tempfile.TemporaryDirectory() as tmp:
             pkg = pathlib.Path(tmp); runs = pkg / review.RUNS_DIR; runs.mkdir()
             (runs / "run-suite-base.txt").write_text("1) A::old_red\n 10 / 10 (100%)\nERRORS!\n")
