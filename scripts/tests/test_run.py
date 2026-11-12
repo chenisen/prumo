@@ -196,6 +196,17 @@ class TestEveryRoutingDecisionIsReadFromDisk(unittest.TestCase):
         self.assertEqual(out["class"], "intervention")
         self.assertIn(f"deliver.py prepare --repo repo-x --fix {self.review}", out["text"])
 
+    def test_a_fix_delivered_after_the_verdict_asks_for_a_review_of_its_head(self):
+        """Measured on 2026-11-12: a fix bound to the run kept showing the old review's
+        intervention, and its own head was never reviewed."""
+        self.put(self.deliver, "deliver-manifest.json", {})
+        self.put(self.deliver, "delivery.json", {"state": "delivered", "branch": {"name": "b", "sha": "new"}})
+        self.put(self.review, "manifest.json", {"head_sha": "old"})
+        self.put(self.review, "verdict.json", {"verdict": "INTERVENTION_REQUIRED"})
+        self.assertTrue(self.decide()["text"].startswith("review.py prepare --repo repo-x --branch b"))
+        self.put(self.review, "manifest.json", {"head_sha": "new"})
+        self.assertEqual(self.decide()["class"], "intervention")
+
     def test_status_says_where_the_run_stands_and_writes_nothing(self):
         """The public contract for a runner or an app: the same step `next` would give,
         with what the run is, and orchestration.md untouched however often it is asked."""
