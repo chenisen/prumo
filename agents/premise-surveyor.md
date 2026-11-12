@@ -45,6 +45,10 @@ JSON only:
 - `central` is true when the item's whole point rests on it: the guard exists, no test
   covers it, the file is where the item says. A central premise that fails ends the
   delivery before anything is written, so mark it only when it is.
+- A premise is what the item takes as **already true**: the cause, the file, the line,
+  the reds it names. What the item **expects** once delivered — "expected", "should" —
+  is not a premise. It is the change, and it fails on the base by definition. Never
+  list it among the premises; its proof is `proving_tests`, red on the base.
 - For `coverage-gap`: the guard's exact line, whether any test under `test_roots` already
   exercises it (grep for the function, the route, the message), the test file to write
   (under `test_roots`, next to the unit's existing tests), and one mutation that inverts
