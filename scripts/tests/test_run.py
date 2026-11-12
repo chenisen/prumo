@@ -37,6 +37,20 @@ class TestTheRouteIsThePersons(unittest.TestCase):
             with self.assertRaises(AskMissing):
                 start(repo="r", item="ITEM-1", ask_file=f.name)
 
+    def test_run_refuses_a_kind_the_shape_does_not_deliver(self):
+        """Refused at start, before a package exists: otherwise every `next` repeats a
+        prepare that can only refuse."""
+        import tempfile
+        from run import start
+        from common import UsageError
+        with tempfile.TemporaryDirectory() as d, tempfile.NamedTemporaryFile("w", suffix=".md") as f:
+            f.write("the ask"); f.flush()
+            with self.assertRaises(UsageError) as cm:
+                start(repo="r", item="ITEM-1", ask_file=f.name, package=str(pathlib.Path(d) / "run"),
+                      shape="debt", kind="refactor")
+            self.assertIn("refactor", str(cm.exception))
+            self.assertFalse((pathlib.Path(d) / "run").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
