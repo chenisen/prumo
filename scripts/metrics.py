@@ -5,7 +5,10 @@ The metric none of the surveyed tools carries is profile coverage: how much of a
 repository is in fact under review. Without it, "0 findings" is ambiguous.
 
 Usage:
-    metrics.py --runs FILE [--repo <repo>]
+    metrics.py --runs FILE [--repo <repo>] [--json]
+
+`--json` is the public, versioned form (METRICS_VERSION) a client reads instead of
+importing this module.
 """
 from __future__ import annotations
 
@@ -18,6 +21,8 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from i18n import t
+
+METRICS_VERSION = 1
 
 
 def aggregate(runs: list[dict]) -> dict:
@@ -90,8 +95,20 @@ def aggregate(runs: list[dict]) -> dict:
         minutes = [r["minutes"] for r in rs if isinstance(r.get("minutes"), (int, float))]
         coverages = [r["profile_coverage"] for r in rs if isinstance(r.get("profile_coverage"), (int, float))]
         not_assessable = [len(r.get("classes_not_assessable") or []) for r in rs]
+        # Deliveries per ISO week, and items whose FIRST review was approved: what a
+        # person can watch grow without rewarding volume over a clean first pass.
+        weeks = collections.Counter(_week(r["date"]) for r in rs
+                                    if r.get("state") == "delivered" and _week(r.get("date")))
+        first = {}
+        for r in rs:
+            if r.get("verdict") and r.get("item") is not None:
+                first.setdefault(str(r["item"]), r["verdict"])
         out[repo] = {
             "runs": len(rs),
+            "delivered": sum(1 for r in rs if r.get("state") == "delivered"),
+            "delivered_by_week": dict(sorted(weeks.items())),
+            "items_reviewed": len(first),
+            "approved_first_pass": sum(1 for v in first.values() if v == "APPROVED"),
             "verdicts": dict(verdicts),
             "precision": precision,
             "precision_basis": precision_basis,
@@ -116,19 +133,35 @@ def aggregate(runs: list[dict]) -> dict:
     return out
 
 
+def _week(date) -> str | None:
+    """`2026-11-12` → `2026-W46`; anything else is no week, never a guessed one."""
+    import datetime
+    try:
+        y, w, _ = datetime.date.fromisoformat(str(date)[:10]).isocalendar()
+    except ValueError:
+        return None
+    return f"{y}-W{w:02d}"
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--runs", required=True)
     p.add_argument("--repo")
+    p.add_argument("--json", action="store_true", help="the versioned JSON form, for clients")
     args = p.parse_args()
 
     path = pathlib.Path(args.runs)
+    runs = ([json.loads(l) for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
+            if path.exists() else [])
+    if args.repo:
+        runs = [r for r in runs if r.get("repo") == args.repo]
+    if args.json:
+        # no history is an empty answer, not an error: a new installation has none yet
+        print(json.dumps({"version": METRICS_VERSION, "repos": aggregate(runs)}, ensure_ascii=False))
+        return 0
     if not path.exists():
         print(t("metrics.no_history", path=path))
         return 0
-    runs = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
-    if args.repo:
-        runs = [r for r in runs if r.get("repo") == args.repo]
 
     for repo, m in aggregate(runs).items():
         print("\n" + t("metrics.repo_header", repo=repo, runs=m["runs"]))
