@@ -102,6 +102,12 @@ def deliver_judge(record: dict, profile: dict, reference: str | None = None) -> 
 
     base = record["baseline"]
     if base.get("executed") is None:
+        # The suite ran and still nobody counted it: the profile names no way to read
+        # how many tests ran. Saying "did not run" would send the author after a fault
+        # that is the profile's.
+        suite_check = (profile.get("checks") or {}).get("suite") or {}
+        if (record.get("measured") or {}).get("suite") and not suite_check.get("progress_pattern"):
+            return stop(BLOCKED, t("deliver.blocked.progress_not_declared"), "profile")
         return stop(BLOCKED, t("deliver.blocked.suite_not_run",
                                reason=t("review.suite_not_run")), "author")
     if base.get("predicted") is not None and base["executed"] < base["predicted"]:

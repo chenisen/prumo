@@ -126,6 +126,20 @@ class TestStops(unittest.TestCase):
         self.assert_blocked(rec, "deliver.blocked.suite_incomplete", "author",
                             executed=97, predicted=120)
 
+    def test_a_suite_nobody_could_count_is_the_profiles_to_fix(self):
+        """Rule 8 again — the suite ran, the profile names no progress pattern. The stop
+        says so and goes to the profile, never "the suite did not run" to the author."""
+        rec = record(baseline={"base_reds": [], "branch_reds": [], "new_reds": [],
+                               "vanished_reds": [], "predicted": None, "executed": None},
+                     measured={"note": "n", "base": "run-suite-base.txt",
+                               "suite": "run-suite-branch.txt", "lint": None, "mutations": []})
+        self.assert_blocked(rec, "deliver.blocked.progress_not_declared", "profile")
+        counted = dict(PROFILE, checks={"suite": {"progress_pattern": r"(\d+)/(\d+)"}})
+        out = judge(rec, profile=counted)
+        self.assertEqual((out["state"], out["owner"]), ("blocked", "author"))
+        self.assertEqual(out["reason"], t("deliver.blocked.suite_not_run",
+                                          reason=t("review.suite_not_run")))
+
     def test_a_mutation_that_survived_blocks(self):
         rec = record(proof={"red_on_base": None,
                             "green_on_branch": {"test": "t_guard", "result": "green"},
@@ -302,6 +316,18 @@ class TestTheVoice(unittest.TestCase):
                     for sentence in re.split(r"(?<=[.!?])\s+", str(text)):
                         words = [w for w in sentence.split() if w]
                         self.assertLessEqual(len(words), 20, sentence)
+
+
+
+class TestTheSurveyorMeasuresPremisesNotTheChange(unittest.TestCase):
+    """Measured on 2026-11-12: a bug item ended in "Expected: the conductor writes
+    workflow-result.json". The surveyor listed it as a central premise that fails, and
+    the delivery stopped before the writer ran — on the very change it was asked for."""
+
+    def test_the_surveyor_s_prompt_keeps_the_expected_behaviour_out_of_the_premises(self):
+        agent = (PRUMO_ROOT / "agents" / "premise-surveyor.md").read_text(encoding="utf-8")
+        self.assertIn("is not a premise. It is the change, and it fails on the base by definition.", agent)
+        self.assertIn("its proof is `proving_tests`, red on the base.", agent)
 
 
 if __name__ == "__main__":
