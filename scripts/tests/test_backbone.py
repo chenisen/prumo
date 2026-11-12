@@ -131,3 +131,39 @@ class TestMetricsByCapability(unittest.TestCase):
         out = aggregate(runs)
         self.assertEqual(out["r"]["tokens_per_line_median"], 10.0)
         self.assertEqual(out["r [deliver]"]["tokens_per_line_median"], 100.0)
+
+
+class TestMetricsForTheMural(unittest.TestCase):
+    """What a client draws: deliveries per week and a clean first pass, read from the
+    ledger, and the JSON form it reads them through."""
+
+    RUNS = [
+        {"repo": "r", "capability": "deliver", "item": "1", "state": "delivered", "date": "2026-11-12"},
+        {"repo": "r", "capability": "deliver", "item": "2", "state": "blocked", "date": "2026-11-12"},
+        {"repo": "r", "capability": "deliver", "item": "3", "state": "delivered", "date": "2026-11-03"},
+        {"repo": "r", "item": "1", "verdict": "INTERVENTION_REQUIRED", "date": "2026-11-12"},
+        {"repo": "r", "item": "1", "verdict": "APPROVED", "date": "2026-11-12"},
+        {"repo": "r", "item": "3", "verdict": "APPROVED", "date": "2026-11-03"},
+    ]
+
+    def test_deliveries_are_counted_per_iso_week_and_a_blocked_one_is_not(self):
+        m = aggregate(self.RUNS)["r [deliver]"]
+        self.assertEqual(m["delivered"], 2)
+        self.assertEqual(m["delivered_by_week"], {"2026-W45": 1, "2026-W46": 1})
+
+    def test_only_an_item_whose_first_review_was_approved_counts_as_first_pass(self):
+        m = aggregate(self.RUNS)["r"]
+        self.assertEqual((m["items_reviewed"], m["approved_first_pass"]), (2, 1))
+
+    def test_the_json_form_is_versioned_and_an_absent_ledger_is_empty(self):
+        import subprocess, sys, tempfile, json as _json
+        script = pathlib.Path(__file__).resolve().parents[1] / "metrics.py"
+        with tempfile.TemporaryDirectory() as d:
+            ledger = pathlib.Path(d) / "runs.jsonl"
+            out = subprocess.run([sys.executable, str(script), "--runs", str(ledger), "--json"],
+                                 capture_output=True, text=True, check=True).stdout
+            self.assertEqual(_json.loads(out), {"version": 1, "repos": {}})
+            ledger.write_text("\n".join(_json.dumps(r) for r in self.RUNS), encoding="utf-8")
+            out = _json.loads(subprocess.run([sys.executable, str(script), "--runs", str(ledger), "--json"],
+                                             capture_output=True, text=True, check=True).stdout)
+            self.assertEqual(out["repos"]["r [deliver]"]["delivered"], 2)
