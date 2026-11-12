@@ -21,6 +21,13 @@ Reread the code at the evidence pointed at, and answer:
    comes back as `attributable: false`.
 4. **Is there something in the code that already handles this** — a guard further up, a
    framework pattern, a validation at the edge — that the finding overlooked?
+5. **What kind of consequence is it, really?** `behaviour` — this code does the wrong
+   thing on a real path. `proof` — a test does not prove what it claims to. `record` —
+   the claim is about what a document says (the delivery's record, the item, the digest),
+   not about what the code does. `convention` — naming, style, documentation; nothing
+   functional. You are the second reading of the severity: a `required` label standing on
+   a consequence of record or convention is charged as a nit by the judge, and your
+   reading is shown beside the reviewer's label, which stays as written.
 
 Return:
 
@@ -28,6 +35,7 @@ Return:
 - `evidence`: what you read, with file and line;
 - `reason`: one sentence;
 - `attributable`: whether the defect belongs to this change.
+- `consequence_kind`: `behaviour`, `proof`, `record` or `convention`.
 
 **When in doubt, return `uncertain`, not `confirmed`.** An uncertain finding goes to a
 person to decide, not to the author to fix — the cost of erring towards "confirmed" is the

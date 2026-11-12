@@ -142,6 +142,36 @@ def about_the_record(finding: dict, package_files: set[str] | None) -> bool:
     return all(pathlib.PurePath(f).name in package_files for f in files)
 
 
+# --- A SECOND READING OF SEVERITY -------------------------------------------------------
+#
+# The reviewer that raises a finding also picks its severity, and severity is what closes
+# gate 1. Measured on real reviews (2026-11-04, 2026-11-05, 2026-11-12): the same delivery,
+# reviewed twice, went INTERVENTION and then APPROVED on the strength of one word, and the
+# same branch-name observation came back `fyi` on one run and `nit` on the next. The
+# verifier already reruns every blocking finding in a clean context; since 2.11.0 it also
+# says what KIND of consequence it read:
+#   * `behaviour`   this code does the wrong thing on a real path
+#   * `proof`       a test does not prove what it claims to
+#   * `record`      the claim is about what a document says — the record, the item, the
+#                   digest — not about what the code does
+#   * `convention`  naming, style, documentation: nothing functional
+# `required` means "a real defect with a demonstrable consequence in this code" (the
+# five-axis scale). A consequence of record or convention is not that, whatever the label,
+# so the judge charges the finding as a nit — and never rewrites the reviewer's severity:
+# the second reading is declared beside it, with the label as written. The other
+# direction, a nit that should have been required, still has no second reading: the
+# verifier never sees what nobody sent it, and sending everything is the axis that grows.
+SEVERITY_READ_DOWN = ("record", "convention")
+
+
+def read_down(finding: dict) -> bool:
+    """True when a blocking label stands on a consequence the verifier read as record or
+    convention. A refuted finding is gone already and is not read twice."""
+    return (finding.get("severity") in BLOCKING_SEVERITIES
+            and finding.get("consequence_kind") in SEVERITY_READ_DOWN
+            and finding.get("status") != "refuted")
+
+
 def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
                    criteria: list[dict], evidence: dict, scope: dict,
                    resolutions: list[dict], today: str | None = None,
@@ -214,7 +244,7 @@ def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
     # --- findings. A refuted one disappears; an uncertain one goes to a person, not to
     #     the author; and a finding the change did not cause is not the debt of whoever
     #     wrote this proposal.
-    severe = lambda f: f.get("severity") in BLOCKING_SEVERITIES
+    severe = lambda f: f.get("severity") in BLOCKING_SEVERITIES and not read_down(f)
     on_record = [f["id"] for f in findings if severe(f) and about_the_record(f, package_files)
                  and f.get("status") != "refuted"]
     blocks = lambda f: severe(f) and f.get("attributable", True) and f["id"] not in on_record
@@ -354,6 +384,9 @@ def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
             "classes_assessed": f"{len([c for c in classes if c['state'] != 'not_assessable'])}/18",
             "blocking_findings": len([f for f in findings if blocks(f)]),
             "findings_about_the_record": on_record,
+            "findings_severity_read_down": [
+                {"id": f["id"], "severity": f["severity"], "consequence_kind": f["consequence_kind"]}
+                for f in findings if read_down(f)],
             "refuted_findings": len([f for f in findings if f.get("status") == "refuted"]),
             "non_attributable_findings": non_attributable,
             # Declared, never deleted: what this environment could not measure is still

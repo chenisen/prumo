@@ -116,6 +116,23 @@
         "null"
       ],
       "description": "the id of the item's acceptance criterion this finding bears on, when it is about one; the judge then charges it at gate 3 (what the item asked for), not at gate 1"
+    },
+    "consequence_kind": {
+      "enum": [
+        "behaviour",
+        "proof",
+        "record",
+        "convention",
+        null
+      ],
+      "description": "the verifier's second reading of the severity: what kind of consequence the finding really has; `record` and `convention` are charged as a nit by the judge whatever the label"
+    },
+    "verifier_reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "the verifier's one sentence, or why the finding was not sent to it"
     }
   },
   "allOf": [

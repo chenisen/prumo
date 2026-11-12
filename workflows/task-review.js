@@ -148,13 +148,16 @@ const FINDINGS_SCHEMA = {
 
 const VERIFICATION_SCHEMA = {
   type: 'object',
-  required: ['verdict', 'reason', 'evidence', 'attributable'],
+  required: ['verdict', 'reason', 'evidence', 'attributable', 'consequence_kind'],
   additionalProperties: false,
   properties: {
     verdict: { enum: ['confirmed', 'refuted', 'uncertain'] },
     reason: { type: 'string' },
     evidence: { type: 'array', items: { type: 'object' } },
     attributable: { type: 'boolean' },
+    // The second reading of severity. `judge.py` charges a blocking label whose
+    // consequence is `record` or `convention` as a nit — see SEVERITY_READ_DOWN there.
+    consequence_kind: { enum: ['behaviour', 'proof', 'record', 'convention'] },
   },
 }
 
@@ -536,6 +539,13 @@ const verified = await pipeline(blocking, (f) =>
         'that record says was or was not executed is decided by the digest or the run file, ' +
         'never by the record\'s prose.'
       : '',
+    'Also say what KIND of consequence you read, in `consequence_kind`: `behaviour` (this ' +
+    'code does the wrong thing on a real path), `proof` (a test does not prove what it ' +
+    'claims to), `record` (the claim is about what a document says — the record, the item, ' +
+    'the digest — not about what the code does), or `convention` (naming, style, ' +
+    'documentation; nothing functional). `required` means a demonstrable consequence in ' +
+    'this code: a consequence of record or convention is charged as a nit by the judge, ' +
+    'whatever the label, and your reading is shown beside it.',
     'When in doubt, return `uncertain` — never `confirmed`.',
   ].filter(Boolean).join('\n'), {
     agentType: agentFor('finding-verifier'),
@@ -545,6 +555,7 @@ const verified = await pipeline(blocking, (f) =>
     ...(EFFORT === 'full' ? {} : { model: 'sonnet' }),
   }).then((v) => ({ ...f, status: v ? v.verdict : 'uncertain',
                     attributable: v ? v.attributable : f.attributable,
+                    consequence_kind: v ? v.consequence_kind : null,
                     verifier_reason: v ? v.reason : 'the verifier did not return' })))
 
 const byId = new Map(verified.filter(Boolean).map((f) => [f.id, f]))

@@ -323,6 +323,9 @@ provenance:
   remedy: 'Rode de novo o agente que o produziu, nomeando o manifesto desta revisão. Não corrija os ids à mão: o que leu a revisão errada teve um motivo, e a próxima rodada faria igual.'
 report:
   about_the_record: 'sobre o registro da entrega, não sobre a entrega: toda evidência nomeia arquivo do pacote da revisão — declarado, e não fecha portão'
+  severity_read_down: 'severidade lida pela segunda vez, pelo verificador: a consequência é {kind} — `{severity}` pede consequência demonstrável neste código, então é cobrado como nit; o rótulo do revisor fica como foi escrito'
+  consequence_kind_record: 'do registro da entrega, não do código'
+  consequence_kind_convention: 'de convenção: nome, estilo ou documentação, nada funcional'
   all_assessed: _Nenhuma. Toda classe foi avaliada._
   approve_not_merge: Aprovar não é mergear. O merge e a coluna d{item_with_article} ficam com
     o time.

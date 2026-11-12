@@ -322,6 +322,9 @@ provenance:
   remedy: 'Re-run the agent that produced it, naming this review''s manifest. Do not hand-edit the ids: whatever read the wrong review read it for a reason, and the next run would do it again.'
 report:
   about_the_record: 'about the delivery''s record, not the delivery: every evidence entry names a file of the review package — declared, and it closes no gate'
+  severity_read_down: 'severity read a second time, by the verifier: the consequence is {kind} — `{severity}` asks for a demonstrable consequence in this code, so it is charged as a nit; the reviewer''s label stays as written'
+  consequence_kind_record: 'of the delivery''s record, not of the code'
+  consequence_kind_convention: 'of convention: naming, style or documentation, nothing functional'
   all_assessed: _None. Every class was assessed._
   approve_not_merge: Approving is not merging. The merge and the {item}'s column stay with the
     team.

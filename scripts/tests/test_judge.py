@@ -545,3 +545,53 @@ class TestASliceNobodyRead(unittest.TestCase):
     def test_an_evidence_that_never_heard_of_coverage_still_approves(self):
         # A package produced before this field existed must not start failing.
         self.assertEqual(judge(evidence={"suite": "green"})["verdict"], APPROVED)
+
+
+class TestSeverityGetsASecondReading(unittest.TestCase):
+    """The reviewer picks the severity and severity closes gate 1; the same delivery went
+    INTERVENTION and then APPROVED on one word. The verifier's `consequence_kind` is the
+    second reading: a blocking label standing on a consequence of record or convention is
+    charged as a nit, declared beside the label, which is never rewritten."""
+
+    def finding(self, **over):
+        base = {"id": "COR-1", "reviewer": "correctness-proof-reviewer", "severity": "required",
+                "class": None, "claim": "the record says mutation (a) turned one test red",
+                "evidence": [{"file": "tests/Feature/XTest.php", "line": 3}],
+                "consequence": "the criterion asks for reds by name", "form": None,
+                "diff_verifiable": True, "status": "confirmed", "attributable": True}
+        return {**base, **over}
+
+    def test_a_required_whose_consequence_is_of_record_is_charged_as_a_nit(self):
+        v = judge(findings=[self.finding(consequence_kind="record")])
+        self.assertEqual(v["verdict"], APPROVED)
+        self.assertEqual(v["summary"]["findings_severity_read_down"],
+                         [{"id": "COR-1", "severity": "required", "consequence_kind": "record"}])
+        self.assertEqual(v["summary"]["blocking_findings"], 0)
+
+    def test_a_required_whose_consequence_is_of_convention_is_charged_as_a_nit(self):
+        self.assertEqual(judge(findings=[self.finding(consequence_kind="convention")])["verdict"], APPROVED)
+
+    def test_behaviour_and_proof_keep_the_label_s_weight(self):
+        for kind in ("behaviour", "proof"):
+            v = judge(findings=[self.finding(consequence_kind=kind)])
+            self.assertEqual(v["verdict"], INTERVENTION, kind)
+            self.assertEqual(v["summary"]["findings_severity_read_down"], [])
+
+    def test_no_reading_at_all_keeps_the_label_s_weight(self):
+        """A verifier that did not return gives `null`: the label stands, never silently
+        softened by an absence."""
+        for absent in ({}, {"consequence_kind": None}):
+            self.assertEqual(judge(findings=[self.finding(**absent)])["verdict"], INTERVENTION)
+
+    def test_the_label_is_never_rewritten(self):
+        v = judge(findings=[self.finding(consequence_kind="record")])
+        self.assertEqual(v["summary"]["findings_severity_read_down"][0]["severity"], "required")
+
+    def test_a_nit_is_not_read_twice(self):
+        v = judge(findings=[self.finding(severity="nit", consequence_kind="record")])
+        self.assertEqual(v["verdict"], APPROVED)
+        self.assertEqual(v["summary"]["findings_severity_read_down"], [])
+
+    def test_a_refuted_finding_is_gone_not_read_down(self):
+        v = judge(findings=[self.finding(status="refuted", consequence_kind="record")])
+        self.assertEqual(v["summary"]["findings_severity_read_down"], [])

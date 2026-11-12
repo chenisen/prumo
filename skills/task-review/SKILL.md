@@ -151,6 +151,14 @@ the digest, the item — is about the record, not the delivery: the judge declar
 closes no gate. The rule is narrow: a claim about the record pointed at a repository file
 keeps its weight, and what answers it is the digest, not this rule.
 
+Severity gets a second reading. The verifier, which already reruns every blocking finding
+in a clean context, also says what kind of consequence it read — `behaviour`, `proof`,
+`record` or `convention` — and the judge charges a `required` that stands on a consequence
+of record or convention as a nit, declaring the reading beside the reviewer's label, which
+is never rewritten. Measured need: the same delivery went INTERVENTION and APPROVED on one
+word, twice. The other direction — a nit that should have been required — still has no
+second reading, because nothing below the blocking severities is sent to the verifier.
+
 | Phase | Part | What it produces |
 |---|---|---|
 | **F0** preflight | `preflight.py` | `capabilities.json` — what THIS environment can do |

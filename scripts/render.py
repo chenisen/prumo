@@ -268,6 +268,8 @@ def build_report(package: pathlib.Path) -> str:
         if not findings:
             return t("report.no_findings")
         parts = []
+        rd = {x['id']: x['consequence_kind']
+              for x in (verd.get('summary') or {}).get('findings_severity_read_down', [])}
         for a in sorted(findings, key=lambda x: SEVERITY_ORDER.index(x["severity"])):
             ev = "; ".join(f"`{e['file']}`:{e.get('line') or '?'}" for e in a["evidence"])
             mark = "" if a.get("attributable", True) else "  " + t("report.finding_from_project")
@@ -282,6 +284,8 @@ def build_report(package: pathlib.Path) -> str:
                 f"- {t('report.status')}: `{a['status']}`\n"
                 + (f"- {t('report.about_the_record')}\n"
                    if a['id'] in (verd.get('summary') or {}).get('findings_about_the_record', []) else "")
+                + (f"- {t('report.severity_read_down', severity=a['severity'], kind=t('report.consequence_kind_' + rd[a['id']]))}\n"
+                   if a['id'] in rd else "")
                 + (f"- {t('report.finding_resolved', who=escape(res.get('decided_by') or res.get('waiver', {}).get('approver') or '?'), text=escape(res.get('text') or ''))}\n"
                    if res else "")
                 + (f"- {t('report.suggested_form')}: {escape(a['form'])}\n" if a.get("form")

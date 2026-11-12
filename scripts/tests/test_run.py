@@ -656,3 +656,18 @@ class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
             rec = json.loads((pkg / "delivery-record.json").read_text()); rec["baseline"]["new_reds"] = ["t_new"]
             (pkg / "delivery-record.json").write_text(json.dumps(rec))
             self.assertEqual(review.initial_evidence(pkg)["suite"], "red_attributable")
+
+
+class TestTheVerifierReadsTheSeverityASecondTime(unittest.TestCase):
+    def test_the_workflow_asks_for_and_carries_the_consequence_kind(self):
+        workflow = (PRUMO_ROOT / "workflows" / "task-review.js").read_text(encoding="utf-8")
+        self.assertIn("consequence_kind: { enum: ['behaviour', 'proof', 'record', 'convention'] }", workflow)
+        self.assertIn("'attributable', 'consequence_kind']", workflow)
+        self.assertIn("consequence_kind: v ? v.consequence_kind : null", workflow)
+        self.assertIn("in `consequence_kind`", workflow)
+
+    def test_the_verifier_s_prompt_names_the_four_kinds(self):
+        agent = (PRUMO_ROOT / "agents" / "finding-verifier.md").read_text(encoding="utf-8")
+        for kind in ("`behaviour`", "`proof`", "`record`", "`convention`"):
+            self.assertIn(kind, agent)
+        self.assertIn("- `consequence_kind`:", agent)

@@ -360,6 +360,8 @@ When the request names a delivery (item, proposal, branch or diff) and asks for 
    <prumo>/schemas/finding.schema.json.
 4. For each blocking finding, run finding-verifier in a context that has NOT seen the
    reasoning behind it. That blindness is what makes the verification worth anything.
+   It also returns `consequence_kind`: the judge charges a `required` whose consequence
+   is of record or convention as a nit, beside the reviewer's label.
 5. python3 <prumo>/scripts/review.py conclude --package P --findings A
 6. Publishing is an external act and wants its own explicit yes. Never merge, never move
    the item.
