@@ -521,6 +521,14 @@ suite:
   red_baseline: vermelhos, todos da linha de base do repositório
   red_delivery: vermelha, e os vermelhos são desta entrega
 telemetry:
+  cost: '  custo: US$ {usd} — tokens × os preços do prumo.yml'
+  cost_no_price: 'o modelo `{model}` não tem preço no prumo.yml'
+  cost_no_split: '{agent} informou só o total, sem separar entrada e saída'
+  cost_nothing: nenhuma chamada de agente para precificar
+  cost_unmeasured: '  custo: NÃO MEDIDO — {reason}. Precificado até aqui: US$ {priced}'
+  scope_ledger: as chamadas de agente que o harness gravou no usage.jsonl do pacote. NÃO inclui
+    a sessão que as conduziu nem os scripts da espinha, que não gastam LLM.
+  summary_ledger: 'telemetria: {tokens} tokens · {agents} chamadas de agente · do usage.jsonl do pacote'
   agent_row: '    {agent} {billable}  {messages} msgs  {model}'
   every_run_help: soma toda execução de workflow sobre o pacote — uma entrega são duas
   components: '  componentes: saída {output} · cache_creation {cache_creation} · cache_read {cache_read}'

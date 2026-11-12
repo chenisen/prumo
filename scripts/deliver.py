@@ -1030,6 +1030,9 @@ def record_run(package: pathlib.Path, record: dict, tel: dict) -> None:
         "premises_failed": sum(1 for p in record["premises"] if p["state"] == "fails"),
         "skipped": len(record["skipped"]),
         "tokens": tel.get("tokens"), "minutes": tel.get("minutes"),
+        "cost_usd": tel.get("cost_usd"),
+        "cost_not_measured_because": tel.get("cost_not_measured_because") or tel.get("reason"),
+        "telemetry_source": tel.get("source") or ("workflow" if tel.get("tokens") is not None else None),
         "agents": tel.get("agents"), "runs": tel.get("runs"),
         "cost_per_agent": tel.get("cost_per_agent") or {},
     }

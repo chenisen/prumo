@@ -460,6 +460,13 @@ Measured, never estimated. `telemetry.py` reads the workflow record and the per-
 transcripts and sums what the API reported. **With no locatable transcript, `tokens`
 comes out `null` with a reason** — a zero would make an expensive review look cheap.
 
+Agents run outside the Workflow — another runner, another provider, a replay — write
+`usage.jsonl` in the package, one line per agent call, and the telemetry reads it
+instead. Money comes from `prices` in `prumo.yml`, by model, in USD per million tokens.
+A model with no price, or a call that reported only a total, keeps the cost `null` with
+the reason. `runs.jsonl` carries `cost_usd`, and `metrics.py` adds the total, the median
+and the cost per changed line.
+
 ---
 
 ## Capabilities
