@@ -148,8 +148,8 @@ A finding the verifier never saw — below the blocking severities nothing is se
 out `unverified`, never `confirmed`: the reviewer's word, unrefuted and unchecked. And a
 severe finding whose every evidence entry names a file of the review package — the record,
 the digest, the item — is about the record, not the delivery: the judge declares it and it
-closes no gate. One such finding sent the same delivery to INTERVENTION on one run and
-APPROVED on the next.
+closes no gate. The rule is narrow: a claim about the record pointed at a repository file
+keeps its weight, and what answers it is the digest, not this rule.
 
 | Phase | Part | What it produces |
 |---|---|---|

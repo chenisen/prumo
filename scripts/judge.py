@@ -128,12 +128,14 @@ ROUTE_ORIGIN = {
 def about_the_record(finding: dict, package_files: set[str] | None) -> bool:
     """A finding whose every evidence entry names a file of the REVIEW PACKAGE — the
     delivery's record, the digest, the item — is about the record, not the delivery:
-    nothing in the repository holds what it claims. One such finding, raised `required`
-    from the record's prose, closed gate 1 and sent the same delivery to INTERVENTION on
-    one run and APPROVED on the next; the run file had settled the matter both times. It
-    is declared, never silenced, and it never closes a gate. A finding with NO evidence
-    file is not this: an absence ("no test covers X") has nothing to point at and keeps
-    its weight."""
+    nothing in the repository holds what it claims. Measured on the fourth review of one
+    delivery: a claim about the record's prose, pointed at the record file. It is
+    declared, never silenced, and it never closes a gate. The rule is narrow on purpose:
+    on the third review the same claim had been pointed at a repository file and raised
+    `required`, and this rule would not have moved it — what settles THAT is the digest
+    of the runs, which gives the reviewer the measured set instead of the prose. A finding
+    with NO evidence file is not this either: an absence ("no test covers X") has nothing
+    to point at and keeps its weight."""
     files = [e.get("file") for e in (finding.get("evidence") or []) if isinstance(e, dict) and e.get("file")]
     if not files or not package_files:
         return False
