@@ -391,6 +391,16 @@ class TheSecondReadingOfTheFirstStory(unittest.TestCase):
         self.assertIn("declared return type returns a value of that type", self.WORKFLOW)
         self.assertIn("a test double of a method with a declared return type", self.WRITER)
 
+    def test_the_code_is_clean_when_written_and_keeps_the_file_s_conventions(self):
+        self.assertIn("The code you write is clean on the first pass", self.WORKFLOW)
+        self.assertIn("only where a test you write depends on it", self.WORKFLOW)
+        self.assertIn("## The code you write is clean on the first pass", self.WRITER)
+        self.assertIn("**one level of nesting in what you add**", self.WRITER)
+        self.assertIn("**the file's conventions stay.**", self.WRITER)
+        reviewer = (PRUMO_ROOT / "agents" / "architecture-reviewer.md").read_text(encoding="utf-8")
+        self.assertIn("**Added code that does not read**", reviewer)
+        self.assertIn("**A convention the change switched without a test that needs it**", reviewer)
+
     def test_a_second_attempt_lists_every_file_since_the_task_base(self):
         self.assertIn("lists EVERY file changed since the task base", self.WORKFLOW)
         self.assertIn("This is a SECOND attempt on the same tree", self.WORKFLOW)

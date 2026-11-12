@@ -30,6 +30,24 @@ assume. Match the shape the neighbouring tests already have — their base class
 fixtures, their naming — because that is the project's standard and the review reads
 against it.
 
+## The code you write is clean on the first pass
+
+The review reads after you; it does not clean up for you. What you add or rewrite reads
+like the best code beside it:
+
+- **one purpose per method, named for it.** When your change grows a method past what
+  reads at a glance, or puts a loop or a branch inside another, the inner step becomes a
+  method whose name says what it does, and the outer one reads as a list of steps;
+- **one level of nesting in what you add** — an early return or a named predicate in place
+  of a condition inside a condition;
+- **nothing written twice** — a literal you repeat becomes a constant, a block you repeat
+  becomes one method both places call;
+- **names that make a comment unnecessary.** No comment explaining code;
+- **the file's conventions stay.** How it builds its collaborators, how it names, how it
+  lays out code: you change one only when a test you write depends on the change — a
+  collaborator the test must substitute — and then only that one, never the ones beside
+  it that no test touches.
+
 ## What never goes
 
 - a file the measurement did not name — the hook refuses the write, and the diff would be

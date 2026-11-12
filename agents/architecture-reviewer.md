@@ -26,6 +26,12 @@ Look for:
    duplicate and recorded why, raising it again is noise and corrodes the review.
 5. **A file above the ceiling** that the change made fatter — the ceiling comes from the
    profile.
+6. **Added code that does not read** — a method the change grew into several jobs, a loop
+   or branch it nested inside another, a block it wrote twice. Cite the lines; the finding
+   is about what this change added, never about the code it left as it was.
+7. **A convention the change switched without a test that needs it** — how the file
+   builds its collaborators, names or lays out code, changed where no test the change
+   wrote depends on the switch.
 
 The costliest mistake in this role is **demanding a standard the project does not adopt**.
 The absence of an abstraction the project chose not to have is never a finding.

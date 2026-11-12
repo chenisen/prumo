@@ -269,6 +269,13 @@ const written = await run('change-writer', [
   // from the double, not from the change.
   'A test double of a method with a declared return type returns a value of that type, ' +
   'explicitly — never the double\'s default.',
+  // The first story's refactor round (2026-11-12): the person reviewing the merge request
+  // found the worker the writer had grown — loops and branches nested three deep, one method
+  // doing five things — and a construction convention changed in files no test needed it in.
+  'The code you write is clean on the first pass: one purpose per method, named for it; ' +
+  'one level of nesting in what you add; nothing written twice; no comment explaining code. ' +
+  'Keep the file\'s conventions — how it builds collaborators, how it names — and change one ' +
+  'only where a test you write depends on it.',
   previous
     ? '`files` in your return lists EVERY file changed since the task base — the earlier ' +
       'attempt\'s included — not only the ones you touched in this pass.'
