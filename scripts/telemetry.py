@@ -351,7 +351,8 @@ def summarise(m: dict) -> str:
         else t("telemetry.summary_ledger", tokens=f"{m['tokens']:,}", agents=m["agents"]),
         t("telemetry.components", output=f"{c['output_tokens']:,}",
           cache_creation=f"{c['cache_creation_input_tokens']:,}",
-          cache_read=f"{c['cache_read_input_tokens']:,}"),
+          cache_read=f"{c['cache_read_input_tokens']:,}")
+        if m.get("components_complete", True) else t("telemetry.components_unknown"),
     ]
     if m.get("harness_tokens") is not None:
         lines.append(t("telemetry.harness_total", harness=f"{m['harness_tokens']:,}"))
