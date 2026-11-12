@@ -384,6 +384,19 @@ def setup_worktree(repo_dir: pathlib.Path, workdir: pathlib.Path, block: dict) -
                                output=output))
 
 
+def file_stands_for(name: str, test_files: list[str]) -> bool:
+    """A red read under a test file's name — the file could not load — stands for every
+    test in it. Runners name that file by module (`pkg.test_a`, `test_a`) or by a path
+    relative to where they ran (`test/a.test.ts` for `apps/web/test/a.test.ts`)."""
+    for f in test_files:
+        module = pathlib.Path(f).stem
+        if name in (f, module) or name.endswith(("." + module, "\\" + module, "/" + module)):
+            return True
+        if "/" in name and f.endswith("/" + name):
+            return True
+    return False
+
+
 def cut_branch(repo_dir: pathlib.Path, block: dict, name: str, base_sha: str,
                fresh: bool = True) -> pathlib.Path:
     """A clean tree is a precondition, not a courtesy: a pending change nobody made here
@@ -1067,10 +1080,10 @@ def conclude(args) -> int:
             # A test file that cannot even load against the base — it imports what the
             # change adds — is reported by the runner under the file's name, not the
             # test's. That is red on the base too: the module's name stands for its tests.
-            modules = [pathlib.Path(f).stem for f in files
-                       if casa_algum(f, [r_.rstrip("/") + "/**" for r_ in block["test_roots"]])]
+            test_files = [f for f in files
+                          if casa_algum(f, [r_.rstrip("/") + "/**" for r_ in block["test_roots"]])]
             red_on_base = {"test": ", ".join(proving),
-                           "result": ("red" if all(any(p in name or any(m == name or name.endswith("." + m) or name.endswith("\\" + m) for m in modules)
+                           "result": ("red" if all(any(p in name or file_stands_for(name, test_files)
                                                            for name in on_base) for p in proving)
                                       else "green") if r.get("ran") else "not_run"}
         suite = run_suite(profile, workdir, package, "branch")

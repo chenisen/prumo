@@ -99,6 +99,21 @@ def git(cwd, *args):
     subprocess.run(("git", *args), cwd=cwd, check=True, capture_output=True, text=True)
 
 
+class FileStandsFor(unittest.TestCase):
+    """A test file that cannot load is reported under the file's name, in each runner's
+    own spelling; every spelling stands for the tests inside it."""
+
+    FILES = ["apps/web/test/app.test.ts", "tests/test_guard.py"]
+
+    def test_a_module_name_or_a_relative_path_stands_for_the_file(self):
+        for name in ("test_guard", "tests.test_guard", "test/app.test.ts", "apps/web/test/app.test.ts"):
+            self.assertTrue(deliver.file_stands_for(name, self.FILES), name)
+
+    def test_another_file_or_a_test_inside_it_does_not(self):
+        for name in ("test/other.test.ts", "pp.test.ts", "test_guard_refuses", "test/app.test.ts > mural > x"):
+            self.assertFalse(deliver.file_stands_for(name, self.FILES), name)
+
+
 class Fixture(unittest.TestCase):
     """The throwaway repository, its profile and the two commands, shared by the
     spine in the checkout and the spine in a worktree."""
