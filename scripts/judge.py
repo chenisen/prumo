@@ -125,9 +125,25 @@ ROUTE_ORIGIN = {
 }
 
 
+def about_the_record(finding: dict, package_files: set[str] | None) -> bool:
+    """A finding whose every evidence entry names a file of the REVIEW PACKAGE — the
+    delivery's record, the digest, the item — is about the record, not the delivery:
+    nothing in the repository holds what it claims. One such finding, raised `required`
+    from the record's prose, closed gate 1 and sent the same delivery to INTERVENTION on
+    one run and APPROVED on the next; the run file had settled the matter both times. It
+    is declared, never silenced, and it never closes a gate. A finding with NO evidence
+    file is not this: an absence ("no test covers X") has nothing to point at and keeps
+    its weight."""
+    files = [e.get("file") for e in (finding.get("evidence") or []) if isinstance(e, dict) and e.get("file")]
+    if not files or not package_files:
+        return False
+    return all(pathlib.PurePath(f).name in package_files for f in files)
+
+
 def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
                    criteria: list[dict], evidence: dict, scope: dict,
-                   resolutions: list[dict], today: str | None = None) -> dict:
+                   resolutions: list[dict], today: str | None = None,
+                   package_files: set[str] | None = None) -> dict:
     """Verdict and routes. Deterministic: it reads no package, and depends on no clock
     beyond the `today` it is handed, which only serves to measure whether a waiver has
     expired. The catalogue and the installation's vocabulary are read for the WORDS of a
@@ -197,7 +213,9 @@ def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
     #     the author; and a finding the change did not cause is not the debt of whoever
     #     wrote this proposal.
     severe = lambda f: f.get("severity") in BLOCKING_SEVERITIES
-    blocks = lambda f: severe(f) and f.get("attributable", True)
+    on_record = [f["id"] for f in findings if severe(f) and about_the_record(f, package_files)
+                 and f.get("status") != "refuted"]
+    blocks = lambda f: severe(f) and f.get("attributable", True) and f["id"] not in on_record
     # A finding about an acceptance criterion of the item is charged where the item is
     # charged — gate 3 — not at "standards and good practice". A finding that the
     # mutation record did not prove the tests closed gate 1 once, and the reader was told
@@ -333,6 +351,7 @@ def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
             "profile_coverage": f"{len([c for c in classes if c['state'] != 'not_assessable'])}/18",
             "classes_assessed": f"{len([c for c in classes if c['state'] != 'not_assessable'])}/18",
             "blocking_findings": len([f for f in findings if blocks(f)]),
+            "findings_about_the_record": on_record,
             "refuted_findings": len([f for f in findings if f.get("status") == "refuted"]),
             "non_attributable_findings": non_attributable,
             # Declared, never deleted: what this environment could not measure is still
@@ -362,6 +381,7 @@ def main() -> int:
         evidence=optional("evidence.json", {}),
         scope=optional("scope.json", {}),
         resolutions=optional("resolutions.json", []),
+        package_files={p.name for p in package.rglob("*") if p.is_file()},
     )
     write_json(output / "verdict.json", verdict)
     print(verdict["verdict"])

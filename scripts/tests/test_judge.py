@@ -162,6 +162,30 @@ class TestFindings(unittest.TestCase):
         self.assertIn("confirm_finding", route_types(v))
         self.assertNotIn("author_fix", route_types(v))
 
+    def test_a_blocking_finding_whose_evidence_names_only_package_files_closes_no_gate(self):
+        """Raised `required` from the record's prose, evidence `delivery-record.json`:
+        INTERVENTION on one run, APPROVED on the next, the run file settling it both
+        times. About the record, not the delivery — declared, never a closed gate."""
+        pkg = {"delivery-record.json", "delivery-digest.json", "item.md", "manifest.json"}
+        on_record = {"id": "COR-1", "severity": "required", "status": "confirmed", "attributable": True,
+                     "evidence": [{"file": "/x/.prumo/packages/p/delivery-record.json", "line": None}]}
+        v = judge_delivery(PROFILE_OK, classes(), [on_record], [], SUITE_GREEN, {}, [], "2026-11-11", pkg)
+        self.assertEqual(v["verdict"], APPROVED)
+        self.assertEqual(v["summary"]["findings_about_the_record"], ["COR-1"])
+        # the same finding pointing at a repository file keeps its weight
+        in_repo = dict(on_record, evidence=[{"file": "tests/Feature/XTest.php", "line": 3}])
+        self.assertEqual(judge_delivery(PROFILE_OK, classes(), [in_repo], [], SUITE_GREEN, {}, [],
+                                        "2026-11-11", pkg)["verdict"], INTERVENTION)
+        # mixed evidence keeps its weight; an absence (no file at all) keeps its weight
+        mixed = dict(on_record, evidence=on_record["evidence"] + in_repo["evidence"])
+        absent = dict(on_record, evidence=[])
+        for f in (mixed, absent):
+            self.assertEqual(judge_delivery(PROFILE_OK, classes(), [f], [], SUITE_GREEN, {}, [],
+                                            "2026-11-11", pkg)["verdict"], INTERVENTION)
+        # without the package's file list the rule is silent
+        self.assertEqual(judge_delivery(PROFILE_OK, classes(), [on_record], [], SUITE_GREEN, {}, [],
+                                        "2026-11-11", None)["verdict"], INTERVENTION)
+
     def test_a_nit_does_not_block(self):
         self.assertEqual(
             judge(findings=[self.finding(severity="nit")])["verdict"], APPROVED)

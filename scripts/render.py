@@ -280,6 +280,8 @@ def build_report(package: pathlib.Path) -> str:
                 f"- {t('report.evidence')}: {ev}\n"
                 f"- {t('report.consequence')}: {escape(a['consequence'])}\n"
                 f"- {t('report.status')}: `{a['status']}`\n"
+                + (f"- {t('report.about_the_record')}\n"
+                   if a['id'] in (verd.get('summary') or {}).get('findings_about_the_record', []) else "")
                 + (f"- {t('report.finding_resolved', who=escape(res.get('decided_by') or res.get('waiver', {}).get('approver') or '?'), text=escape(res.get('text') or ''))}\n"
                    if res else "")
                 + (f"- {t('report.suggested_form')}: {escape(a['form'])}\n" if a.get("form")
