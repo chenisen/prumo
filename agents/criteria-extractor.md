@@ -10,6 +10,13 @@ declare to be out of scope?**
 
 Read the normalised item and the comments named in the request. Do not read code.
 
+**When the request hands you candidate lines (`L-1`, `L-2`, …), you do not cut the item:
+you label.** One label per id — `criterion`, `out_of_scope`, `context`, or `summary` with
+`of`, the ids a line restates as a whole ("the five tests above"). The harness turns the
+labels into the list, in document order, and replaces every summary by its parts; the same
+text labelled twice gives the same list. The free form below is for an item with no list
+lines at all.
+
 **One criterion per bullet or sentence the item states as a condition, in the order they
 appear.** Never split a bullet into sub-criteria, and never keep both a whole and its
 parts: a bullet that names two mutants is ONE criterion, a bullet that asks for a green

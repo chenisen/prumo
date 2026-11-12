@@ -578,6 +578,57 @@ class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
         self.assertIn("inlined[`slices/${slice}.patch`]", workflow)
         self.assertIn("do not read the file", workflow)
 
+    def test_the_harness_names_the_candidate_lines_and_a_summary_is_its_parts(self):
+        """The extractor cut the same item into nine criteria on one run and five on the
+        next: "the five tests above" as the five, or as one. The harness now names the
+        list lines; the extractor labels; and a summary is replaced by its parts
+        whatever the parts were labelled — the same labels give the same list."""
+        import review
+        item = ("# Title\n\n**Objetivo:** do X\n- first test\n- second test\n\n"
+                "**Contexto**\nprose\n**Critérios de aceite**\n- Os dois testes acima passando.\n"
+                "- Suíte verde.\n- **Fora de escopo:** outros middlewares.\n**Sugestão**\n1. try this\n")
+        cands = review.criteria_candidates(item)
+        self.assertEqual([c["id"] for c in cands], ["L-1", "L-2", "L-3", "L-4", "L-5", "L-6"])
+        self.assertEqual(cands[2]["under"], "Critérios de aceite")
+        self.assertEqual(cands[5]["text"], "try this")
+        self.assertEqual(cands[0]["under"], "Title")
+        labels_a = [{"id": "L-1", "role": "criterion"}, {"id": "L-2", "role": "criterion"},
+                    {"id": "L-3", "role": "summary", "of": ["L-1", "L-2"]},
+                    {"id": "L-4", "role": "criterion"}, {"id": "L-5", "role": "out_of_scope"},
+                    {"id": "L-6", "role": "context"}]
+        labels_b = [{"id": "L-1", "role": "context"}, {"id": "L-2", "role": "context"},
+                    {"id": "L-3", "role": "summary", "of": ["L-1", "L-2"]},
+                    {"id": "L-4", "role": "criterion"}, {"id": "L-5", "role": "out_of_scope"}]
+        crit_a, out_a = review.build_criteria(cands, labels_a)
+        crit_b, out_b = review.build_criteria(cands, labels_b)
+        self.assertEqual([c["text"] for c in crit_a], ["first test", "second test", "Suíte verde."])
+        self.assertEqual(crit_a, crit_b)
+        self.assertEqual([c["id"] for c in crit_a], ["AC-1", "AC-2", "AC-3"])
+        self.assertEqual(out_a, ["**Fora de escopo:** outros middlewares."])
+        # a summary of nothing known is itself the criterion; an unknown id is ignored
+        crit_c, _ = review.build_criteria(cands, [{"id": "L-3", "role": "summary", "of": ["L-99"]},
+                                                  {"id": "L-77", "role": "criterion"}])
+        self.assertEqual([c["candidate"] for c in crit_c], ["L-3"])
+        self.assertIn(review.CANDIDATES_FILE, review.INLINE_FILES)
+        workflow = (PRUMO_ROOT / "workflows" / "task-review.js").read_text(encoding="utf-8")
+        self.assertIn("criteria-candidates.json", workflow)
+        self.assertIn("criteria_labels: labels", workflow)
+
+    def test_conclude_builds_the_criteria_from_the_labels_not_from_the_extractors_list(self):
+        import json, tempfile
+        import review
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = pathlib.Path(tmp)
+            (pkg / review.CANDIDATES_FILE).write_text(json.dumps(
+                review.criteria_candidates("- a\n- b\n- a and b above\n")))
+            readings = review.absorb_workflow_result(pkg, {
+                "criteria_labels": [{"id": "L-1", "role": "criterion"}, {"id": "L-2", "role": "criterion"},
+                                    {"id": "L-3", "role": "summary", "of": ["L-1", "L-2"]}],
+                "criteria_extracted": {"criteria": [{"id": "AC-1", "text": "wrong"}], "out_of_scope": []},
+                "criteria": [{"id": "AC-2", "state": "met", "record": "r"}]})
+            self.assertEqual([c["text"] for c in json.loads((pkg / "criteria.json").read_text())], ["a", "b"])
+            self.assertEqual(readings, [{"id": "AC-2", "state": "met", "record": "r"}])
+
     def test_the_suite_the_delivery_measured_on_this_head_is_evidence(self):
         import json, tempfile
         import review

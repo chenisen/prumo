@@ -230,12 +230,78 @@ const EXTRACT_SCHEMA = {
   },
 }
 
+// The harness names the item's list lines (`criteria-candidates.json`, ids `L-n`); the
+// extractor only LABELS them; and the one rule that wobbled between runs — "the five
+// tests above" as one criterion or as five — is code: a summary IS its parts. Mirrored
+// in `review.py build_criteria`, which writes the file at `conclude` from the labels.
+const LABEL_SCHEMA = {
+  type: 'object',
+  required: ['labels'],
+  additionalProperties: false,
+  properties: {
+    labels: {
+      type: 'array',
+      items: {
+        type: 'object', required: ['id', 'role'], additionalProperties: false,
+        properties: { id: { type: 'string' },
+                      role: { enum: ['criterion', 'out_of_scope', 'context', 'summary'] },
+                      of: { type: 'array', items: { type: 'string' } } },
+      },
+    },
+    note: { type: ['string', 'null'] },
+  },
+}
+const buildCriteria = (candidates, labels) => {
+  const byId = new Map(candidates.map((c) => [c.id, c]))
+  const role = new Map((labels || []).filter((l) => l && byId.has(l.id)).map((l) => [l.id, l]))
+  const chosen = []
+  for (const c of candidates) {
+    const l = role.get(c.id)
+    if (!l) continue
+    if (l.role === 'criterion') chosen.push(c.id)
+    else if (l.role === 'summary') {
+      const parts = (l.of || []).filter((x) => byId.has(x) && x !== c.id)
+      chosen.push(...(parts.length ? parts : [c.id]))
+    }
+  }
+  const ordered = [...new Set(chosen.sort((a, b) => byId.get(a).line - byId.get(b).line))]
+  return {
+    criteria: ordered.map((i, k) => ({ id: `AC-${k + 1}`, text: byId.get(i).text,
+                                       state: 'not_verifiable', record: null, evidence: [], candidate: i })),
+    out_of_scope: candidates.filter((c) => role.get(c.id)?.role === 'out_of_scope').map((c) => c.text),
+  }
+}
+
 phase('Criteria')
 let extracted = null
+let labels = null
+const candidates = inlined['criteria-candidates.json'] ? JSON.parse(inlined['criteria-candidates.json']) : []
 if (inlined['criteria.json']) {
   log('criteria already in the package — the extractor is not paid twice')
 } else if (!inlined['item.md']) {
   log('WARNING: no item in the package — nothing to extract criteria from; ledger 1 stays empty')
+} else if (candidates.length) {
+  const labelled = await agent([
+    'LABEL each candidate line of the item below. You do not cut the item: the harness',
+    'already named its list lines, `L-1`, `L-2`, … Return one label per id:',
+    '`criterion` — a condition the delivery must satisfy; `out_of_scope` — what the item',
+    'says is NOT part of this delivery; `context` — background, origin, suggestion, a',
+    'premise; `summary` with `of: [ids]` — a line that restates other lines as a whole',
+    '("the five tests above", "all of the above"). Never decide whether a criterion was',
+    'met. Label every id; an id you leave out is treated as context.',
+    `Candidates: ${inlined['criteria-candidates.json']}`,
+    embed('item.md', 'Normalised item (description + comments)'),
+  ].join('\n'), { agentType: agentFor('criteria-extractor'), label: 'criteria-extractor',
+                  phase: 'Criteria', schema: LABEL_SCHEMA })
+  if (labelled) {
+    labels = labelled.labels
+    extracted = buildCriteria(candidates, labels)
+    inlined['criteria.json'] = JSON.stringify(extracted.criteria, null, 2)
+    inlined['out-of-scope.json'] = JSON.stringify({ out_of_scope: extracted.out_of_scope }, null, 2)
+    log(`${candidates.length} candidate lines labelled → ${extracted.criteria.length} criteria; ${extracted.out_of_scope.length} out of scope`)
+  } else {
+    log('WARNING: the extractor returned no labels — the reviewers read the item without a criteria list')
+  }
 } else {
   extracted = await agent([
     'Extract the acceptance criteria and the out-of-scope list of the item below.',
@@ -579,5 +645,5 @@ const scripts = templatable
   : null
 
 return { findings: final, coverage, conventions_observed: conventionsObserved,
-         criteria: criteriaVerdicts, criteria_extracted: extracted,
+         criteria: criteriaVerdicts, criteria_extracted: extracted, criteria_labels: labels,
          scripts_manual: scripts ? scripts.scripts_manual : [] }

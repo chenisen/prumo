@@ -266,6 +266,60 @@ def digest_runs(package: pathlib.Path, profile: dict) -> dict | None:
     return digest
 
 
+CANDIDATES_FILE = "criteria-candidates.json"
+LIST_LINE = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+(.+?)\s*$")
+HEADING_LINE = re.compile(r"^\s*(?:#{1,6}\s+(.+?)|\*\*([^*]+)\*\*:?)\s*$")
+
+
+def criteria_candidates(item_text: str) -> list[dict]:
+    """Every list line of the item, numbered in document order, with the heading it sits
+    under. The extractor used to cut the item into criteria by itself and cut it
+    differently each time — nine over one reading, five over the next, the same text —
+    because "the five tests above" can be one criterion or the five. Now the HARNESS
+    names the lines; the extractor only labels them; and `build_criteria` applies the
+    one rule that was wobbling: a line that summarises other lines IS those lines."""
+    out: list[dict] = []
+    heading = None
+    for n, line in enumerate(item_text.splitlines(), 1):
+        h = HEADING_LINE.match(line)
+        if h:
+            heading = (h.group(1) or h.group(2) or "").strip()
+            continue
+        m = LIST_LINE.match(line)
+        if m:
+            out.append({"id": f"L-{len(out) + 1}", "line": n, "under": heading, "text": m.group(1)})
+    return out
+
+
+def build_criteria(candidates: list[dict], labels: list[dict]) -> tuple[list[dict], list[str]]:
+    """The criteria list from the harness's candidates and the extractor's labels —
+    deterministic, in document order, ids `AC-n`. Roles: `criterion`, `out_of_scope`,
+    `context`, and `summary` with `of`: the ids it restates. A summary is replaced by
+    its parts whatever the parts were labelled, and never kept beside them. The same
+    function runs in the workflow for the reviewers' prompt and here for the file."""
+    by_id = {c["id"]: c for c in candidates}
+    role = {l["id"]: l for l in labels or [] if isinstance(l, dict) and l.get("id") in by_id}
+    chosen: list[str] = []
+    for c in candidates:
+        l = role.get(c["id"])
+        if not l:
+            continue
+        if l.get("role") == "criterion":
+            chosen.append(c["id"])
+        elif l.get("role") == "summary":
+            parts = [x for x in (l.get("of") or []) if x in by_id and x != c["id"]]
+            chosen.extend(parts or [c["id"]])
+    ordered: list[str] = []
+    for i in sorted(chosen, key=lambda i: by_id[i]["line"]):
+        if i not in ordered:
+            ordered.append(i)
+    criteria = [{"id": f"AC-{k}", "text": by_id[i]["text"], "state": "not_verifiable",
+                 "record": None, "evidence": [], "candidate": i}
+                for k, i in enumerate(ordered, 1)]
+    out_of_scope = [c["text"] for c in candidates if role.get(c["id"], {}).get("role") == "out_of_scope"]
+    return criteria, out_of_scope
+
+
 WORKFLOW_FILES = (("findings", "findings.json"), ("scripts_manual", "scripts_manual.json"),
                   ("conventions_observed", "conventions_observed.json"), ("coverage", "coverage.json"))
 
@@ -294,6 +348,12 @@ def absorb_workflow_result(package: pathlib.Path, result: dict) -> list[dict]:
     for key, name in WORKFLOW_FILES:
         if key in result:
             write_json(package / name, result[key])
+    labels = result.get("criteria_labels")
+    if labels is not None and (package / CANDIDATES_FILE).exists() \
+            and not (package / "criteria.json").exists():
+        criteria, out = build_criteria(read_json(package / CANDIDATES_FILE), labels)
+        write_json(package / "criteria.json", criteria)
+        write_json(package / "out-of-scope.json", {"out_of_scope": out})
     extracted = result.get("criteria_extracted") or {}
     if extracted.get("criteria") is not None and not (package / "criteria.json").exists():
         write_json(package / "criteria.json", extracted["criteria"])
@@ -391,6 +451,9 @@ def prepare(args) -> int:
     # The mandatory reading is copied into the package BEFORE the preflight, because it is
     # the file's existence — not the caller's intention — that counts as read.
     reading = copy_mandatory_reading(args, package)
+    if (package / "item.md").is_file():
+        write_json(package / CANDIDATES_FILE,
+                   criteria_candidates((package / "item.md").read_text(encoding="utf-8")))
     # A delivery's record, when the branch was delivered by the prumo: the proof its
     # own run measured — mutations, the suite by name, lint — travels with the review.
     if getattr(args, "delivery", None):
@@ -513,7 +576,7 @@ INLINE_CEILING = 24_000   # bytes, per file: above this, pointing at it is cheap
 # a file too big to share is already pointed at, not carried.
 INLINE_FILES = ("manifest.json", "capabilities.json", "profile.yml", "classes.json",
                 "criteria.json", "item.md", "proposal.md", "out-of-scope.json",
-                "delivery-record.json", DIGEST_FILE)
+                "delivery-record.json", DIGEST_FILE, CANDIDATES_FILE)
 
 
 def inline_payload(package: pathlib.Path) -> dict:
