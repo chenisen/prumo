@@ -15,6 +15,7 @@ import io
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -582,6 +583,40 @@ class Spine(Fixture):
         code, expired = status({"approver": "someone", "reason": "a person said so", "expires": "2000-01-01"})
         self.assertEqual((code, expired["state"]), (1, "blocked"))
         profile_file.write_text(yaml.safe_dump(original), encoding="utf-8")
+
+        # A fix round after a review (`prepare --fix`) lands on the story's branch from a
+        # package of its own and moves the head past the last task. The story counts its
+        # diff and takes its suite as the head's (2026-11-12: the story read "no task at
+        # the head" right after the fix round of the first real story was delivered).
+        man["budget"] = {"max_files": 60, "max_lines": 6000}
+        (story / "deliver-manifest.json").write_text(json.dumps(man), encoding="utf-8")
+        (self.repo / "src" / "b.py").write_text("def limit():\n    return 10  # fixed\n", encoding="utf-8")
+        git(self.repo, "add", "-A"); git(self.repo, "commit", "-q", "-m", "fix round")
+        fix_head = subprocess.run(("git", "rev-parse", "HEAD"), cwd=self.repo,
+                                  capture_output=True, text=True).stdout.strip()
+        fix_pkg = story.parent / "the-fix-round"
+        fix_pkg.mkdir()
+        fix_rec = json.loads(json.dumps(t2))
+        fix_rec["branch"]["sha"] = fix_head
+        fix_rec["item"] = dict(man["item"])
+        fix_rec["diff"] = {"files": ["src/b.py", "src/c.py"], "added": 7, "removed": 3,
+                           "outside_scope": [], "within_budget": True}
+        (fix_pkg / "delivery.json").write_text(json.dumps(fix_rec), encoding="utf-8")
+        shutil.copy2(story / "tasks" / "T2" / "run-suite-branch.txt", fix_pkg / "run-suite-branch.txt")
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = deliver.story_status(argparse.Namespace(package=str(story)))
+        fixed = json.loads((story / "delivery.json").read_text(encoding="utf-8"))
+        self.assertEqual((code, fixed["state"]), (0, "delivered"), fixed["reason"])
+        self.assertEqual(fixed["branch"]["sha"], fix_head)
+        self.assertIn("src/c.py", fixed["diff"]["files"])
+        self.assertEqual(fixed["diff"]["added"], rec["diff"]["added"] + 10)
+        self.assertIn("the-fix-round", fixed["measured"]["note"])
+        # Another item's delivery on the same branch is not this story's fix.
+        fix_rec["item"]["id"] = "SOMETHING-ELSE"
+        (fix_pkg / "delivery.json").write_text(json.dumps(fix_rec), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = deliver.story_status(argparse.Namespace(package=str(story)))
+        self.assertEqual(code, 1)
 
     def test_a_kind_the_shape_does_not_allow_is_refused(self):
         with self.assertRaises(common.UsageError):

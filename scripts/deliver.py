@@ -763,6 +763,27 @@ def story_status(args) -> int:
     lines = sum(r["diff"]["added"] + r["diff"]["removed"] for r in records.values())
     budget = man["budget"]
     head = git(dir_repositories() / man["repo"], "rev-parse", "--verify", "-q", man["branch"]["name"], check=False) or man["branch"]["sha"]
+    # A fix round on the story's branch (`prepare --fix` after a review) moves the head
+    # past the last task. Its record lives in its own package beside the story's; it is
+    # the same item on the same branch, so its diff joins the story's, and when it is the
+    # one at the head its suite is the head's. Measured on the first story (2026-11-12):
+    # without this the story read "no task at the head" right after the fix was delivered.
+    repo_dir = dir_repositories() / man["repo"]
+    fixes = []
+    for rec_path in sorted(package.parent.glob("*/delivery.json")):
+        if rec_path.parent == package:
+            continue
+        rec = read_json(rec_path)
+        if (rec.get("state") == DELIVERED
+                and str((rec.get("item") or {}).get("id")) == str(man["item"]["id"])
+                and (rec.get("branch") or {}).get("name") == man["branch"]["name"]
+                and rec["branch"].get("sha")
+                and subprocess.run(("git", "merge-base", "--is-ancestor", rec["branch"]["sha"], head),
+                                   cwd=repo_dir, capture_output=True).returncode == 0):
+            fixes.append((rec_path.parent, rec))
+    for _, rec in fixes:
+        files = sorted(set(files) | set(rec["diff"]["files"]))
+        lines += rec["diff"]["added"] + rec["diff"]["removed"]
     within = len(files) <= budget["max_files"] and lines <= budget["max_lines"]
     waiver = block.get("waiver")
 
@@ -772,12 +793,18 @@ def story_status(args) -> int:
     at_head = next((x["id"] for x in reversed(tasks)
                     if x["id"] in done and records[x["id"]]["branch"]["sha"] == head), None)
     branch_out, lint = "", {"state": "not_run", "reason": t("review.suite_not_run"), "run": None}
+    head_fix = None
+    if not at_head:
+        head_fix = next(((pkg, rec) for pkg, rec in fixes if rec["branch"]["sha"] == head), None)
+        if head_fix:
+            at_head = head_fix[0].name
     if at_head:
-        run = package / "tasks" / at_head / "run-suite-branch.txt"
+        source = head_fix[0] if head_fix else package / "tasks" / at_head
+        run = source / "run-suite-branch.txt"
         if run.exists():
             branch_out = run.read_text(encoding="utf-8")
             shutil.copy2(run, package / "run-suite-branch.txt")
-        lint = records[at_head].get("lint") or lint
+        lint = (head_fix[1] if head_fix else records[at_head]).get("lint") or lint
     if branch_out:
         reads = compare_reds(base_out, branch_out, check)
         baseline = {"base_reds": reads["base_reds"] or [], "branch_reds": reads["branch_reds"] or [],
@@ -843,7 +870,8 @@ def story_status(args) -> int:
               "baseline": baseline,
               "diff": {"files": files, "added": lines, "removed": 0, "outside_scope": [],
                        "within_budget": within},
-              "skipped": [s for r in records.values() for s in r.get("skipped") or []],
+              "skipped": [s for r in list(records.values()) + [rec for _, rec in fixes]
+                          for s in r.get("skipped") or []],
               "measured": measured,
               "waiver": waiver, "state": state, "reason": reason, "owner": owner,
               "next": NEXT.format(repo=man["repo"], branch=man["branch"]["name"], item=man["item"]["id"]),
