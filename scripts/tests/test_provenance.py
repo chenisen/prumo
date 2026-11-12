@@ -75,6 +75,22 @@ class TestItSpeaksOnlyAboutThisReview(unittest.TestCase):
         found = foreign_references("revisão do item 70707", package())
         self.assertEqual([{"kind": "item", "value": "70707"}], found)
 
+    def test_beside_a_short_id_a_line_a_count_and_an_amount_are_not_items(self):
+        """Item 15: `conduct.ts:93`, 65 tests and R$ 20 are not items 93, 65 and 20."""
+        short = package(dict(OWN, item={"id": "15"}), "# 15\n\nO condutor para.\n")
+        self.assertEqual([], foreign_references(
+            "src/conduct.ts:93 grava; linhas 76 e 79; 65 testes; limite de R$ 20; item 15", short))
+
+    def test_beside_a_short_id_a_written_reference_is_still_caught(self):
+        short = package(dict(OWN, item={"id": "15"}), "# 15\n\nO condutor para.\n")
+        self.assertEqual([{"kind": "item", "value": "16"}],
+                         foreign_references("o mesmo defeito do item 16", short))
+        self.assertEqual([{"kind": "item", "value": "42"}],
+                         foreign_references("ver #42 para o contexto", short))
+
+    def test_a_long_number_behind_a_colon_is_an_address(self):
+        self.assertEqual([], foreign_references("gerado.sql:70707 muda o índice", package()))
+
     def test_a_plain_number_is_not_a_sha(self):
         """`188523` is a pipeline id and `42` a count. Hex with no letter is a number."""
         self.assertEqual([], foreign_references(
