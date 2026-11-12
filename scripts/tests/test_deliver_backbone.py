@@ -641,6 +641,16 @@ class Spine(Fixture):
         self.assertEqual(rec["diff"]["outside_scope"], ["src/a.py"])
 
 
+    def test_a_named_document_under_doc_roots_is_inside_the_scope(self):
+        """Measured on 2026-11-12: a README the change made stale could not travel with
+        it, and the review asked for it four rounds running."""
+        roots = ["src", "tests", "README.md", "docs/"]
+        self.assertEqual(deliver.scope_guard(["README.md", "docs/a.md", "src/x.py"],
+                                             ["README.md", "docs/a.md", "src/x.py"], roots), [])
+        self.assertEqual(deliver.scope_guard(["README.md"], [], roots), ["README.md"],
+                         "a document the measurement did not name stays outside")
+        self.assertEqual(deliver.scope_guard(["NOTES.md"], ["NOTES.md"], roots), ["NOTES.md"])
+
 class InAWorktree(Fixture):
     """The same spine, with the profile asking for a worktree: the person's checkout
     never changes branch, the suite runs over the worktree through `{workdir}`, what
