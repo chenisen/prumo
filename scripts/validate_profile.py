@@ -94,6 +94,12 @@ def validate(profile: dict, schema: dict | None = None) -> tuple[list[str], list
                 warnings.append(t("validate.waiver_expired", role=role,
                                   date=waiver.get("expires")))
 
+    # --- a delivery reads the suite's progress: with no pattern for it, every delivery
+    # stops on "nobody counted the suite", after the whole write stage has been paid for
+    suite = (profile.get("checks") or {}).get("suite") or {}
+    if profile.get("delivery") and suite.get("command") and not suite.get("progress_pattern"):
+        warnings.append(t("validate.delivery_without_progress"))
+
     # --- evals pointing at a class with no anchor measure nothing
     for i, ev in enumerate(profile.get("evals") or []):
         klass = ev["class"]

@@ -95,6 +95,21 @@ class TestWarnings(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertIn(t("validate.check_without_tool", role="secrets"), warnings)
 
+    def test_a_delivering_profile_whose_suite_nobody_counts_warns(self):
+        """A delivery reads executed against predicted. A profile that delivers with no
+        progress pattern hears it here, not after a write stage it paid for."""
+        p = minimal_profile()
+        p["checks"]["suite"] = {"command": "make test", "required": True}
+        p["delivery"] = {"branch_format": "{item}", "commit_format": "{message}", "worktree": False,
+                         "budget": {"max_files": 4, "max_lines": 120}, "source_roots": ["src"],
+                         "test_roots": ["tests"], "mutation": {"command": None, "note": None},
+                         "kinds": ["coverage-gap"]}
+        _, warnings = validate(p)
+        self.assertIn(t("validate.delivery_without_progress"), warnings)
+        p["checks"]["suite"]["progress_pattern"] = r"(\d+) of (\d+)"
+        _, warnings = validate(p)
+        self.assertNotIn(t("validate.delivery_without_progress"), warnings)
+
     def test_an_expired_waiver_warns(self):
         p = minimal_profile()
         p["checks"]["secrets"] = {"command": None, "required": True, "waiver": {

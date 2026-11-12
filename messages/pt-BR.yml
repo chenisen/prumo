@@ -104,6 +104,7 @@ deliver:
     premise_failed: 'premissa central falha — {premise} ({evidence})'
     refuted: 'o cético leu o teste e ele não prova a guarda — {reason}'
     suite_incomplete: 'a suíte executou {executed} de {predicted} — não é verde'
+    progress_not_declared: 'a suíte rodou, mas ninguém a contou. O perfil não declara `checks.suite.progress_pattern`.'
     suite_not_run: 'a suíte não rodou: {reason}'
     test_not_red_on_base: '`{test}` não ficou vermelho na base — sem prova'
   cli:
@@ -588,6 +589,8 @@ validate:
     a âncora, ou registre `not_applicable` com motivo e aprovador'
   anchor_needs_verification: 'anchors.{klass}.verificacao: classe §B precisa dizer como uma pessoa
     prova'
+  delivery_without_progress: 'checks.suite.progress_pattern: ausente, e o perfil entrega. Toda entrega vai parar depois
+    da escrita, porque nada conta a suíte.'
   check_without_tool: 'checks.{role}: obrigatória e sem ferramenta — toda revisão abrirá `capacidade_ausente`
     até haver comando ou dispensa'
   confirmation_requires: '{field}: obrigatório quando status é `confirmado` — confirmar um perfil
