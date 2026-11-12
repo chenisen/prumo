@@ -350,6 +350,11 @@ class Config:
     # agent with `agent type 'scope-coherence-reviewer' not found` — far from the cause,
     # after the package is already built. Measured on 2026-11-04.
     agent_prefix: str | None = None
+    # What a token costs, by model id, in USD per million tokens — the installation's to
+    # declare, because a price list changes and the method must not carry one. Without a
+    # price for every model a run used, its cost stays `null` with the reason; never a
+    # guess. Each entry: input, output, and optionally cache_write and cache_read.
+    prices: tuple = ()
     # Legacy keys found while loading. The caller prints them once; silence would let an
     # installation drift until support is removed.
     legacy_keys: tuple = ()
@@ -624,7 +629,19 @@ def build(data: dict, source: pathlib.Path | None = None) -> Config:
         registries.insert(0, {"type": entry["type"], "marker": entry["marker"],
                               "note": entry.get("note") or ""})
 
-    return Config(forge=forge, tracker=tracker, paths=paths, source=source,
+    prices = []
+    for model, entry in ((data.get("prices") or {}).items() if isinstance(data.get("prices"), dict) else []):
+        if not isinstance(entry, dict) or not all(
+                isinstance(entry.get(k), (int, float)) and entry[k] >= 0 for k in ("input", "output")):
+            raise InvalidConfiguration(
+                f"`prices.{model}` needs `input` and `output`, in USD per million tokens, "
+                f"each a number ≥ 0 (and optionally `cache_write`, `cache_read`)")
+        extra = {k: entry[k] for k in ("cache_write", "cache_read")
+                 if isinstance(entry.get(k), (int, float)) and entry[k] >= 0}
+        prices.append((str(model), {"input": entry["input"], "output": entry["output"], **extra}))
+    if data.get("prices") is not None and not isinstance(data.get("prices"), dict):
+        raise InvalidConfiguration("`prices` is a mapping: model id → {input, output, …}")
+    return Config(forge=forge, tracker=tracker, paths=paths, source=source, prices=tuple(prices),
                   language=language, owner=owner.strip(), agnosticism=tuple(extras),
                   tolerated_repo_names=tuple(tolerated),
                   proof_registries=tuple(registries), agent_prefix=agent_prefix,

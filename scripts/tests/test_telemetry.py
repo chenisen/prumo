@@ -219,3 +219,57 @@ class TestEveryRunOverAPackage(TestTelemetry):
         self.assertEqual(both["runs"], ["wf_first", "wf_second"])
         self.assertEqual(both["minutes"], 3.0)
         self.assertEqual(both["harness_tokens"], 30)
+
+
+class TestALedgerAndAPrice(TestTelemetry):
+    """Agents run outside the Workflow — a runner of its own, a replay, any harness — leave a
+    ledger in the package. Measured on 2026-11-12: three deliveries and two reviews, a
+    dozen agents each, all printed `NOT MEASURED` because no Workflow had recorded them."""
+
+    PRICES = {"model-a": {"input": 3, "output": 15, "cache_read": 0.3}}
+
+    def ledger(self, *lines):
+        pkg = self.root / "pkg"
+        pkg.mkdir(exist_ok=True)
+        (pkg / telemetry.LEDGER).write_text("\n".join(json.dumps(l) for l in lines) + "\n")
+        return str(pkg)
+
+    def test_the_ledger_is_read_when_no_workflow_recorded_the_run(self):
+        pkg = self.ledger(
+            {"agent": "reviewer", "model": "model-a", "input_tokens": 1000, "output_tokens": 200},
+            {"agent": "reviewer", "model": "model-a", "input_tokens": 500, "output_tokens": 100,
+             "cache_read_input_tokens": 2000})
+        m = telemetry.with_cost(telemetry.from_ledger(pkg), self.PRICES)
+        self.assertEqual((m["tokens"], m["source"], m["agents"]), (3800, telemetry.LEDGER, 2))
+        self.assertEqual(m["cost_per_agent"]["reviewer"]["instances"], 2)
+        # (1500×3 + 300×15 + 2000×0.3) / 1e6
+        self.assertAlmostEqual(m["cost_usd"], 0.0096, places=6)
+        self.assertIsNone(m["cost_not_measured_because"])
+
+    def test_a_model_with_no_price_leaves_the_cost_null_and_says_which(self):
+        pkg = self.ledger({"agent": "writer", "model": "model-b", "input_tokens": 10, "output_tokens": 10})
+        m = telemetry.with_cost(telemetry.from_ledger(pkg), self.PRICES)
+        self.assertIsNone(m["cost_usd"])
+        self.assertEqual(m["cost_not_measured_because"], t("telemetry.cost_no_price", model="model-b"))
+
+    def test_a_total_with_no_split_counts_tokens_but_buys_no_price(self):
+        """The split is never invented: a total stays a total, and its cost stays null."""
+        pkg = self.ledger({"agent": "verifier", "model": "model-a", "total_tokens": 5000})
+        m = telemetry.with_cost(telemetry.from_ledger(pkg), self.PRICES)
+        self.assertEqual(m["tokens"], 5000)
+        self.assertFalse(m["components_complete"])
+        self.assertIsNone(m["cost_usd"])
+        self.assertEqual(m["cost_not_measured_because"], t("telemetry.cost_no_split", agent="verifier"))
+
+    def test_measure_falls_back_to_the_ledger_and_never_to_zero(self):
+        pkg = self.ledger({"agent": "a", "model": "model-a", "input_tokens": 1, "output_tokens": 1})
+        self.assertEqual(telemetry.measure(pkg, None)["tokens"], 2)
+        empty = self.root / "empty"; empty.mkdir()
+        self.assertIsNone(telemetry.measure(str(empty), None)["tokens"])
+
+    def test_prices_are_validated_in_prumo_yml(self):
+        import providers
+        self.assertEqual(dict(providers.test_config(prices=self.PRICES).prices)["model-a"]["output"], 15)
+        with self.assertRaises(providers.InvalidConfiguration):
+            providers.test_config(prices={"model-a": {"input": "three"}})
+

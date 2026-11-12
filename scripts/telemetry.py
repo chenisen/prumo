@@ -17,6 +17,15 @@ requests that generate it.
 `null` with a reason beside it. A zero here would make an expensive review look cheap,
 which is the failure mode this harness exists not to have.
 
+**A run the Workflow did not record still counts.** Agents run by another harness — a
+runner with any provider, a Codex-style harness, a person replaying the workflow — leave
+a ledger in the package instead: `usage.jsonl`, one line per agent call, with the agent,
+the model and what the provider reported. It is read when no Workflow record is.
+
+**Money is measured, never estimated.** Tokens become USD only through `prices` in
+`prumo.yml`, the installation's own list. A model with no price, or a call whose tokens
+came without the input/output split, leaves the cost `null` with the reason.
+
 Usage:
     telemetry.py --package DIR [--output FILE]
     telemetry.py --run-id wf_xxx
@@ -168,7 +177,113 @@ def usage_per_agent(session: pathlib.Path, run_id: str) -> list[dict]:
     return sorted(out, key=lambda a: -a["billable"])
 
 
+LEDGER = "usage.jsonl"
+
+
+def ledger_agents(package: str | None) -> list[dict]:
+    """The agent calls a harness wrote to `<package>/usage.jsonl`, in the shape
+    `usage_per_agent` returns. A line that names only `total_tokens` keeps its total and
+    says the split is unknown — the components are never invented as zero."""
+    path = pathlib.Path(package) / LEDGER if package else None
+    if not path or not path.exists():
+        return []
+    out = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            o = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        known = {k: o[k] for k in COMPONENTS if isinstance(o.get(k), int)}
+        split = "input_tokens" in known and "output_tokens" in known
+        total = sum(known.values()) if split else o.get("total_tokens")
+        if not isinstance(total, int):
+            continue
+        out.append({"agent": o.get("agent") or "?", "model": o.get("model"),
+                    "messages": int(o.get("requests") or 1),
+                    **{k: known.get(k, 0) for k in COMPONENTS},
+                    "billable": total, "split": split, "source": o.get("source")})
+    return sorted(out, key=lambda a: -a["billable"])
+
+
+def price_of(agent: dict, prices: dict) -> tuple[float | None, str | None]:
+    """USD for one agent call, from the installation's price list — or None and why."""
+    if not agent.get("split", True):
+        return None, t("telemetry.cost_no_split", agent=agent["agent"])
+    p = prices.get(agent.get("model") or "")
+    if not p:
+        return None, t("telemetry.cost_no_price", model=agent.get("model") or "?")
+    usd = (agent["input_tokens"] * p["input"] + agent["output_tokens"] * p["output"]
+           + agent["cache_creation_input_tokens"] * p.get("cache_write", p["input"])
+           + agent["cache_read_input_tokens"] * p.get("cache_read", p["input"])) / 1_000_000
+    return round(usd, 6), None
+
+
+def installation_prices() -> dict:
+    try:
+        from common import cfg
+        return dict(cfg().prices)
+    except Exception:                                        # noqa: BLE001 — no config, no prices
+        return {}
+
+
+def with_cost(m: dict, prices: dict | None = None) -> dict:
+    """Adds `cost_usd` (all agents priced, or null with the first reasons) and the cost
+    of each agent type."""
+    prices = installation_prices() if prices is None else prices
+    reasons, total = [], 0.0
+    for a in m["per_agent"]:
+        a["cost_usd"], why = price_of(a, prices)
+        if why:
+            reasons.append(why)
+        else:
+            total += a["cost_usd"]
+            entry = m["cost_per_agent"].get(a["agent"])
+            if entry is not None:
+                entry["cost_usd"] = round(entry.get("cost_usd", 0) + a["cost_usd"], 6)
+    reasons = list(dict.fromkeys(reasons))
+    m["cost_usd"] = None if reasons or not m["per_agent"] else round(total, 4)
+    m["cost_not_measured_because"] = "; ".join(reasons[:3]) or (
+        None if m["per_agent"] else t("telemetry.cost_nothing"))
+    m["cost_priced_usd"] = round(total, 4)
+    return m
+
+
+def from_ledger(package: str) -> dict | None:
+    agents = ledger_agents(package)
+    if not agents:
+        return None
+    total = collections.Counter()
+    for a in agents:
+        for k in COMPONENTS:
+            total[k] += a[k]
+    aggregate: dict[str, dict] = {}
+    for a in agents:
+        e = aggregate.setdefault(a["agent"], {"instances": 0, "billable": 0, "messages": 0})
+        e["instances"] += 1
+        e["billable"] += a["billable"]
+        e["messages"] += a["messages"]
+    billable = sum(a["billable"] for a in agents)
+    return {"run_id": None, "runs": [], "session": None, "source": LEDGER,
+            "scope": t("telemetry.scope_ledger"),
+            "tokens": billable, "billable_tokens": billable, "harness_tokens": None,
+            "components": {k: total[k] for k in COMPONENTS},
+            "components_complete": all(a["split"] for a in agents),
+            "minutes": None, "agents": len(agents), "declared_agents": None,
+            "tool_calls": None, "default_model": None, "status": None,
+            "per_agent": agents,
+            "cost_per_agent": dict(sorted(aggregate.items(), key=lambda kv: -kv[1]["billable"]))}
+
+
 def measure(package: str | None, run_id: str | None, every_run: bool = False) -> dict:
+    """What the agents cost: the Workflow's own records when there are any, else the
+    ledger a harness left in the package; tokens always, USD when every model is priced."""
+    m = measure_tokens(package, run_id, every_run)
+    if m.get("tokens") is None and package:
+        m = from_ledger(package) or m
+    return with_cost(m) if m.get("tokens") is not None else m
+
+
+def measure_tokens(package: str | None, run_id: str | None, every_run: bool = False) -> dict:
     """One run — the most recent, which is the one whose findings a review judges — or,
     with `every_run`, all of them summed: a delivery spends across two workflow runs."""
     runs = find_runs(package, run_id) if every_run else [find_run(package, run_id)]
@@ -232,17 +347,24 @@ def summarise(m: dict) -> str:
     c = m["components"]
     lines = [
         t("telemetry.summary", tokens=f"{m['tokens']:,}", minutes=m["minutes"],
-          agents=m["agents"], tool_calls=m["tool_calls"]),
+          agents=m["agents"], tool_calls=m["tool_calls"]) if m.get("source") != LEDGER
+        else t("telemetry.summary_ledger", tokens=f"{m['tokens']:,}", agents=m["agents"]),
         t("telemetry.components", output=f"{c['output_tokens']:,}",
           cache_creation=f"{c['cache_creation_input_tokens']:,}",
           cache_read=f"{c['cache_read_input_tokens']:,}"),
-        t("telemetry.harness_total", harness=f"{m['harness_tokens']:,}"),
-        t("telemetry.per_agent"),
     ]
+    if m.get("harness_tokens") is not None:
+        lines.append(t("telemetry.harness_total", harness=f"{m['harness_tokens']:,}"))
+    if "cost_usd" in m:
+        lines.append(t("telemetry.cost", usd=f"{m['cost_usd']:.4f}") if m["cost_usd"] is not None
+                     else t("telemetry.cost_unmeasured", priced=f"{m['cost_priced_usd']:.4f}",
+                            reason=m["cost_not_measured_because"]))
+    lines.append(t("telemetry.per_agent"))
     for a in m["per_agent"]:
+        cost = f" · US$ {a['cost_usd']:.4f}" if a.get("cost_usd") is not None else ""
         lines.append(t("telemetry.agent_row", agent=f"{a['agent']:30}",
                        billable=f"{a['billable']:>11,}",
-                       messages=f"{a['messages']:>3}", model=a["model"]))
+                       messages=f"{a['messages']:>3}", model=a["model"]) + cost)
     return "\n".join(lines)
 
 

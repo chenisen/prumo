@@ -203,6 +203,21 @@ forge:
 #       marker: my-framework.json
 #       note: "where the artefacts live and what the spec points at"
 
+# --- PRICES (optional) --------------------------------------------------------------
+#
+# What a token costs, by model id, in USD per million tokens. The telemetry multiplies
+# what the provider REPORTED by these numbers; the method carries no price list, because
+# prices change and they are yours to check. A run that used a model with no price here
+# keeps its cost `null`, with the reason — never a guess.
+#
+# The tokens come from the Workflow's own records, or — when the agents ran in another
+# harness — from `usage.jsonl` in the package, one JSON line per agent call:
+#   {"agent": "…", "model": "…", "input_tokens": n, "output_tokens": n,
+#    "cache_creation_input_tokens": n, "cache_read_input_tokens": n, "source": "…"}
+#
+# prices:
+#   some-model-id:  { input: 3, output: 15, cache_write: 3.75, cache_read: 0.3 }
+
 # ------------------------------------------------------------------------------------
 # EXAMPLES FOR THE OTHER PROVIDERS
 #

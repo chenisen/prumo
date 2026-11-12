@@ -519,6 +519,14 @@ suite:
   red_baseline: red, all of them from the repository's baseline
   red_delivery: red, and the reds belong to this delivery
 telemetry:
+  cost: '  cost: US$ {usd} — tokens × the prices in prumo.yml'
+  cost_no_price: 'model `{model}` has no price in prumo.yml'
+  cost_no_split: '{agent} reported a total only, with no input/output split'
+  cost_nothing: no agent call to price
+  cost_unmeasured: '  cost: NOT MEASURED — {reason}. Priced so far: US$ {priced}'
+  scope_ledger: the agent calls the harness wrote to the package's usage.jsonl. It does NOT include
+    the session that conducted them, nor the spine's scripts, which spend no LLM.
+  summary_ledger: 'telemetry: {tokens} tokens · {agents} agent calls · from the package''s usage.jsonl'
   agent_row: '    {agent} {billable}  {messages} msgs  {model}'
   every_run_help: sum every workflow run over the package — a delivery is two
   components: '  components: output {output} · cache_creation {cache_creation} · cache_read {cache_read}'

@@ -81,6 +81,12 @@ def aggregate(runs: list[dict]) -> dict:
         # A run without measurement is not a cheap run — it is an unmeasured one, and it
         # has to appear beside the median so that the median is not read as the whole.
         unmeasured = sum(1 for r in rs if r.get("tokens") is None)
+        # Money, where the installation priced every model a run used. A run whose cost
+        # is null is counted apart, for the same reason as the tokens: not cheap, unpriced.
+        usd = [r["cost_usd"] for r in rs if isinstance(r.get("cost_usd"), (int, float))]
+        usd_per_line = [r["cost_usd"] / r["lines_changed"] for r in rs
+                        if isinstance(r.get("cost_usd"), (int, float))
+                        and isinstance(r.get("lines_changed"), (int, float)) and r["lines_changed"] > 0]
         minutes = [r["minutes"] for r in rs if isinstance(r.get("minutes"), (int, float))]
         coverages = [r["profile_coverage"] for r in rs if isinstance(r.get("profile_coverage"), (int, float))]
         not_assessable = [len(r.get("classes_not_assessable") or []) for r in rs]
@@ -97,6 +103,10 @@ def aggregate(runs: list[dict]) -> dict:
                 for e, v in sorted(per_line_by_effort.items())},
             "shapes": dict(shapes),
             "runs_without_measurement": unmeasured,
+            "cost_usd_total": round(sum(usd), 4) if usd else None,
+            "cost_usd_median": round(statistics.median(usd), 4) if usd else None,
+            "cost_usd_per_line_median": round(statistics.median(usd_per_line), 5) if usd_per_line else None,
+            "runs_without_cost": len(rs) - len(usd),
             "cost_per_agent": agent_cost,
             "minutes_median": round(statistics.median(minutes), 1) if minutes else None,
             "profile_coverage_mean": round(statistics.mean(coverages), 2) if coverages else None,
