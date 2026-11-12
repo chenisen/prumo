@@ -5,6 +5,8 @@ from disk and every act handed over ready to paste.
     run.py start --repo R --item C --ask-file ASK.md --item-file ITEM.md [--package P]
     run.py bind  --package P (--deliver DIR | --review DIR)
     run.py next  --package P
+    run.py status [--package P] [--json]   where a run stands, read-only — the contract
+                                           a runner or an app reads; it logs nothing
     run.py log   --package P --line TEXT
 
 `start` refuses to begin without the ask — the person's own words, in a file: a run that
@@ -229,6 +231,40 @@ def _review_step(run: dict, r: str, repo: str, stop, invoke) -> dict:
                   + (f" --criteria {r}/criteria-verdicts.json" if _exists(r, "criteria-verdicts.json") else ""))
 
 
+STATUS_VERSION = 1
+
+
+def status(root: pathlib.Path) -> dict:
+    """Where one run stands, for another program to read — the public contract between
+    the method and anything that conducts or shows it (a runner, an app). Read-only: unlike
+    `next`, it appends nothing to orchestration.md, so asking twice changes nothing.
+
+    `kind` is `invoke` (`text` is the step to run) or `stop` (`class` and `text` say why).
+    A field added later never changes the meaning of one already here; a change that would
+    raises `version`."""
+    run = read_json(root / "run.json")
+    out = decide(run, root)
+    return {"version": STATUS_VERSION, "package": str(root),
+            "repo": run.get("repo"), "item": None if run.get("item") is None else str(run["item"]),
+            "shape": run.get("shape"), "started_at": run.get("started_at"),
+            "deliver_package": run.get("deliver_package"), "review_package": run.get("review_package"),
+            "step": {"kind": out["kind"], "class": out.get("class"), "text": out.get("text", "")}}
+
+
+def status_all(packages: pathlib.Path) -> list[dict]:
+    """Every run under the packages directory, each read on its own: one broken run is a
+    `blocked` stop with its error, never a reason to lose the others."""
+    out = []
+    for d in sorted(p for p in packages.iterdir() if (p / "run.json").is_file()) if packages.is_dir() else []:
+        try:
+            out.append(status(d))
+        except Exception as e:                               # noqa: BLE001 — reported, not raised
+            out.append({"version": STATUS_VERSION, "package": str(d), "repo": None, "item": None,
+                        "shape": None, "started_at": None, "deliver_package": None, "review_package": None,
+                        "step": {"kind": "stop", "class": "blocked", "text": f"{type(e).__name__}: {e}"}})
+    return out
+
+
 def next_step(root: pathlib.Path) -> dict:
     run = read_json(root / "run.json")
     out = decide(run, root)
@@ -257,6 +293,9 @@ def main() -> int:
     b.add_argument("--task", help="with --deliver: the task id this package delivers")
     c = sub.add_parser("next")
     c.add_argument("--package", required=True)
+    s_ = sub.add_parser("status", help="where a run stands, read-only (`--json` for programs)")
+    s_.add_argument("--package", help="one run; without it, every run in paths.packages")
+    s_.add_argument("--json", action="store_true")
     d = sub.add_parser("log")
     d.add_argument("--package", required=True)
     d.add_argument("--line", required=True)
@@ -268,6 +307,21 @@ def main() -> int:
                          shape=args.shape)
             print(t("run.started", item=args.item, repo=args.repo, path=root))
             print(t("run.then", path=root))
+            return 0
+        if args.command == "status":
+            import json as _json
+            if args.package:
+                out = status(pathlib.Path(args.package))
+            else:
+                from common import cfg
+                out = status_all(pathlib.Path(cfg().paths.packages))
+            if args.json:
+                print(_json.dumps(out, ensure_ascii=False))
+            else:
+                for o in (out if isinstance(out, list) else [out]):
+                    st = o["step"]
+                    print(f"{o['package']}: " + (t("run.stop", klass=st["class"], fact=st["text"])
+                                                 if st["kind"] == "stop" else t("run.next", text=st["text"])))
             return 0
         root = pathlib.Path(args.package)
         if args.command == "bind":
