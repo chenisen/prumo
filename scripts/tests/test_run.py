@@ -72,6 +72,13 @@ class TestEveryRoutingDecisionIsReadFromDisk(unittest.TestCase):
         self.assertEqual(out["kind"], "invoke")
         self.assertTrue(out["text"].startswith("deliver.py prepare --repo repo-x --item ITEM-1"))
 
+    def test_the_kind_travels_into_the_prepare_invocation(self):
+        """Measured on 2026-11-12: with no way to pass the kind through `start`, a
+        behaviour change was prepared as a coverage gap, and the surveyor stopped it on
+        a premise of the wrong kind."""
+        self.run["kind"] = "behaviour-change"
+        self.assertTrue(self.decide()["text"].endswith(" --kind behaviour-change"))
+
     def test_a_prepared_delivery_asks_for_the_measure_stage(self):
         self.put(self.deliver, "deliver-manifest.json", {})
         self.assertIn("stage: 'measure'", self.decide()["text"])
