@@ -145,14 +145,18 @@ first real review with the runs attached, both reviewers raised from the prose t
 mutant had turned one test red while its run held seventeen beyond the base.
 
 A finding the verifier never saw — below the blocking severities nothing is sent — comes
-out `unverified`, never `confirmed`: the reviewer's word, unrefuted and unchecked.
+out `unverified`, never `confirmed`: the reviewer's word, unrefuted and unchecked. And a
+severe finding whose every evidence entry names a file of the review package — the record,
+the digest, the item — is about the record, not the delivery: the judge declares it and it
+closes no gate. One such finding sent the same delivery to INTERVENTION on one run and
+APPROVED on the next.
 
 | Phase | Part | What it produces |
 |---|---|---|
 | **F0** preflight | `preflight.py` | `capabilities.json` — what THIS environment can do |
 | **F1** resolve | `resolver.py` | `manifest.json` — base, SHAs, item |
 | **F2** package | `package.py` | `diff.patch`, `slices/`, `change.json`, `profile.yml` |
-| **F2b** criteria | agent `criteria-extractor`, run by the workflow as its first stage when the package carries no `criteria.json` | `criteria.json`, written by `conclude` from the workflow's result |
+| **F2b** criteria | `prepare` numbers the item's list lines into `criteria-candidates.json`; the agent `criteria-extractor`, run by the workflow as its first stage when the package carries no `criteria.json`, only LABELS them (criterion, out of scope, context, summary of other lines); a summary is replaced by its parts, in code | `criteria.json`, built by `conclude` from the labels — the same labels give the same list |
 | **F3** triage | `triage.py` | `classes.json`, `size.json`, `plan.json` |
 | **F4, F5, F8** | the workflow | verified findings and manual scripts |
 | **F6** evidence | `evidence.py --role suite --run` | `evidence.json` — **one round, only the profile's allowlist** |
