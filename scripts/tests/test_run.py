@@ -175,6 +175,34 @@ class TestEveryRoutingDecisionIsReadFromDisk(unittest.TestCase):
         self.assertEqual(out["class"], "intervention")
         self.assertIn(f"deliver.py prepare --repo repo-x --fix {self.review}", out["text"])
 
+    def test_status_says_where_the_run_stands_and_writes_nothing(self):
+        """The public contract for a runner or an app: the same step `next` would give,
+        with what the run is, and orchestration.md untouched however often it is asked."""
+        from run import status, STATUS_VERSION
+        (self.root / "run.json").write_text(self.json.dumps(self.run), encoding="utf-8")
+        log = self.root / "orchestration.md"
+        before = log.read_text(encoding="utf-8") if log.exists() else None
+        first, second = status(self.root), status(self.root)
+        self.assertEqual(first, second)
+        self.assertEqual(first["version"], STATUS_VERSION)
+        self.assertEqual((first["repo"], first["item"]), ("repo-x", "ITEM-1"))
+        self.assertEqual(first["step"]["kind"], self.decide()["kind"])
+        self.assertEqual(first["step"]["text"], self.decide()["text"])
+        after = log.read_text(encoding="utf-8") if log.exists() else None
+        self.assertEqual(before, after)
+
+    def test_status_of_every_run_keeps_a_broken_one_as_a_stop(self):
+        from run import status_all
+        good = self.root / "good"; good.mkdir()
+        (good / "run.json").write_text(self.json.dumps(self.run), encoding="utf-8")
+        broken = self.root / "broken"; broken.mkdir()
+        (broken / "run.json").write_text("{not json", encoding="utf-8")
+        out = {pathlib.Path(o["package"]).name: o for o in status_all(self.root)}
+        self.assertEqual(set(out), {"good", "broken"})
+        self.assertEqual(out["broken"]["step"]["kind"], "stop")
+        self.assertEqual(out["broken"]["step"]["class"], "blocked")
+        self.assertEqual(out["good"]["step"]["kind"], "invoke")
+
     def test_the_same_disk_gives_the_same_answer(self):
         self.put(self.deliver, "deliver-manifest.json", {})
         answers = {self.decide()["text"] for _ in range(50)}
