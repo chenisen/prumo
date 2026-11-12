@@ -165,12 +165,44 @@ def judge(command: str, pwd: str) -> str | None:
     return None
 
 
+def effective_cwd(command: str, pwd: str) -> pathlib.Path:
+    """Where the command's git runs: `pwd`, moved by every `cd` the command makes."""
+    cwd = pathlib.Path(pwd)
+    for segment in SEGMENTS.split(command):
+        try:
+            tokens = shlex.split(segment)
+        except ValueError:
+            continue
+        if tokens and tokens[0] == "cd" and len(tokens) > 1:
+            cwd = (cwd / os.path.expanduser(tokens[1])).resolve()
+    return cwd
+
+
+def inside_repositories(command: str, pwd: str) -> bool:
+    """Whether the command's git runs in a repository under `paths.repositories`. The
+    review-time guard blocks commit, push and rewriting ONLY there: a review alters no
+    history of the repository it reads, and the prumo's own checkout — where a commit was
+    blocked mid-review, six reviews into a day of its own development — is not that
+    repository. With no root configured the answer is yes: a guard that cannot tell
+    where it is keeps blocking, as it always did."""
+    _, root = settings()
+    if root is None:
+        return True
+    cwd = os.path.realpath(effective_cwd(command, pwd))
+    return cwd == str(root) or cwd.startswith(str(root).rstrip("/") + "/")
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--pwd", required=True)
     p.add_argument("--command", required=True)
+    p.add_argument("--inside-repositories", action="store_true",
+                   help="print yes/no: does the command's git run under paths.repositories?")
     a = p.parse_args()
+    if a.inside_repositories:
+        print("yes" if inside_repositories(a.command, a.pwd) else "no")
+        return 0
     reason = judge(a.command, a.pwd)
     if reason:
         print(reason)

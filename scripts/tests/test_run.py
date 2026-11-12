@@ -563,16 +563,21 @@ class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
     def test_a_slice_that_fits_travels_inline_and_the_reviewer_is_told_not_to_read_it(self):
         """Each reviewer of an 85-line delivery read its slice twice, from the path the
         prompt gave. A slice under the ceiling is carried like any other package file."""
-        import tempfile
+        import json, tempfile
         import review
         with tempfile.TemporaryDirectory() as tmp:
             pkg = pathlib.Path(tmp); (pkg / "slices").mkdir()
             (pkg / "slices" / "complete.patch").write_text("--- a\n+++ b\n+line\n")
             (pkg / "slices" / "huge.patch").write_text("x" * (review.INLINE_CEILING + 1))
+            (pkg / "slices" / "unused.patch").write_text("+nobody reads this\n")
             (pkg / "manifest.json").write_text("{}")
+            (pkg / "plan.json").write_text(json.dumps({"reviewers": [
+                {"agent": "a", "slice": "complete"}, {"agent": "b", "slice": "huge"}]}))
             payload = review.inline_payload(pkg)
             self.assertEqual(payload["slices/complete.patch"], "--- a\n+++ b\n+line\n")
             self.assertNotIn("slices/huge.patch", payload)
+            # a slice no reviewer of the plan reads does not travel
+            self.assertNotIn("slices/unused.patch", payload)
             self.assertIn("manifest.json", payload)
         workflow = (PRUMO_ROOT / "workflows" / "task-review.js").read_text(encoding="utf-8")
         self.assertIn("inlined[`slices/${slice}.patch`]", workflow)

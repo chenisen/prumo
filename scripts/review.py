@@ -590,7 +590,11 @@ def inline_payload(package: pathlib.Path) -> dict:
     # patch spent two of its turns reading it — twice, measured on two reviews of the
     # same delivery. A slice that fits is carried like any other package file, and the
     # prompt tells the reviewer not to read it again. One that does not fit stays a path.
-    slices = sorted((package / "slices").glob("*.patch")) if (package / "slices").is_dir() else []
+    # Only the slices the plan hands to a reviewer: five travelled on a one-file delivery,
+    # four of them the same bytes, for two reviewers.
+    plan = read_json(package / "plan.json") if (package / "plan.json").exists() else {}
+    wanted = {r.get("slice") for r in plan.get("reviewers") or [] if r.get("slice")}
+    slices = [package / "slices" / f"{name}.patch" for name in sorted(wanted)]
     for f in [package / name for name in INLINE_FILES] + slices:
         if not f.is_file():
             continue

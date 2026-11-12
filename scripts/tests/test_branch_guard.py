@@ -116,6 +116,25 @@ class ProtectedBranches(unittest.TestCase):
         self.assertIsNotNone(self.judge(f"git -C {self.repo} commit -m x", cwd=self.root))
         self.assertIsNone(self.judge("git push origin homolog", cwd=self.root))
 
+    def test_the_review_time_block_asks_whether_the_command_runs_under_the_root(self):
+        """A commit in the prumo's own checkout was blocked mid-review, six reviews into
+        a day of the prumo's own development. The review-time rule now asks the same
+        script that scopes the protected-branch rule: under `paths.repositories`, yes;
+        anywhere else, no; the `cd` in the command counts."""
+        self.assertTrue(branch_guard.inside_repositories("git commit -m x", str(self.repo)))
+        self.assertTrue(branch_guard.inside_repositories(f"cd {self.repo} && git commit -m x", "/"))
+        outside = self.root / "elsewhere"; outside.mkdir(exist_ok=True)
+        self.assertFalse(branch_guard.inside_repositories("git commit -m x", str(outside)))
+        self.assertFalse(branch_guard.inside_repositories(f"cd {outside} && git commit -m x", str(self.repo)))
+        out = subprocess.run((sys.executable, str(pathlib.Path(branch_guard.__file__)),
+                              "--pwd", str(outside), "--command", "git commit -m x",
+                              "--inside-repositories"), capture_output=True, text=True,
+                             env={**os.environ, "PRUMO_CONFIG": os.environ.get("PRUMO_CONFIG", "")})
+        self.assertIn(out.stdout.strip(), ("yes", "no"))
+        hook = (pathlib.Path(branch_guard.__file__).parent.parent / "hooks" / "review-guard.sh").read_text()
+        self.assertIn("--inside-repositories", hook)
+        self.assertIn('[ "$inside" != "no" ]', hook)
+
     def test_a_repository_outside_the_root_is_not_the_guards_business(self):
         (self.elsewhere / "f").write_text("x", encoding="utf-8")
         self.assertIsNone(self.judge("git push origin main", cwd=self.elsewhere))

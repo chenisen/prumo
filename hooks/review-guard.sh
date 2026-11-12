@@ -92,11 +92,18 @@ if fresh "$MARKER"; then
   # The tracker is configurable, so this matches the ACTION a tool name describes, not
   # one provider's spelling: `move_card_batch` on one board, `transition_issue` on another.
   moves_the_item && block "moving the item during a review"
-  if [ -n "$cmd" ]; then
-    printf '%s' "$cmd" | grep -Eq '(^|[[:space:]])git[[:space:]]+push([[:space:]]|$)' \
-      && block "git push during a review"
-    printf '%s' "$cmd" | grep -Eq '(^|[[:space:]])git[[:space:]]+(commit|reset[[:space:]]+--hard|checkout[[:space:]]+-B|rebase|cherry-pick|revert)' \
-      && block "a review does not alter the target repository's history"
+  # Only in a repository under `paths.repositories`: a review alters no history of the
+  # repository it reads, and a commit in the prumo's own checkout, or anywhere else, is
+  # not that. The same script that scopes the protected-branch rule answers here.
+  if [ -n "$cmd" ] && printf '%s' "$cmd" | grep -Eq '(^|[[:space:]])git([[:space:]]|$)'; then
+    SCRIPTS="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}/scripts"
+    inside=$(python3 "$SCRIPTS/branch_guard.py" --pwd "$PWD" --command "$cmd" --inside-repositories 2>/dev/null || echo yes)
+    if [ "$inside" != "no" ]; then
+      printf '%s' "$cmd" | grep -Eq '(^|[[:space:]])git[[:space:]]+push([[:space:]]|$)' \
+        && block "git push during a review"
+      printf '%s' "$cmd" | grep -Eq '(^|[[:space:]])git[[:space:]]+(commit|reset[[:space:]]+--hard|checkout[[:space:]]+-B|rebase|cherry-pick|revert)' \
+        && block "a review does not alter the target repository's history"
+    fi
   fi
 fi
 
