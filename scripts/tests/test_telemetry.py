@@ -260,6 +260,9 @@ class TestALedgerAndAPrice(TestTelemetry):
         self.assertFalse(m["components_complete"])
         self.assertIsNone(m["cost_usd"])
         self.assertEqual(m["cost_not_measured_because"], t("telemetry.cost_no_split", agent="verifier"))
+        summary = telemetry.summarise(m)
+        self.assertIn(t("telemetry.components_unknown"), summary)
+        self.assertNotIn(t("telemetry.components", output="0", cache_creation="0", cache_read="0"), summary)
 
     def test_measure_falls_back_to_the_ledger_and_never_to_zero(self):
         pkg = self.ledger({"agent": "a", "model": "model-a", "input_tokens": 1, "output_tokens": 1})

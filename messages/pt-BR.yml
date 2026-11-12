@@ -532,6 +532,7 @@ telemetry:
   agent_row: '    {agent} {billable}  {messages} msgs  {model}'
   every_run_help: soma toda execução de workflow sobre o pacote — uma entrega são duas
   components: '  componentes: saída {output} · cache_creation {cache_creation} · cache_read {cache_read}'
+  components_unknown: '  componentes: não informados — ao menos uma chamada deu só o total'
   harness_total: '  totalTokens do harness: {harness} (contagem própria dele)'
   need_target: informe --package ou --run-id
   no_record: nenhum registro de workflow encontrado para `{target}` em {root} — o custo desta
