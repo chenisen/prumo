@@ -351,3 +351,17 @@ class TestTheBranchName(unittest.TestCase):
     def test_without_one_the_title_is_slugged(self):
         from deliver import branch_name
         self.assertEqual(branch_name(self.BLOCK, "I-1", "# Prove the guard\n", None), "I-1-prove-the-guard")
+
+
+class TestATaskSCriteriaAreNotPremises(unittest.TestCase):
+    """The first story task measured (2026-11-12) was blocked before a line was written:
+    the surveyor read the task's target state as a failing central premise and named a
+    mutation on the line the writer was about to replace."""
+
+    def test_the_task_brief_says_so_to_the_surveyor(self):
+        workflow = (PRUMO_ROOT / "workflows" / "deliver.js").read_text(encoding="utf-8")
+        self.assertIn("The task's bullets are its CRITERIA", workflow)
+        self.assertIn("name NO mutation", workflow)
+        agent = (PRUMO_ROOT / "agents" / "premise-surveyor.md").read_text(encoding="utf-8")
+        self.assertIn("## A task of a story", agent)
+        self.assertIn("never a failing premise", agent)

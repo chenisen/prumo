@@ -129,7 +129,19 @@ const common = [
   embed('item.md', 'The item'),
   input.task
     ? `This item is task ${input.task.id} of a story the person approved. Its files and proving tests are ` +
-      `the design's: confirm them against the code, name a mutation only where one applies, replace nothing. ` +
+      `the design's: confirm them against the code, replace nothing. ` +
+      // The first story task ever measured (2026-11-12) came back blocked before a line
+      // was written: the surveyor read the task's criteria — the TARGET state — as premises
+      // of today's code, marked "the query still groups by client" as a central premise
+      // that FAILS, and named a mutation on the very line the writer was about to replace,
+      // which `conclude` would then have reported as a mutation it could not apply.
+      `The task's bullets are its CRITERIA — the state the code must reach — and never ` +
+      `premises: a premise is a fact about the code TODAY that the design assumed (the line it ` +
+      `points at exists, the behaviour it replaces is where it says, the callers it names are ` +
+      `the callers, no test covers it yet), and \`fails\` means today's code is NOT as the design ` +
+      `assumed. "The behaviour is wrong today" is the reason the task exists, not a failing premise. ` +
+      `For a \`behaviour-change\` task name NO mutation: the writer replaces the lines you would ` +
+      `point at, and the proof is the proving tests red on the base and green after. ` +
       `Task: ${JSON.stringify(input.task)}`
     : '',
   embed('profile.yml', 'Repository profile'),

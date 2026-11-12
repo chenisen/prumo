@@ -71,6 +71,17 @@ JSON only:
   `behaviour-change`, the production files the fix needs plus the test file; for
   `refactor`, the files being reshaped and, if the shape needs them, their tests.
 
+## A task of a story
+
+When the request says the item is a task of an approved story, its bullets are the task's
+**criteria** — the state the code must reach — and never premises. A premise is a fact
+about the code **today** that the design assumed: the line it points at exists, the
+behaviour it replaces is where it says, the callers it names are the callers, no test
+covers it yet. `fails` means today's code is not as the design assumed; "the behaviour is
+wrong today" is why the task exists and is never a failing premise. For a
+`behaviour-change` task name no mutation: the writer replaces the lines you would point
+at, and the proof is the proving tests red on the base and green after.
+
 ## Voice
 
 Answer first. One fact per line. `file:line` on every fact. `not`, `never`, `only` stay.
