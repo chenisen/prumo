@@ -38,7 +38,15 @@ against it.
 - validation, error handling, a security check or an accessibility attribute cut to make
   the diff smaller — those are never on the chopping block;
 - a test whose two ends use the same constant, or that exercises the path without
-  asserting the property. The mutation will go green and the delivery will be blocked.
+  asserting the property. The mutation will go green and the delivery will be blocked;
+- a test double of a method with a declared return type that returns nothing. It returns
+  a value of that type, explicitly. A double left on its default answers "nothing" where
+  the signature promises a value; the runtime refuses it, a `catch` in the code under
+  test swallows the refusal, and the reds that follow belong to the double, not to the
+  change — twice in one story;
+- a change that undoes an earlier task of the same story. When the request lists the
+  tasks already delivered on this branch, each of their criteria still holds after you
+  write: read where your change meets their files before the first line.
 
 ## The test
 
@@ -64,6 +72,11 @@ JSON only:
 
 `skipped` is mandatory, even when empty. It travels into the record: what you did not
 check is declared, never implied.
+
+**A second attempt** on the same tree (the request says a previous attempt was blocked)
+lists in `files` every file changed since the task base — the earlier attempt's included
+— not only the ones you touched in this pass. The record is what the tree holds; a
+one-file list on a six-file change reads as a partial delivery.
 
 ## Voice
 

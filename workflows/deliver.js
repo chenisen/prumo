@@ -144,6 +144,13 @@ const common = [
       `point at, and the proof is the proving tests red on the base and green after. ` +
       `Task: ${JSON.stringify(input.task)}`
     : '',
+  // Not only a story's task: a fix round's measure (2026-11-12) named two mutants on
+  // the pre-fix lines the fix itself rewrote. `deliver.py plan` drops them and says so;
+  // the brief keeps the surveyor from spending a turn on them.
+  item.kind === 'behaviour-change' && !input.task
+    ? 'This item changes behaviour: name NO mutation. The writer replaces the lines a mutant ' +
+      'would point at; the proof is the proving tests red on the base and green after.'
+    : '',
   embed('profile.yml', 'Repository profile'),
   `Conventions of this repository, to read BEFORE writing or judging shape: ${JSON.stringify(input.conventions ?? [])}`,
   (input.conventions ?? []).length === 0
@@ -239,15 +246,33 @@ const previous = input.previous
     (input.previous.output ? `\nWhat the suite printed for the reds:\n${input.previous.output}` : '') +
     (input.previous.hint ? `\n${input.previous.hint}` : '')
   : ''
+// What the story already delivered on this branch. A write in the tenth task of the
+// first story (2026-11-12) removed a field before the call the ninth task had made read
+// it, and the sceptic — asked only about the tenth task's own tests — said `proves`.
+// `deliver.py prepare --story` inlines the earlier tasks; both agents read them.
+const storyContext = (input.story_context ?? []).length
+  ? 'EARLIER TASKS OF THIS STORY, already delivered on this branch — every criterion below ' +
+    `must still hold after this change: ${JSON.stringify(input.story_context)}`
+  : ''
 const written = await run('change-writer', [
   ...common,
   previous,
+  storyContext ? `${storyContext}\nDo not undo any of them: read how this change meets their files before writing.` : '',
   `Measurement: ${JSON.stringify(measure)}`,
   `You may write ONLY these files: ${measure.files.join(', ')}. The hook refuses any other.`,
   measure.mutations.length
     ? `Name the test exactly: ${measure.mutations.map((m) => m.test).join(', ')}.`
     : '',
   'Write the smallest change that delivers the item, by the ladder. Run nothing.',
+  // Twice in the first story a test double of a method with a declared return type
+  // returned nothing; the runtime threw inside a try, the catch ran, and new reds came
+  // from the double, not from the change.
+  'A test double of a method with a declared return type returns a value of that type, ' +
+  'explicitly — never the double\'s default.',
+  previous
+    ? '`files` in your return lists EVERY file changed since the task base — the earlier ' +
+      'attempt\'s included — not only the ones you touched in this pass.'
+    : '',
 ].filter(Boolean).join('\n'), { label: 'change-writer', phase: 'Write', schema: WRITTEN_SCHEMA })
 if (!written) throw new Error('change-writer returned nothing — nothing was written')
 log(`${written.files.length} file(s) written · ${written.skipped.length} skipped item(s) declared`)
@@ -259,8 +284,18 @@ const refutation = await run('proof-skeptic', [
   ...common,
   `Measurement: ${JSON.stringify(measure)}`,
   `Files written: ${written.files.join(', ')}`,
+  // A second attempt sits on the first one's tree: the change is every measured file
+  // that differs from the base, whatever this pass's list says (the twelfth task of the
+  // first story came back `uncertain` for reading a one-file list).
+  input.previous
+    ? 'This is a SECOND attempt on the same tree: the change under review is every file of ' +
+      'the measurement that differs from the base, not only the files listed above.'
+    : '',
+  storyContext
+    ? `${storyContext}\nQuestion 5 applies: does this change break a criterion of an earlier task listed here?`
+    : '',
   'Try to show the test does NOT prove the guard. When in doubt, `uncertain`.',
-].join('\n'), { label: 'proof-skeptic', phase: 'Refute', schema: REFUTATION_SCHEMA })
+].filter(Boolean).join('\n'), { label: 'proof-skeptic', phase: 'Refute', schema: REFUTATION_SCHEMA })
 log(refutation ? `sceptic: ${refutation.verdict} — ${refutation.reason}`
                : 'sceptic returned nothing — recorded as uncertain')
 

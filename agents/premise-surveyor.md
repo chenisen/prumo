@@ -61,8 +61,11 @@ JSON only:
   that turns it red is wider than the guard, and the script blocks on that.
 - For `behaviour-change`: the production file and line where the behaviour is wrong or
   missing, the test file that will prove it, and `proving_tests` — the names the writer
-  must use, which the script requires red on the base and green on the branch. A
-  mutation is optional here; the red-before-green is the proof.
+  must use, which the script requires red on the base and green on the branch. Name
+  **no** mutation: the writer replaces the very lines a mutant would point at, so its
+  `from` text is gone before the script applies it (a fix round's two mutants, on the
+  lines the fix rewrote). The red-before-green is the proof; `deliver.py plan` drops any
+  mutation a behaviour change names, and says so in the plan.
 - For `refactor`: the files being reshaped, and `guarding_tests` — the existing tests,
   by name, that exercise them today. Grep the test roots for the units' names and
   routes. A refactor with no guarding test is not deliverable: say so, with the files

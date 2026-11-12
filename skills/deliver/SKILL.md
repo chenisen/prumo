@@ -145,6 +145,11 @@ by whoever resumes, never by the workflow. Then `conclude` runs again on the sam
 package. Measured need: the first story's second task was blocked by a hand-made
 builder stub the writer itself had flagged as never run.
 
+What a second attempt wrote is what the tree holds: `conclude` keeps the writer's list
+and adds every file the measurement named that differs from the base, so a writer that
+lists only this pass's file does not leave a partial record, and the sceptic is told the
+change is every measured file that differs from the base.
+
 ## The record
 
 `delivery.json`, held to `schemas/delivery.schema.json`. `deliver_judge()` reads it and
@@ -181,9 +186,21 @@ deliver.py prepare --repo R --story <story package> --task T1 --package <story p
 Its item is the task as the design wrote it, its shape a bug's — reproduce, no gate,
 because the person approved the whole plan — its branch the story's, its base that
 branch's head. The surveyor confirms the design's files and proving tests against the
-code and replaces nothing. When every task is delivered, `deliver.py story --package
+code and replaces nothing. From the second task on, `prepare` inlines the tasks already
+delivered on the branch as `story_context` — id, title, criteria, files — and the writer
+and the sceptic both read it: a change that makes an earlier task's criterion stop
+holding is `does_not_prove`. When every task is delivered, `deliver.py story --package
 <story package>` writes the story's own record from its tasks' — delivered when all
-are, inside the shape's budget over every task — and the branch goes to the review once.
+are, inside the shape's budget over every task or under a waiver in force in the
+profile — and the branch goes to the review once. The record carries the proof: the
+suite is the last task's run **at the story's head**, re-read against the story's base
+and copied beside the record as `run-suite-branch.txt`, each task's red-on-base run
+travels as `run-suite-base-with-test-<task>.txt`, and a story whose head no task was
+concluded on says so and stops, instead of writing a blank the review reads as "never
+ran".
+
+A `behaviour-change` names no mutation, task or not: `plan` drops any the measurement
+carried and writes one line per dropped mutant in the plan.
 
 An `epic` is designed and never cut: no branch, no suite, no marker. Its plan holds the
 stories it decomposes into, each an item for the tracker, and the plan is where it ends.

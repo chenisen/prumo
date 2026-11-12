@@ -374,3 +374,38 @@ class TestABlockedAttemptIsWrittenAgainWithItsReason(unittest.TestCase):
         self.assertIn("input.previous.reason", workflow)
         skill = (PRUMO_ROOT / "skills" / "deliver" / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("## A blocked attempt, written again", skill)
+
+
+class TheSecondReadingOfTheFirstStory(unittest.TestCase):
+    """What the first story (2026-11-12) measured, held in the briefs: a writer that
+    left a test double silent on a typed method, a rewrite that listed one file of six,
+    a write that undid the task before it, a fix round whose mutants pointed at the
+    lines the fix rewrote."""
+
+    WORKFLOW = (PRUMO_ROOT / "workflows" / "deliver.js").read_text(encoding="utf-8")
+    WRITER = (PRUMO_ROOT / "agents" / "change-writer.md").read_text(encoding="utf-8")
+    SCEPTIC = (PRUMO_ROOT / "agents" / "proof-skeptic.md").read_text(encoding="utf-8")
+    SURVEYOR = (PRUMO_ROOT / "agents" / "premise-surveyor.md").read_text(encoding="utf-8")
+
+    def test_a_typed_test_double_returns_a_value_of_its_type(self):
+        self.assertIn("declared return type returns a value of that type", self.WORKFLOW)
+        self.assertIn("a test double of a method with a declared return type", self.WRITER)
+
+    def test_a_second_attempt_lists_every_file_since_the_task_base(self):
+        self.assertIn("lists EVERY file changed since the task base", self.WORKFLOW)
+        self.assertIn("This is a SECOND attempt on the same tree", self.WORKFLOW)
+        self.assertIn("**A second attempt**", self.WRITER)
+
+    def test_the_writer_and_the_sceptic_read_the_story_s_earlier_tasks(self):
+        self.assertIn("input.story_context", self.WORKFLOW)
+        self.assertIn("EARLIER TASKS OF THIS STORY", self.WORKFLOW)
+        self.assertIn("Question 5 applies", self.WORKFLOW)
+        self.assertIn("5. **Does it break an earlier task of the same story?**", self.SCEPTIC)
+        self.assertIn("`does_not_prove`, with that criterion", self.SCEPTIC)
+        self.assertIn("undoes an earlier task of the same story", self.WRITER)
+
+    def test_any_behaviour_change_names_no_mutation(self):
+        self.assertIn("This item changes behaviour: name NO mutation", self.WORKFLOW)
+        self.assertIn("item.kind === 'behaviour-change' && !input.task", self.WORKFLOW)
+        self.assertIn("Name\n  **no** mutation", self.SURVEYOR)
+

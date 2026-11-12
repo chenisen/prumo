@@ -22,6 +22,15 @@ Read the measurement (the guard, its line, the mutation) and the files written. 
    deleted — because a fake answers for it, because an exception is swallowed, because
    the assertion is on a side effect the guard does not own — is not proof.
 4. **Is anything outside the named files touched?** Say so; the script measures it too.
+5. **Does it break an earlier task of the same story?** When the request lists the tasks
+   already delivered on this branch, read where this change meets their files. A change
+   that makes one of their criteria stop holding — a value removed before the call that
+   needs it, a filter that no longer applies, a signature an earlier caller relies on —
+   is `does_not_prove`, with that criterion and the line in the reason. The tests this
+   task names cannot see it; that is why you are asked.
+
+On a **second attempt** on the same tree, the change under review is every file of the
+measurement that differs from the base, not only the files the request lists.
 
 Return JSON only:
 

@@ -120,6 +120,9 @@ deliver:
     story_task_missing: 'a tarefa `{task}` não está no design em {path}'
     story_tasks_pending: '{done} de {total} tarefas entregues — próxima: {task}'
     story_budget: 'as tarefas da história gastaram {lines} linhas em {files} arquivos; a forma permite {max_lines} e {max_files}'
+    story_budget_waived: 'as tarefas da história gastaram {lines} linhas em {files} arquivos. A forma permite {max_lines} e {max_files}. Dispensa de {approver} até {expires}.'
+    story_no_task_at_head: 'nenhuma tarefa entregue da história está no head da branch {head}. A suíte não foi medida nele. Conclua de novo a última tarefa.'
+    story_suite_at_head: 'suíte no head, da tarefa {task}: {executed}/{predicted} executados · {reds} vermelhos na base · {new} vermelho(s) novo(s)'
     baseline: 'baseline: {reds} vermelhos por nome · {executed}/{predicted} executados'
     branch_at: 'branch `{branch}` em {path}, cortada de {base}'
     delivery_block_draft: 'rascunho de `delivery:` para `{repo}` — cole no perfil e confirme:'
@@ -128,6 +131,7 @@ deliver:
     fix_needs_branch: 'a origem da revisão é `{origin}`, não uma branch — passe --branch'
     mutation_file_missing: '{file} não está na árvore'
     mutation_text_missing: '{file}:{line} não contém `{text}`'
+    mutation_dropped_behaviour_change: 'descartada: a mutação em {file}:{line} para {test}. Uma mudança de comportamento substitui as linhas que a mutação aponta. A prova é vermelho na base, verde depois.'
     then_conclude: 'Depois: deliver.py conclude --package {path} --measure <arquivo> --written <arquivo>'
     tree_dirty: '{path} tem mudanças pendentes — trabalho de alguém em andamento; commite ou guarde antes'
     worktree_exists: '{path} já existe — uma branch com esse nome está em andamento'
@@ -163,6 +167,7 @@ deliver:
     measured: MEDIDO
   record:
     measured_note: "o que o escritor declarou antes de o script rodar. Os runs do script estão em `measured`, e decidem"
+    story_measured_note: "a suíte da história é o run da tarefa {task} no head da branch, relido contra a base da história. O run vermelho-na-base de cada tarefa vai junto."
   state:
     blocked: BLOQUEADO
     delivered: ENTREGUE

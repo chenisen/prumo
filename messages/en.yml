@@ -116,6 +116,9 @@ deliver:
     story_task_missing: 'task `{task}` is not in the design at {path}'
     story_tasks_pending: '{done} of {total} tasks delivered — next: {task}'
     story_budget: 'the story''s tasks spent {lines} lines over {files} files; the shape allows {max_lines} and {max_files}'
+    story_budget_waived: 'the story''s tasks spent {lines} lines over {files} files. The shape allows {max_lines} and {max_files}. Waived by {approver} until {expires}.'
+    story_no_task_at_head: 'no delivered task of the story is at the branch head {head}. The suite was not measured on it. Re-conclude the last task.'
+    story_suite_at_head: 'suite at the head, from task {task}: {executed}/{predicted} executed · {reds} red on the base · {new} new red(s)'
     baseline: 'baseline: {reds} red by name · {executed}/{predicted} executed'
     branch_at: 'branch `{branch}` at {path}, cut from {base}'
     delivery_block_draft: 'a `delivery:` draft for `{repo}` — paste it into the profile and confirm it:'
@@ -124,6 +127,7 @@ deliver:
     fix_needs_branch: 'the review''s origin is `{origin}`, not a branch — pass --branch'
     mutation_file_missing: '{file} is not in the tree'
     mutation_text_missing: '{file}:{line} does not contain `{text}`'
+    mutation_dropped_behaviour_change: 'dropped: the mutant at {file}:{line} for {test}. A behaviour change replaces the lines a mutant points at. Its proof is red on the base, green after.'
     then_conclude: 'Then: deliver.py conclude --package {path} --measure <file> --written <file>'
     tree_dirty: '{path} has pending changes — somebody''s work in progress; commit or stash it first'
     worktree_exists: '{path} already exists — a branch of that name is under way'
@@ -159,6 +163,7 @@ deliver:
     measured: MEASURED
   record:
     measured_note: "what the writer declared before the script ran. The script's runs are under `measured`, and decide"
+    story_measured_note: "the story's suite is task {task}'s run at the branch head, re-read against the story's base. Each task's red-on-base run travels beside it."
   state:
     blocked: BLOCKED
     delivered: DELIVERED

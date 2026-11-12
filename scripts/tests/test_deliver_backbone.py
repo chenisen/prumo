@@ -21,9 +21,13 @@ import tempfile
 import textwrap
 import unittest
 
+import jsonschema
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 import common
 import deliver
+
+PRUMO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 
 RUNNER = textwrap.dedent('''\
     import sys, unittest
@@ -154,7 +158,7 @@ class Fixture(unittest.TestCase):
                 self.assertEqual(deliver.prepare(args), 0)
         return self.root / package
 
-    def conclude(self, package, test_text, measure_data=MEASURE, source=None):
+    def conclude(self, package, test_text, measure_data=MEASURE, source=None, declared=None):
         # the writer writes where the branch was cut: the checkout, or its worktree
         tree = pathlib.Path(json.loads((package / "deliver-manifest.json")
                                        .read_text(encoding="utf-8"))["workdir"])
@@ -163,7 +167,7 @@ class Fixture(unittest.TestCase):
             (tree / "src" / "a.py").write_text(source, encoding="utf-8")
         measure, written = package / "m.json", package / "w.json"
         measure.write_text(json.dumps(measure_data), encoding="utf-8")
-        written.write_text(json.dumps({"files": list(measure_data["files"]),
+        written.write_text(json.dumps({"files": list(measure_data["files"]) if declared is None else declared,
                                        "skipped": ["the boundary at 9"]}), encoding="utf-8")
         args = argparse.Namespace(package=str(package), measure=str(measure),
                                   written=str(written), refutation=None)
@@ -304,6 +308,43 @@ class Spine(Fixture):
         self.assertEqual(rec["proof"]["green_on_branch"]["result"], "green")
         self.assertEqual((self.repo / "src" / "a.py").read_text(encoding="utf-8"), SOURCE)
         self.assertEqual(rec["diff"]["outside_scope"], [])
+
+    def test_a_second_attempt_that_declares_one_file_is_recorded_with_every_file_it_left(self):
+        """A rewrite on the same tree declared only the file it touched in that pass
+        (2026-11-12, three tasks of the first story): the record holds what the tree
+        holds inside the measured files, not what the writer remembered."""
+        (self.repo / "src" / "a.py").write_text(BUGGY, encoding="utf-8")
+        git(self.repo, "add", "-A"); git(self.repo, "commit", "-q", "-m", "buggy base")
+        package = self.prepare(kind="behaviour-change")
+        measure = {"premises": [], "files": ["src/a.py", "tests/test_guard.py"], "mutations": [],
+                   "proving_tests": ["test_guard_refuses"]}
+        code, rec = self.conclude(package, PROVING_TEST, measure_data=measure, source=SOURCE,
+                                  declared=["tests/test_guard.py"])
+        self.assertEqual(code, 0, rec)
+        written = json.loads((package / "w.json").read_text(encoding="utf-8"))
+        self.assertEqual(written["files"], ["tests/test_guard.py"], "the writer's own file stays as it was")
+        kept = json.loads((package / "written.json").read_text(encoding="utf-8"))
+        self.assertEqual(kept["files"], ["tests/test_guard.py", "src/a.py"])
+        self.assertEqual(rec["proof"]["red_on_base"]["result"], "red")
+
+    def test_a_behaviour_change_drops_the_mutants_its_measure_named_and_says_so(self):
+        """A fix round's measure (2026-11-12) named mutants on the pre-fix lines the fix
+        itself rewrote. A behaviour change is proven red on the base, green after."""
+        (self.repo / "src" / "a.py").write_text(BUGGY, encoding="utf-8")
+        git(self.repo, "add", "-A"); git(self.repo, "commit", "-q", "-m", "buggy base")
+        package = self.prepare(kind="behaviour-change")
+        measure = {"premises": [], "files": ["src/a.py", "tests/test_guard.py"],
+                   "mutations": [{"file": "src/a.py", "line": 2, "from": "x > 10", "to": "x > 11",
+                                  "test": "test_guard_refuses"}],
+                   "proving_tests": ["test_guard_refuses"]}
+        (package / "m.in").write_text(json.dumps(measure), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            deliver.plan(argparse.Namespace(package=str(package), measure=str(package / "m.in"), design=None))
+        kept = json.loads((package / "measure.json").read_text(encoding="utf-8"))
+        self.assertEqual(kept["mutations"], [])
+        self.assertIn("src/a.py:2", (package / "plan.md").read_text(encoding="utf-8"))
+        code, rec = self.conclude(package, PROVING_TEST, measure_data=measure, source=SOURCE)
+        self.assertEqual((code, rec["proof"]["mutations"]), (0, []), rec)
 
     def test_a_behaviour_change_whose_test_is_green_on_the_base_is_blocked(self):
         package = self.prepare(kind="behaviour-change")
@@ -492,6 +533,55 @@ class Spine(Fixture):
         log = subprocess.run(("git", "log", "--format=%s", "main..HEAD"), cwd=self.repo,
                              capture_output=True, text=True).stdout.strip().splitlines()
         self.assertEqual(len(log), 2, log)
+
+        # The story carries the proof its tasks measured (2026-11-12: the first real
+        # story wrote `baseline` all null, and the review read "the suite never ran at
+        # the head" of a branch whose last task had run it on that very commit).
+        self.assertEqual(rec["branch"]["sha"], t2["branch"]["sha"])
+        self.assertIsNotNone(rec["baseline"]["executed"], rec["baseline"])
+        self.assertEqual(rec["baseline"]["new_reds"], [])
+        self.assertEqual(rec["measured"]["suite"], "run-suite-branch.txt")
+        self.assertTrue((story / "run-suite-branch.txt").is_file())
+        self.assertEqual(rec["proof"]["red_on_base"]["result"], "red")
+        self.assertEqual(rec["proof"]["green_on_branch"]["result"], "green")
+        for task_id in ("T1", "T2"):
+            self.assertTrue((story / f"run-suite-base-with-test-{task_id}.txt").is_file(), task_id)
+        jsonschema.validate(rec, json.loads((PRUMO_ROOT / "schemas" / "delivery.schema.json").read_text(encoding="utf-8")))
+
+        # The second task was told what the first delivered, so neither the writer nor
+        # the sceptic can undo it unseen (2026-11-12: a write in task 10 defeated task 9).
+        args_t2 = json.loads((story / "tasks" / "T2" / "workflow-args.json").read_text(encoding="utf-8"))
+        self.assertEqual([x["id"] for x in args_t2["story_context"]], ["T1"])
+        self.assertEqual(args_t2["story_context"][0]["criteria"], ["limit() is 10"])
+        self.assertEqual(args_t2["story_context"][0]["files"], ["src/b.py", "tests/test_b.py"])
+        args_t1 = json.loads((story / "tasks" / "T1" / "workflow-args.json").read_text(encoding="utf-8"))
+        self.assertEqual(args_t1["story_context"], [])
+
+        # Over the story's budget: blocked for a person — unless the person's waiver in
+        # the profile is in force. An expired waiver is as if it never existed.
+        man["budget"] = {"max_files": 1, "max_lines": 1}
+        (story / "deliver-manifest.json").write_text(json.dumps(man), encoding="utf-8")
+        import yaml
+        profile_file = self.root / "profiles" / "repo-x.yml"
+        original = yaml.safe_load(profile_file.read_text(encoding="utf-8"))
+
+        def status(waiver):
+            profile = json.loads(json.dumps(original))
+            if waiver:
+                profile["delivery"]["waiver"] = waiver
+            profile_file.write_text(yaml.safe_dump(profile), encoding="utf-8")
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = deliver.story_status(argparse.Namespace(package=str(story)))
+            return code, json.loads((story / "delivery.json").read_text(encoding="utf-8"))
+
+        code, over = status(None)
+        self.assertEqual((code, over["state"], over["owner"]), (1, "blocked", "person"))
+        code, waived = status({"approver": "someone", "reason": "a person said so", "expires": "2999-12-31"})
+        self.assertEqual((code, waived["state"]), (0, "delivered"), waived["reason"])
+        self.assertEqual(waived["waiver"]["approver"], "someone")
+        code, expired = status({"approver": "someone", "reason": "a person said so", "expires": "2000-01-01"})
+        self.assertEqual((code, expired["state"]), (1, "blocked"))
+        profile_file.write_text(yaml.safe_dump(original), encoding="utf-8")
 
     def test_a_kind_the_shape_does_not_allow_is_refused(self):
         with self.assertRaises(common.UsageError):

@@ -454,6 +454,7 @@ def prepare(args) -> int:
     fix = pathlib.Path(args.fix) if getattr(args, "fix", None) else None
     story = pathlib.Path(args.story) if getattr(args, "story", None) else None
     task = None
+    story_context = None
     if story:
         # A task of a story is a delivery of its own: its item is the task as the design
         # wrote it, its branch the story's, its base that branch's head, its shape a bug's
@@ -472,6 +473,17 @@ def prepare(args) -> int:
         text += ["", f"files: {', '.join(task['files'])}", f"proving tests: {', '.join(task['proving_tests'])}"]
         (package / "item.md").write_text("\n".join(text) + "\n", encoding="utf-8")
         write_json(package / "task.json", {"story": str(story), **task})
+        # What the story already delivered on this branch, so neither the writer nor the
+        # sceptic undoes it unseen: on the first story (2026-11-12) a write in task 10
+        # removed a field before the call task 9 had made read it, and the sceptic, asked
+        # only about task 10's own proving tests, said `proves`.
+        story_context = []
+        for earlier in design.get("tasks") or []:
+            if earlier["id"] == task["id"]:
+                break
+            rec_path = story / "tasks" / earlier["id"] / "delivery.json"
+            if rec_path.exists() and read_json(rec_path).get("state") == DELIVERED:
+                story_context.append({k: earlier[k] for k in ("id", "title", "criteria", "files")})
     elif fix:
         # A fix delivers the routes a review opened, on the review's own branch: the
         # item is written from the findings, and the base is that branch's head, so the
@@ -600,6 +612,7 @@ def prepare(args) -> int:
         "shape": shape, "plan_depth": rules["plan"],
         "workdir": str(workdir), "delivery": block,
         "task": task,
+        "story_context": story_context,
         # The repository's own conventions, as pointers: the writer reads them before
         # the first line, the way the reviewers read them before judging style.
         "conventions": list(profile.get("conventions") or []),
@@ -626,7 +639,18 @@ def digest(data) -> str:
     return hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
 
 
-def render_plan(man: dict, measure: dict) -> str:
+def without_mutations(kind: str, measure: dict) -> tuple[dict, list[dict]]:
+    """A behaviour change names no mutation: the writer replaces the very lines a
+    mutant would point at, so the mutant's `from` text is gone by the time `conclude`
+    applies it. A fix round of the first story (2026-11-12) carried two such mutants on
+    pre-fix code. Returns the measurement without them and the ones dropped, which the
+    plan declares instead of silently losing."""
+    if kind != "behaviour-change" or not measure.get("mutations"):
+        return measure, []
+    return dict(measure, mutations=[]), list(measure["mutations"])
+
+
+def render_plan(man: dict, measure: dict, dropped: list[dict] | None = None) -> str:
     """The plan a person reads before a line is written: what was measured, what will
     be touched, what will prove it. One fact per line, each with an address."""
     L = lambda key: t(f"deliver.report.{key}")  # noqa: E731
@@ -642,6 +666,9 @@ def render_plan(man: dict, measure: dict) -> str:
                      + (" · central" if p.get("central") else ""))
     lines += ["", f"{L('diff'):9}" + ", ".join(measure.get("files") or []) or "?"]
     lines += ["", L("proof")]
+    for m in dropped or []:
+        lines.append("  " + t("deliver.cli.mutation_dropped_behaviour_change",
+                              file=m.get("file", "?"), line=m.get("line", "?"), test=m.get("test", "?")))
     for m in measure.get("mutations") or []:
         lines.append(f"  {m['file']}:{m['line']} `{m['from']}`→`{m['to']}` → {m['test']} red"
                      + (f" · stays green: {', '.join(m['stays_green'])}" if m.get("stays_green") else ""))
@@ -692,9 +719,9 @@ def plan(args) -> int:
         write_json(package / "design.json", design)
         subject, text = design, render_design(man, design)
     else:
-        measure = read_json(pathlib.Path(args.measure))
+        measure, dropped = without_mutations(man["item"]["kind"], read_json(pathlib.Path(args.measure)))
         write_json(package / "measure.json", measure)
-        subject, text = measure, render_plan(man, measure)
+        subject, text = measure, render_plan(man, measure, dropped)
     record = {"shape": man["shape"], "depth": man["plan_depth"], "gate": rules["gate"],
               "digest": digest(subject), "rendered_at": today()}
     write_json(package / "plan.json", record)
@@ -708,12 +735,22 @@ def plan(args) -> int:
 
 def story_status(args) -> int:
     """The story's record, from its tasks' records: delivered when every task is and
-    the sum of their diffs sits inside the story's budget; blocked otherwise, naming
-    the next task. Written as `delivery.json` so the route and the review read one
-    record per branch."""
+    the sum of their diffs sits inside the story's budget — or a person's waiver in the
+    profile covers it; blocked otherwise, naming the next task. Written as
+    `delivery.json` so the route and the review read one record per branch.
+
+    The record carries the proof the tasks measured, not a blank. The first story
+    (2026-11-12) wrote `baseline` all null and `proof` empty, and the review read "the
+    suite never ran at the head" of a branch whose last task had run it on that very
+    commit. The suite is the last task's run AT THE STORY'S HEAD, re-read against the
+    story's own base, and its file is copied beside the record so `review.py prepare
+    --delivery` carries it; the red-on-base runs travel too, one per task."""
     package = pathlib.Path(args.package)
     man = read_json(package / "deliver-manifest.json")
     design = read_json(package / "design.json")
+    profile = load_profile(man["repo"])
+    block = delivery_block(profile, man["repo"])
+    check = (profile.get("checks") or {}).get("suite") or {}
     tasks = design.get("tasks") or []
     records = {}
     for x in tasks:
@@ -725,6 +762,53 @@ def story_status(args) -> int:
     files = sorted({f for r in records.values() for f in r["diff"]["files"]})
     lines = sum(r["diff"]["added"] + r["diff"]["removed"] for r in records.values())
     budget = man["budget"]
+    head = git(dir_repositories() / man["repo"], "rev-parse", "--verify", "-q", man["branch"]["name"], check=False) or man["branch"]["sha"]
+    within = len(files) <= budget["max_files"] and lines <= budget["max_lines"]
+    waiver = block.get("waiver")
+
+    from evidence import compare_reds, red_names
+    base_file = package / "run-suite-base.txt"
+    base_out = base_file.read_text(encoding="utf-8") if base_file.exists() else ""
+    at_head = next((x["id"] for x in reversed(tasks)
+                    if x["id"] in done and records[x["id"]]["branch"]["sha"] == head), None)
+    branch_out, lint = "", {"state": "not_run", "reason": t("review.suite_not_run"), "run": None}
+    if at_head:
+        run = package / "tasks" / at_head / "run-suite-branch.txt"
+        if run.exists():
+            branch_out = run.read_text(encoding="utf-8")
+            shutil.copy2(run, package / "run-suite-branch.txt")
+        lint = records[at_head].get("lint") or lint
+    if branch_out:
+        reads = compare_reds(base_out, branch_out, check)
+        baseline = {"base_reds": reads["base_reds"] or [], "branch_reds": reads["branch_reds"] or [],
+                    "new_reds": reads["new_reds"], "vanished_reds": reads["vanished_reds"] or [],
+                    "predicted": reads["predicted"], "executed": reads["executed"]}
+    else:
+        baseline = {"base_reds": man["baseline"]["base_reds"] or [], "branch_reds": None,
+                    "new_reds": None, "vanished_reds": None, "predicted": None, "executed": None}
+
+    # Red before green, task by task: each task's own base-with-test run travels beside
+    # the record under the task's name, and the story's proof is red only when every
+    # task that names one was red.
+    proving = [p for x in tasks for p in x.get("proving_tests") or []]
+    reds_on_base = []
+    for x in tasks:
+        red = (records.get(x["id"]) or {}).get("proof", {}).get("red_on_base")
+        if red:
+            reds_on_base.append(red["result"])
+            run = package / "tasks" / x["id"] / "run-suite-base-with-test.txt"
+            if run.exists():
+                shutil.copy2(run, package / f"run-suite-base-with-test-{x['id']}.txt")
+    red_on_base = ({"test": ", ".join(proving),
+                    "result": "red" if all(r == "red" for r in reds_on_base) and len(reds_on_base) == len(tasks)
+                    else ("green" if "green" in reds_on_base else "not_run")}
+                   if reds_on_base else None)
+    green_on_branch = None
+    if branch_out and proving:
+        on_branch = red_names(branch_out, check.get("red_name_pattern")) or []
+        green_on_branch = {"test": ", ".join(proving),
+                           "result": "red" if any(p in name for p in proving for name in on_branch) else "green"}
+
     state, reason, owner = DELIVERED, t("deliver.state.delivered"), None
     if pending:
         nxt = pending[0]["id"]
@@ -733,30 +817,51 @@ def story_status(args) -> int:
         reason = (records[bad]["reason"] if bad else
                   t("deliver.cli.story_tasks_pending", done=len(done), total=len(tasks), task=nxt))
         owner = records[bad]["owner"] if bad else "author"
-    elif len(files) > budget["max_files"] or lines > budget["max_lines"]:
+    elif not at_head:
+        state, owner = BLOCKED, "author"
+        reason = t("deliver.cli.story_no_task_at_head", head=head[:12])
+    elif baseline["new_reds"]:
+        state, owner = BLOCKED, "author"
+        reason = t("deliver.blocked.new_red", names=", ".join(baseline["new_reds"]))
+    elif not within and not waiver_in_force(waiver):
         state, owner = BLOCKED, "person"
         reason = t("deliver.cli.story_budget", lines=lines, files=len(files),
                    max_lines=budget["max_lines"], max_files=budget["max_files"])
-    head = git(dir_repositories() / man["repo"], "rev-parse", "--verify", "-q", man["branch"]["name"], check=False) or man["branch"]["sha"]
+    measured = {"note": (t("deliver.record.story_measured_note", task=at_head) if at_head
+                         else t("deliver.cli.story_no_task_at_head", head=head[:12])),
+                "base": "run-suite-base.txt" if base_file.exists() else None,
+                "suite": "run-suite-branch.txt" if branch_out else None,
+                "lint": None,
+                "mutations": []}
     record = {"repo": man["repo"], "item": man["item"], "base": man["base"],
               "branch": {"name": man["branch"]["name"], "sha": head},
-              "premises": [], "lint": {"state": "not_run", "reason": t("review.suite_not_run")},
+              "premises": [], "lint": lint,
               "plan": {"shape": man["shape"], "depth": man["plan_depth"], "gate": SHAPES[man["shape"]]["gate"],
                        "approved_by": approval_of(package), "budget": budget},
-              "proof": {"red_on_base": None, "green_on_branch": None, "mutations": [], "guarding": None,
-                        "refutation": None},
-              "baseline": {"base_reds": [], "branch_reds": None, "new_reds": None, "vanished_reds": None,
-                           "predicted": None, "executed": None},
+              "proof": {"red_on_base": red_on_base, "green_on_branch": green_on_branch, "mutations": [],
+                        "guarding": None, "refutation": None},
+              "baseline": baseline,
               "diff": {"files": files, "added": lines, "removed": 0, "outside_scope": [],
-                       "within_budget": len(files) <= budget["max_files"] and lines <= budget["max_lines"]},
+                       "within_budget": within},
               "skipped": [s for r in records.values() for s in r.get("skipped") or []],
-              "waiver": None, "state": state, "reason": reason, "owner": owner,
+              "measured": measured,
+              "waiver": waiver, "state": state, "reason": reason, "owner": owner,
               "next": NEXT.format(repo=man["repo"], branch=man["branch"]["name"], item=man["item"]["id"]),
               "tasks": {x["id"]: records.get(x["id"], {}).get("state", "pending") for x in tasks}}
+    import jsonschema
+    jsonschema.validate(record, read_json(ROOT.parent / "schemas" / "delivery.schema.json"))
     write_json(package / "delivery.json", record)
     print(f"{t('deliver.report.item'):9}{man['item']['id']} · story · {t('deliver.state.' + state)}")
     for x in tasks:
         print(f"  {SYMBOL.get({'delivered': 'holds', 'blocked': 'fails'}.get(record['tasks'][x['id']], 'not_assessable'))} {x['id']}  {x['title']}  {record['tasks'][x['id']]}")
+    if branch_out:
+        print(f"{'':9}" + t("deliver.cli.story_suite_at_head", task=at_head, executed=baseline["executed"],
+                             predicted=baseline["predicted"], reds=len(baseline["base_reds"]),
+                             new=len(baseline["new_reds"] or [])))
+    if not within and waiver_in_force(waiver):
+        print(f"{'':9}" + t("deliver.cli.story_budget_waived", lines=lines, files=len(files),
+                             max_lines=budget["max_lines"], max_files=budget["max_files"],
+                             approver=waiver.get("approver", "?"), expires=waiver.get("expires", "?")))
     if state != DELIVERED:
         print(f"{'':9}{reason}")
     print(f"{t('deliver.report.next'):9}{record['next']}")
@@ -828,11 +933,10 @@ def conclude(args) -> int:
     profile = load_profile(man["repo"])
     block = delivery_block(profile, man["repo"])
     workdir = pathlib.Path(man["workdir"])
-    measure = read_json(pathlib.Path(args.measure))
+    measure, _ = without_mutations(man["item"]["kind"], read_json(pathlib.Path(args.measure)))
     written = read_json(pathlib.Path(args.written)) if args.written else {"files": [], "skipped": []}
     refutation = read_json(pathlib.Path(args.refutation)) if args.refutation else None
     write_json(package / "measure.json", measure)
-    write_json(package / "written.json", written)
 
     premises = measure.get("premises") or []
     allowed = list(measure.get("files") or []) + list(written.get("files") or [])
@@ -840,6 +944,15 @@ def conclude(args) -> int:
     roots = block["test_roots"] if kind == "coverage-gap" else block["source_roots"] + block["test_roots"]
 
     files, added, removed = changed_files(workdir, man["base"]["sha"])
+    # What was written is what the tree holds, not what the writer remembered. A second
+    # attempt on the same tree declared only the files it touched in that pass (three
+    # tasks of the first story, 2026-11-12), and the record and the sceptic read a
+    # partial delivery. The writer's list is kept, and every file the measurement named
+    # that differs from the base joins it; anything else stays outside the scope below.
+    declared = list(written.get("files") or [])
+    named = set(measure.get("files") or [])
+    written = dict(written, files=declared + [f for f in files if f in named and f not in declared])
+    write_json(package / "written.json", written)
     budget = man.get("budget") or block.get("budget") or {}
     shape = man.get("shape") or "debt"
     # The plan is rendered here too when nobody did, so the record always holds one;
