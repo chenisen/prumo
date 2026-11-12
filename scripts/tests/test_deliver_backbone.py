@@ -190,6 +190,22 @@ class Spine(Fixture):
         with self.assertRaises(common.UsageError), contextlib.redirect_stdout(io.StringIO()):
             self.prepare()
 
+    def test_a_second_prepare_never_discards_the_commits_a_branch_holds(self):
+        package = self.prepare()
+        code, rec = self.conclude(package, PROVING_TEST)
+        self.assertEqual(code, 0, rec)
+        name = json.loads((package / "deliver-manifest.json").read_text(encoding="utf-8"))["branch"]["name"]
+        before = subprocess.run(("git", "rev-parse", name), cwd=self.repo,
+                                capture_output=True, text=True).stdout.strip()
+        git(self.repo, "checkout", "-q", "main")
+        deliver.marker().unlink(missing_ok=True)
+        with self.assertRaises(common.UsageError) as cm, contextlib.redirect_stdout(io.StringIO()):
+            self.prepare(package="pkg2")
+        self.assertIn(name, str(cm.exception))
+        after = subprocess.run(("git", "rev-parse", name), cwd=self.repo,
+                               capture_output=True, text=True).stdout.strip()
+        self.assertEqual(after, before)
+
     # ---- see also: the shape tests above
 
     def test_a_proving_test_is_delivered_committed_and_handed_to_review(self):

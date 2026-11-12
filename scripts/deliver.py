@@ -390,8 +390,9 @@ def cut_branch(repo_dir: pathlib.Path, block: dict, name: str, base_sha: str,
     is somebody's work in progress. In a worktree the branch lives beside the checkout
     and the checkout is never touched — not even its branch; without one, the branch
     is checked out in place and the report says where HEAD stood. A branch that already
-    exists is never reset under a worktree: it may carry somebody's commits, and the
-    person names another or deletes it. A worktree that already holds the branch is
+    exists is never reset under a worktree, nor in place while it holds commits the
+    base lacks: it may carry somebody's commits, and the person names another, asks
+    for a fix, or deletes it. A worktree that already holds the branch is
     continued, not recut — that is a story's second task, or a fix on a reviewed branch."""
     if block.get("worktree"):
         workdir = repo_dir / ".worktrees" / name
@@ -421,6 +422,10 @@ def cut_branch(repo_dir: pathlib.Path, block: dict, name: str, base_sha: str,
     if git(repo_dir, "status", "--porcelain"):
         raise UsageError(t("deliver.cli.tree_dirty", path=repo_dir))
     if fresh:
+        # recutting in place is safe only when the branch holds nothing the base lacks
+        if git(repo_dir, "rev-parse", "--verify", "-q", f"refs/heads/{name}", check=False) \
+                and git(repo_dir, "rev-list", "--count", f"{base_sha}..{name}") != "0":
+            raise UsageError(t("deliver.cli.branch_ahead", branch=name, path=repo_dir))
         git(repo_dir, "checkout", "-q", "-B", name, base_sha)
     else:
         git(repo_dir, "checkout", "-q", name)
