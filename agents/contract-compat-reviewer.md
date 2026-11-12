@@ -75,4 +75,4 @@ it, ask: *would this point be here if the diff did not exist?* If so,
 what it delivered — a branch the new file ought to have covered and did not is a finding
 of this delivery, because the delivery is the proof. Code the diff merely read is not.
 
-Reply **only** with the JSON of the `finding.schema.json` schema.
+Answer **only** through the structured output the request names: the object with `findings` (each in the shape of `finding.schema.json`), `checked`, `not_applicable`, and optionally `criteria` and `conventions_observed`. The tool input is that object itself, never a string. `checked` and `not_applicable` are short plain phrases: no double quotes, no backslashes, no code.

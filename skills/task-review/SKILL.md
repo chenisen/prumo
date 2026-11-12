@@ -159,6 +159,11 @@ is never rewritten. Measured need: the same delivery went INTERVENTION and APPRO
 word, twice. The other direction — a nit that should have been required — still has no
 second reading, because nothing below the blocking severities is sent to the verifier.
 
+Every agent prompt ends with the same return rule: the tool input is the object itself,
+`findings` first, `checked` as short plain phrases with no quotes or backslashes. Measured
+over 42 runs: 15% of structured returns failed and were regenerated, 250k output tokens,
+almost all of them long `checked` strings the model did not escape.
+
 | Phase | Part | What it produces |
 |---|---|---|
 | **F0** preflight | `preflight.py` | `capabilities.json` — what THIS environment can do |

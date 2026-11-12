@@ -671,3 +671,21 @@ class TestTheVerifierReadsTheSeverityASecondTime(unittest.TestCase):
         for kind in ("`behaviour`", "`proof`", "`record`", "`convention`"):
             self.assertIn(kind, agent)
         self.assertIn("- `consequence_kind`:", agent)
+
+
+class TestEveryAgentIsToldHowToReturn(unittest.TestCase):
+    """40 of 263 structured returns failed over 42 runs and were regenerated at output
+    price; 29 began at `"checked": [` with unescaped quotes and backslashes, the rest
+    wrapped the JSON as a string under `input`. The rule travels with every prompt."""
+
+    def test_the_rule_reaches_reviewers_extractor_verifier_and_planner(self):
+        workflow = (PRUMO_ROOT / "workflows" / "task-review.js").read_text(encoding="utf-8")
+        self.assertIn("const RETURN_RULE", workflow)
+        self.assertEqual(workflow.count("RETURN_RULE,"), 5)
+        self.assertIn("never wrapped under `input`", workflow)
+
+    def test_no_reviewer_still_asks_for_the_single_finding_schema(self):
+        for agent in (PRUMO_ROOT / "agents").glob("*-reviewer.md"):
+            text = agent.read_text(encoding="utf-8")
+            self.assertNotRegex(text, r"only\*\* with the JSON of the `finding\.schema\.json` schema", agent.name)
+            self.assertIn("never a string", text, agent.name)

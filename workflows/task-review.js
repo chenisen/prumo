@@ -70,6 +70,20 @@ const { package: bundle, plan, profile, classes } = input
 const PREFIX = plan.agent_prefix ?? 'prumo:'
 const agentFor = (name) => `${PREFIX}${name}`
 
+// How to hand the result back. Measured over 42 workflow runs (2026-11-12): 40 of 263
+// StructuredOutput calls failed, 250k output tokens — the costliest component — spent on
+// retries; 29 of the 31 unparseable returns began at `"checked": [` with long free text
+// carrying double quotes, parentheses and PHP namespace backslashes the model did not
+// escape, and the other failures wrapped the whole JSON as a string under `input`. Size
+// does not predict it (median of the failures equals the median of the successes); the
+// shape of the strings does. The rule travels with every agent prompt of this workflow.
+const RETURN_RULE =
+  'HOW TO RETURN: call StructuredOutput once, with the object itself as the tool input — ' +
+  'never a JSON string, never wrapped under `input`. Put `findings` first. Every string in ' +
+  '`checked` and `not_applicable` is one short plain phrase: no double quotes inside it, no ' +
+  'backslashes (write a PHP namespace with slashes or by its short name), no code excerpt. ' +
+  'Excerpts belong in `evidence.excerpt`, short.'
+
 const FINDINGS_SCHEMA = {
   type: 'object',
   required: ['findings', 'checked', 'not_applicable'],
@@ -294,6 +308,7 @@ if (inlined['criteria.json']) {
     'met. Label every id; an id you leave out is treated as context.',
     `Candidates: ${inlined['criteria-candidates.json']}`,
     embed('item.md', 'Normalised item (description + comments)'),
+    RETURN_RULE,
   ].join('\n'), { agentType: agentFor('criteria-extractor'), label: 'criteria-extractor',
                   phase: 'Criteria', schema: LABEL_SCHEMA })
   if (labelled) {
@@ -319,6 +334,7 @@ if (inlined['criteria.json']) {
     'If the item carries no legible criterion at all, return an empty list and say so',
     'in `note`.',
     embed('item.md', 'Normalised item (description + comments)'),
+    RETURN_RULE,
   ].join('\n'), { agentType: agentFor('criteria-extractor'), label: 'criteria-extractor',
                   phase: 'Criteria', schema: EXTRACT_SCHEMA })
   if (extracted) {
@@ -375,6 +391,7 @@ const context = (slice) => [
     + '`conventions_observed`, each with the file that shows it. It is kept outside the '
     + 'repository so the next review starts less blind. Never phrase it in terms of this '
     + 'delivery, and never put an identifier in it. Nothing to say there is a valid answer.',
+  RETURN_RULE,
   inlined[`slices/${slice}.patch`]
     ? embed(`slices/${slice}.patch`, 'Your slice of the diff — it is HERE, do not read the file')
     : `Slice to read: ${bundle}/slices/${slice}.patch`,
@@ -547,6 +564,7 @@ const verified = await pipeline(blocking, (f) =>
     'this code: a consequence of record or convention is charged as a nit by the judge, ' +
     'whatever the label, and your reading is shown beside it.',
     'When in doubt, return `uncertain` — never `confirmed`.',
+    RETURN_RULE,
   ].filter(Boolean).join('\n'), {
     agentType: agentFor('finding-verifier'),
     label: `verify:${f.id}`,
@@ -651,6 +669,7 @@ const scripts = templatable
       `Criteria from the item: ${bundle}/criteria.json`,
       `The item itself: ${bundle}/item.md`,
       'The expected result is written BEFORE executing.',
+      RETURN_RULE,
     ].join('\n'), { agentType: agentFor('manual-verification-planner'), phase: 'Manual plan',
                     schema: SCRIPT_SCHEMA })
   : null
