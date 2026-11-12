@@ -951,7 +951,7 @@ def scope_guard(files: list[str], allowed: list[str], roots: list[str]) -> list[
     """A file outside what the measurement named, or outside the roots the kind allows,
     is outside the scope. The hook holds this while the writer works; this holds it
     over what actually landed."""
-    patterns = [r.rstrip("/") + "/**" for r in roots]
+    patterns = [p for r in roots for p in (r.rstrip("/"), r.rstrip("/") + "/**")]
     return [f for f in files if f not in allowed or not casa_algum(f, patterns)]
 
 
@@ -969,7 +969,10 @@ def conclude(args) -> int:
     premises = measure.get("premises") or []
     allowed = list(measure.get("files") or []) + list(written.get("files") or [])
     kind = man["item"]["kind"]
-    roots = block["test_roots"] if kind == "coverage-gap" else block["source_roots"] + block["test_roots"]
+    # Documentation the change makes stale travels with it, where the profile says
+    # where documentation lives — except in a coverage gap, which only adds tests.
+    roots = (block["test_roots"] if kind == "coverage-gap"
+             else block["source_roots"] + block["test_roots"] + list(block.get("doc_roots") or []))
 
     files, added, removed = changed_files(workdir, man["base"]["sha"])
     # What was written is what the tree holds, not what the writer remembered. A second
