@@ -135,6 +135,16 @@ can swallow an exit code, so the result is read from the output (`failure_patter
 `delivery.path_map` when the suite runs in a container; what git does not hold arrives by
 `worktree_setup`, one plain command per line, nothing chained.
 
+## A blocked attempt, written again
+
+A `blocked` delivery leaves the tree as it is. To write it again on the same tree, the
+`write` stage takes `previous`: `{reason, output, hint}` — the judge's reason from
+`delivery.json`, what the suite printed for the new reds (from the run file), and, when
+the measurement already named it, the neighbouring pattern the writer missed. Composed
+by whoever resumes, never by the workflow. Then `conclude` runs again on the same
+package. Measured need: the first story's second task was blocked by a hand-made
+builder stub the writer itself had flagged as never run.
+
 ## The record
 
 `delivery.json`, held to `schemas/delivery.schema.json`. `deliver_judge()` reads it and

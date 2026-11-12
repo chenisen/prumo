@@ -365,3 +365,12 @@ class TestATaskSCriteriaAreNotPremises(unittest.TestCase):
         agent = (PRUMO_ROOT / "agents" / "premise-surveyor.md").read_text(encoding="utf-8")
         self.assertIn("## A task of a story", agent)
         self.assertIn("never a failing premise", agent)
+
+
+class TestABlockedAttemptIsWrittenAgainWithItsReason(unittest.TestCase):
+    def test_the_write_stage_carries_the_previous_verdict(self):
+        workflow = (PRUMO_ROOT / "workflows" / "deliver.js").read_text(encoding="utf-8")
+        self.assertIn("A PREVIOUS ATTEMPT AT THIS ITEM WAS BLOCKED", workflow)
+        self.assertIn("input.previous.reason", workflow)
+        skill = (PRUMO_ROOT / "skills" / "deliver" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("## A blocked attempt, written again", skill)

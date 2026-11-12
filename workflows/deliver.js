@@ -225,8 +225,23 @@ if (!input.measure) {
 const measure = input.measure
 
 phase('Write')
+// A blocked delivery can be written again on the same tree. The second task of the first
+// story (2026-11-12) was blocked by two new reds: the writer had stubbed the query builder
+// by hand, warned in `skipped` that the stub had never run, and the suite proved it. The
+// writer of the second attempt would have seen the same files and the same measurement
+// and written the same stub again — so the previous verdict travels with the prompt:
+// the reason the judge gave and what the suite printed for the reds. Composed by whoever
+// resumes, from `delivery.json` and the run file; never invented here.
+const previous = input.previous
+  ? 'A PREVIOUS ATTEMPT AT THIS ITEM WAS BLOCKED on this same tree — the files below ' +
+    'already hold it. Fix the cause before anything else, inside the same files. ' +
+    `Reason: ${input.previous.reason}` +
+    (input.previous.output ? `\nWhat the suite printed for the reds:\n${input.previous.output}` : '') +
+    (input.previous.hint ? `\n${input.previous.hint}` : '')
+  : ''
 const written = await run('change-writer', [
   ...common,
+  previous,
   `Measurement: ${JSON.stringify(measure)}`,
   `You may write ONLY these files: ${measure.files.join(', ')}. The hook refuses any other.`,
   measure.mutations.length
