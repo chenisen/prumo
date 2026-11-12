@@ -160,9 +160,17 @@ def decide(run: dict, root: pathlib.Path) -> dict:
     # --- the review. The door out of an intervention is handed over, never taken: a
     # fix is a new delivery on the person's own ask, and the invocation is what the
     # person pastes.
-    if not _exists(r, "manifest.json"):
+    if not _exists(r, "manifest.json") or _review_read_another_head(r, rec):
         return invoke(f"review.py prepare --repo {repo} --branch {branch} --item {item} --item-file {item_file} --delivery {d}")
     return _review_step(run, r, repo, stop, invoke)
+
+
+def _review_read_another_head(r: str, rec: dict) -> bool:
+    """A fix delivered after the verdict moves the branch: the bound review judged the
+    head before it, so the fix asks for a review of its own head, not the old stop."""
+    head = read_json(pathlib.Path(r) / "manifest.json").get("head_sha")
+    delivered = (rec.get("branch") or {}).get("sha")
+    return bool(head and delivered and head != delivered)
 
 
 def decide_decomposed(run: dict, root: pathlib.Path, d: str, man: dict, invoke, stop) -> dict:
