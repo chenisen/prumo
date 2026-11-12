@@ -75,6 +75,10 @@ def _delivery_hex(package: pathlib.Path) -> set[str]:
     return set(RE_SHA.findall(patch.read_text(encoding="utf-8", errors="ignore")))
 
 
+# From this many digits on, an item id is a shape of its own; below it, it is any number.
+LONG_ID = 4
+
+
 def _proposal_number(origin: str) -> str | None:
     """The number inside the origin ref, whatever shape this forge publishes it in.
 
@@ -118,7 +122,17 @@ def foreign_references(text: str, package: pathlib.Path) -> list[dict]:
     if item_id and item_path.exists():
         # Only ids shaped like ours, and only those the item itself never names.
         said_by_the_item = item_path.read_text(encoding="utf-8")
-        same_shape = re.compile(r"(?<![\w.])\d{%d}(?![\w.])" % len(item_id))
+        digits = len(item_id)
+        if digits >= LONG_ID:
+            # A number behind a colon is an address — `file.ts:12345` — never an id.
+            same_shape = re.compile(r"(?<![\w.:])\d{%d}(?![\w.])" % digits)
+        else:
+            # A short id has no shape of its own: beside item 15, every line number, count
+            # and amount of two digits read as "another item", and no review of a tracker
+            # with short ids could conclude (measured on 2026-11-12, twenty of them in one
+            # findings.json). A short number is another item only when it is written as a
+            # reference: `#16`, or after the word for an item.
+            same_shape = re.compile(r"(?i)(?:#|\b(?:item|card|issue|ticket)\s+#?)(\d{%d})(?![\w.])" % digits)
         for n in dict.fromkeys(same_shape.findall(text)):
             if n != item_id and n not in said_by_the_item:
                 out.append({"kind": "item", "value": n})
