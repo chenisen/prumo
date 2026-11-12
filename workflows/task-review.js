@@ -570,7 +570,7 @@ const final = findings.map((f) => byId.get(f.id)
             : NOT_SENT_BELOW_BLOCKING }))
 
 phase('Manual plan')
-const candidates = classes.filter(
+const manualCandidates = classes.filter(
   (c) => (c.section === 'B' && c.state === 'fired')
       || (c.state === 'not_assessable' && !c.not_applicable))
 
@@ -586,7 +586,7 @@ const candidates = classes.filter(
 // about this change) is never grouped: it gets its own script.
 const grouped = new Map()
 const needsScript = []
-for (const c of candidates) {
+for (const c of manualCandidates) {
   if (c.cause && c.state === 'not_assessable') {
     if (!grouped.has(c.cause)) grouped.set(c.cause, [])
     grouped.get(c.cause).push(c)
@@ -602,8 +602,8 @@ for (const [cause, members] of grouped) {
     cause,
   })
 }
-if (candidates.length !== needsScript.length) {
-  log(`${candidates.length} classes need manual work, collapsed into ${needsScript.length} ` +
+if (manualCandidates.length !== needsScript.length) {
+  log(`${manualCandidates.length} classes need manual work, collapsed into ${needsScript.length} ` +
       `script(s): classes sharing a cause are answered by one act, not one each`)
 }
 

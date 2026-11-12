@@ -2,6 +2,8 @@ import pathlib, subprocess, sys, tempfile, unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 import hygiene
+
+PRUMO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 from providers import InvalidConfiguration, build, looks_like_a_secret
 
 
@@ -101,3 +103,30 @@ class TestAConfigurationNeverHoldsTheValue(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAWorkflowDeclaresEachTopLevelNameOnce(unittest.TestCase):
+    """2.10.2 shipped `const candidates` twice at the top of task-review.js — once for the
+    item's candidate lines, once for the manual-plan classes — and the harness refused the
+    whole script at parse time ("Identifier 'candidates' has already been declared"). No
+    `node` runs here, so the suite cannot parse the scripts; it can count the top-level
+    bindings, which is exactly the mistake a long flat module invites."""
+
+    def test_no_top_level_binding_is_declared_twice(self):
+        import re
+        pattern = re.compile(r"^(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)", re.M)
+        for script in (PRUMO_ROOT / "workflows").glob("*.js"):
+            seen = {}
+            for match in pattern.finditer(script.read_text(encoding="utf-8")):
+                name = match.group(1)
+                line = script.read_text(encoding="utf-8").count("\n", 0, match.start()) + 1
+                self.assertNotIn(name, seen,
+                                 f"{script.name}: `{name}` declared at line {seen.get(name)} "
+                                 f"and again at line {line}")
+                seen[name] = line
+
+    def test_the_check_sees_a_duplicate(self):
+        import re
+        pattern = re.compile(r"^(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)", re.M)
+        names = [m.group(1) for m in pattern.finditer("const a = 1\nif (x) {\n  const a = 2\n}\nconst a = 3\n")]
+        self.assertEqual(names, ["a", "a"])
