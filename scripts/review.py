@@ -30,11 +30,11 @@ import sys
 import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from common import (MissingConfiguration, InvalidConfiguration, dir_packages, dir_reports, forge, tracker, UsageError, profile_path, load_profile, write_json,
+from common import (MissingConfiguration, dir_repositories, InvalidConfiguration, dir_packages, dir_reports, forge, tracker, UsageError, profile_path, load_profile, write_json,
                    today, read_json, slug, cfg, capabilities_after_preflight, hint_config,
                    report_dir_name)
 from i18n import t
-from evidence import red_names, progress
+from evidence import red_names, progress, authorise, resolve, run_command
 
 ROOT = pathlib.Path(__file__).resolve().parent
 # Where the package is assembled, when `--package` does not say. It is `paths.packages`
@@ -169,6 +169,52 @@ def copy_mandatory_reading(args, package: pathlib.Path) -> dict:
 def short_range(package: pathlib.Path) -> str:
     m = read_json(package / "manifest.json")
     return f"{m['merge_base'][:12]}..{m['head_sha'][:12]}"
+
+
+SECRETS_RUN = "run-secrets.txt"
+SECRETS_SHOWN = 10
+
+
+def run_secrets_check(package: pathlib.Path, profile: dict, repo_dir: pathlib.Path) -> dict | None:
+    """Runs the profile's `secrets` check over THIS review's change, and lets A9 hear it.
+
+    The check used to be a capability only: preflight asked whether the tool exists, and
+    A9 left `not_assessable` the moment it did — with nothing ever scanned. The command
+    now runs, with `{base}` and `{head}` filled from the manifest, its output stays in the
+    package, and a red turns A9 into `fired` with the scanner's lines as the evidence: a
+    secret is a person's decision, never a reviewer's guess. A green adds that the scan
+    ran; it never silences what the reviewers read in the diff themselves."""
+    check = (profile.get("checks") or {}).get("secrets") or {}
+    cap = (read_json(package / "capabilities.json").get("checks") or {}).get("secrets") or {}
+    if not check.get("command") or not cap.get("available"):
+        return None
+    ok, reason = authorise(check["command"], profile)
+    if not ok:
+        return {"ran": False, "state": "not_run", "reason": reason}
+    man = read_json(package / "manifest.json")
+    command = (resolve(check["command"], profile, repo_dir)
+               .replace("{base}", man.get("merge_base") or man["base"]["sha"])
+               .replace("{head}", man["head_sha"]))
+    result = run_command(command, repo_dir)
+    output = result.get("output", result.get("reason", ""))
+    (package / SECRETS_RUN).write_text(output, encoding="utf-8")
+    if not result.get("ran"):
+        return {"ran": False, "state": "not_run", "reason": result.get("reason", "")}
+    pattern = check.get("failure_pattern")
+    red = result["exit_code"] != 0 or bool(pattern and re.search(pattern, output))
+    if red:
+        classes = read_json(package / "classes.json")
+        lines = [l for l in output.splitlines() if re.match(r"\S+:\d+:", l)][:SECRETS_SHOWN]
+        for c in classes:
+            if c["id"] == "A9":
+                c.update(state="fired", cause="check_red",
+                         reason=t("review.secrets_found", run=SECRETS_RUN),
+                         evidence=[{"file": l.split(":", 1)[0], "by": l} for l in lines]
+                                  or [{"file": SECRETS_RUN, "by": SECRETS_RUN}])
+        write_json(package / "classes.json", classes)
+    return {"ran": True, "state": "red" if red else "green",
+            "reason": t("review.secrets_found", run=SECRETS_RUN) if red
+                      else t("review.secrets_clean", run=SECRETS_RUN)}
 
 
 def item_scope(package: pathlib.Path) -> dict:
@@ -510,7 +556,12 @@ def prepare(args) -> int:
 
     _py("triage.py", "--package", str(package))
     write_json(package / "scope.json", item_scope(package))
-    write_json(package / "evidence.json", initial_evidence(package))
+    evidence = initial_evidence(package)
+    secrets = run_secrets_check(package, load_profile(args.repo), dir_repositories() / args.repo)
+    if secrets:
+        evidence.setdefault("checks", {})["secrets"] = secrets
+        print(t("review.secrets_line", state=secrets["state"], reason=secrets["reason"]))
+    write_json(package / "evidence.json", evidence)
 
     plan = read_json(package / "plan.json")
     profile = load_profile(args.repo)
