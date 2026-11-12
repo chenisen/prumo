@@ -483,6 +483,9 @@ review:
   scope_no_criteria: 'sem criteria.json: nada a comparar'
   step_failed: o passo `{path}` terminou com código {n} — a revisão para aqui
   stop: 'parada: {reason}'
+  secrets_found: 'a varredura de segredos achou algo. As linhas estão em `{run}`, e A9 disparou.'
+  secrets_clean: 'a varredura de segredos não achou nada nesta mudança. A saída está em `{run}`.'
+  secrets_line: 'segredos: {state} — {reason}'
   suite_not_run: a suíte não foi executada nesta rodada
   telemetry_at: 'telemetria: {path}'
   telemetry_unmeasured: 'telemetria: NÃO MEDIDA — nenhum registro de workflow encontrado para

@@ -94,6 +94,7 @@ prumo/
 │   ├── migrate_config.py        rewrites a Portuguese prumo.yml or profile
 │   ├── agnosticism_check.py     fails the method when it names a technology
 │   ├── hygiene.py               fails a secret, or a rule that is not the prumo's own
+│   ├── secrets_scan.py          what a change adds that looks like a secret — a tool for `checks.secrets`
 │   ├── setup.py                 writes a prumo.yml: asks five things, measures the rest
 │   └── tests/                   571 tests
 │
@@ -310,6 +311,18 @@ confirmed it.
 
 ```bash
 python3 scripts/validate_profile.py my-service   # against the contract
+```
+
+**A9 needs a secrets scanner.** Without `checks.secrets.command`, every review opens
+`missing_capability` for it. Point the check at your own scanner, or at the one the prumo
+carries. The review runs it over its own change, with `{base}` and `{head}` filled in.
+A red fires A9 with the scanner's lines:
+
+```yaml
+checks:
+  secrets:
+    command: python3 <prumo>/scripts/secrets_scan.py --repo {workdir} --base {base} --head {head}
+    required: true
 ```
 
 ### 4. Say who you are

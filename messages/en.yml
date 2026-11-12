@@ -481,6 +481,9 @@ review:
   scope_no_criteria: 'no criteria.json: nothing to compare against'
   step_failed: step `{path}` exited with code {n} — the review stops here
   stop: 'stop: {reason}'
+  secrets_found: 'the secrets scan found something. Its lines are in `{run}`, and A9 fired.'
+  secrets_clean: 'the secrets scan found nothing in this change. Its output is in `{run}`.'
+  secrets_line: 'secrets: {state} — {reason}'
   suite_not_run: the suite was not run in this round
   telemetry_at: 'telemetry: {path}'
   telemetry_unmeasured: 'telemetry: NOT MEASURED — no workflow record found for `{package}` in
