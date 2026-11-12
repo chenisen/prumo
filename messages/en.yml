@@ -128,6 +128,7 @@ deliver:
     tree_dirty: '{path} has pending changes — somebody''s work in progress; commit or stash it first'
     worktree_exists: '{path} already exists — a branch of that name is under way'
     branch_exists: '`{branch}` already exists in {path} — a worktree never resets a branch; pass --branch, or delete it first'
+    branch_ahead: '`{branch}` in {path} holds commits beyond the base — prepare never drops them; pass --fix, --branch, or delete it'
     branch_protected: '`{branch}` is a protected branch — a delivery is cut from one, never on one'
     setup_composed: 'worktree_setup `{command}` composes with the shell — one plain command per line, nothing chained'
     setup_failed: 'worktree_setup `{command}` failed with exit code {n}: {output}'
