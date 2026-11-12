@@ -55,7 +55,8 @@ def read_ask(path: str | None) -> str:
 
 
 def start(repo: str, item: str, ask_file: str | None, item_file: str | None = None,
-          package: str | None = None, shape: str | None = None) -> pathlib.Path:
+          package: str | None = None, shape: str | None = None,
+          kind: str | None = None) -> pathlib.Path:
     ask = read_ask(ask_file)
     root = pathlib.Path(package or (dir_packages() / f"{repo}-run-{int(time.time())}"))
     root.mkdir(parents=True, exist_ok=True)
@@ -63,7 +64,7 @@ def start(repo: str, item: str, ask_file: str | None, item_file: str | None = No
     if item_file:
         shutil.copy2(item_file, root / "item.md")
     write_json(root / "run.json", {
-        "repo": repo, "item": item, "shape": shape, "started_at": today(),
+        "repo": repo, "item": item, "shape": shape, "kind": kind, "started_at": today(),
         "ask_digest": hashlib.sha256(ask.encode("utf-8")).hexdigest(),
         "deliver_package": None, "review_package": None,
     })
@@ -121,7 +122,8 @@ def decide(run: dict, root: pathlib.Path) -> dict:
     # --- the delivery
     if not _exists(d, "deliver-manifest.json"):
         return invoke(f"deliver.py prepare --repo {repo} --item {item} --item-file {item_file}"
-                      + (f" --shape {run['shape']}" if run.get("shape") else ""))
+                      + (f" --shape {run['shape']}" if run.get("shape") else "")
+                      + (f" --kind {run['kind']}" if run.get("kind") else ""))
     if _exists(d, "delivery.json"):
         rec = read_json(pathlib.Path(d) / "delivery.json")
         if rec.get("state") != "delivered":
@@ -286,6 +288,7 @@ def main() -> int:
     a.add_argument("--item-file", required=True, help=t("review.help_item_file"))
     a.add_argument("--package")
     a.add_argument("--shape", help="the item's shape, as prepare takes it")
+    a.add_argument("--kind", help="the item's kind (coverage-gap, behaviour-change, refactor…), as prepare takes it")
     b = sub.add_parser("bind")
     b.add_argument("--package", required=True)
     b.add_argument("--deliver")
@@ -304,7 +307,7 @@ def main() -> int:
     try:
         if args.command == "start":
             root = start(args.repo, args.item, args.ask_file, args.item_file, args.package,
-                         shape=args.shape)
+                         shape=args.shape, kind=args.kind)
             print(t("run.started", item=args.item, repo=args.repo, path=root))
             print(t("run.then", path=root))
             return 0
