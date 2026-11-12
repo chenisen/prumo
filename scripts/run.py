@@ -57,6 +57,12 @@ def read_ask(path: str | None) -> str:
 def start(repo: str, item: str, ask_file: str | None, item_file: str | None = None,
           package: str | None = None, shape: str | None = None,
           kind: str | None = None) -> pathlib.Path:
+    from shape import SHAPES
+    kinds = (SHAPES.get(shape) or {}).get("kinds")
+    if shape and kind and kinds is not None and kind not in kinds:
+        # refused here, where it is typed, not at the prepare the run would repeat
+        raise UsageError(t("deliver.cli.kind_not_for_shape", kind=kind, shape=shape,
+                           kinds=", ".join(kinds) or "-"))
     ask = read_ask(ask_file)
     root = pathlib.Path(package or (dir_packages() / f"{repo}-run-{int(time.time())}"))
     root.mkdir(parents=True, exist_ok=True)
