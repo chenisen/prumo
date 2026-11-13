@@ -294,6 +294,18 @@ def with_base_versions(workdir: pathlib.Path, base_sha: str, files: list[str]):
     return _ctx()
 
 
+def production_files(files: list[str], block: dict) -> list[str]:
+    """The changed files the base's version replaces under the new test: under a source
+    root and under no test root. A repository that keeps its tests beside the code
+    (`src/**/__tests__`) has its test roots inside a source root, and a test file counted
+    as production went back to the base with the code — the proving test vanished, and
+    the red it owed could never show."""
+    def under(f: str, roots: list[str]) -> bool:
+        return casa_algum(f, [r.rstrip("/") + "/**" for r in roots or []])
+    return [f for f in files
+            if under(f, block.get("source_roots")) and not under(f, block.get("test_roots"))]
+
+
 def apply_mutation(workdir: pathlib.Path, m: dict) -> str | None:
     """Turn the guarded line wrong. Returns None when applied, else why not — a line
     that moved or a text that is not there is declared, never approximated."""
@@ -1093,7 +1105,7 @@ def conclude(args) -> int:
                 mutations.append(entry)
         # Red before green: the base's production files under the new test.
         proving = list(measure.get("proving_tests") or [])
-        production = [f for f in files if casa_algum(f, [r.rstrip("/") + "/**" for r in block["source_roots"]])]
+        production = production_files(files, block)
         if kind == "behaviour-change" and proving and production:
             with with_base_versions(workdir, man["base"]["sha"], production):
                 r = run_suite(profile, workdir, package, "base-with-test")

@@ -419,3 +419,23 @@ class TheSecondReadingOfTheFirstStory(unittest.TestCase):
         self.assertIn("item.kind === 'behaviour-change' && !input.task", self.WORKFLOW)
         self.assertIn("Name\n  **no** mutation", self.SURVEYOR)
 
+
+
+class TestATestBesideTheCodeIsNotProduction(unittest.TestCase):
+    """Red before green restores the base's production files under the new test. A
+    repository that keeps its tests inside the source root (`src/**/__tests__`) had the
+    proving test restored with the code, and the red could never show."""
+
+    BLOCK = {"source_roots": ["src"], "test_roots": ["src/**/__tests__"]}
+
+    def test_a_test_inside_a_source_root_stays_out_of_production(self):
+        from deliver import production_files
+        code = "src/app/plans/ActionsPlan/index.tsx"
+        spec = "src/app/plans/ActionsPlan/__tests__/actionsPlan.spec.tsx"
+        self.assertEqual(production_files([code, spec], self.BLOCK), [code])
+
+    def test_separate_roots_keep_their_split(self):
+        from deliver import production_files
+        block = {"source_roots": ["app"], "test_roots": ["tests/Unit"]}
+        self.assertEqual(production_files(["app/A.php", "tests/Unit/ATest.php"], block),
+                         ["app/A.php"])
