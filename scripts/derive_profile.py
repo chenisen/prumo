@@ -209,7 +209,9 @@ def delivery_draft(repo_dir: pathlib.Path, profile: dict) -> dict:
     return {
         "branch_format": "{item}-{slug}",
         "commit_format": "{item} - {message}",
-        "worktree": False,
+        # a dedicated worktree per delivery: several agents, several items, one
+        # repository. What it needs outside git goes in `worktree_setup`.
+        "worktree": True,
         "budget": {"max_files": 4, "max_lines": 120},
         "source_roots": sources or ["<fill in>"],
         "test_roots": tests or ["<fill in>"],

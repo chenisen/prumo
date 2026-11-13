@@ -217,8 +217,8 @@ class Spine(Fixture):
         head = subprocess.run(("git", "branch", "--show-current"), cwd=self.repo,
                               capture_output=True, text=True).stdout.strip()
         self.assertEqual(head, man["branch"]["name"])
-        self.assertTrue(deliver.marker().exists())
-        self.assertEqual(json.loads(deliver.marker().read_text())["worktree"], str(self.repo))
+        self.assertTrue(deliver.markers())
+        self.assertEqual(json.loads(deliver.markers()[0].read_text())["worktree"], str(self.repo))
 
     def test_a_dirty_tree_is_a_stop(self):
         (self.repo / "src" / "a.py").write_text(SOURCE + "# pending\n", encoding="utf-8")
@@ -233,7 +233,7 @@ class Spine(Fixture):
         before = subprocess.run(("git", "rev-parse", name), cwd=self.repo,
                                 capture_output=True, text=True).stdout.strip()
         git(self.repo, "checkout", "-q", "main")
-        deliver.marker().unlink(missing_ok=True)
+        deliver.unmark()
         with self.assertRaises(common.UsageError) as cm, contextlib.redirect_stdout(io.StringIO()):
             self.prepare(package="pkg2")
         self.assertIn(name, str(cm.exception))
@@ -275,7 +275,7 @@ class Spine(Fixture):
         log = subprocess.run(("git", "log", "--format=%s", "main..HEAD"), cwd=self.repo,
                              capture_output=True, text=True).stdout.strip().splitlines()
         self.assertEqual(log, ["ITEM-1 - prove the refusal above ten"])
-        self.assertFalse(deliver.marker().exists())
+        self.assertFalse(deliver.markers())
         self.assertTrue((self.root / "reports" / "repo-x" / "ITEM-1-deliver").is_dir())
 
     def test_the_record_names_every_run_the_script_made_beside_what_the_writer_declared(self):
@@ -313,7 +313,7 @@ class Spine(Fixture):
                              capture_output=True, text=True).stdout.strip()
         self.assertEqual(log, "")
         self.assertTrue((self.repo / "tests" / "test_guard.py").exists())
-        self.assertFalse(deliver.marker().exists())
+        self.assertFalse(deliver.markers())
 
     def test_a_red_lint_blocks_the_delivery(self):
         package = self.prepare()
@@ -503,7 +503,7 @@ class Spine(Fixture):
         package = self.prepare(shape="epic")
         man = json.loads((package / "deliver-manifest.json").read_text(encoding="utf-8"))
         self.assertFalse(man["deliverable"])
-        self.assertFalse(deliver.marker().exists())
+        self.assertFalse(deliver.markers())
         head = subprocess.run(("git", "branch", "--show-current"), cwd=self.repo,
                               capture_output=True, text=True).stdout.strip()
         self.assertEqual(head, "main", "no branch was cut for an epic")
@@ -736,7 +736,7 @@ class InAWorktree(Fixture):
         self.assertEqual(self.branch_of(self.repo), "main")
         self.assertEqual(self.branch_of(workdir), man["branch"]["name"])
         self.assertTrue((workdir / "runner" / "run_tests.py").exists())
-        self.assertEqual(json.loads(deliver.marker().read_text())["worktree"], str(workdir))
+        self.assertEqual(json.loads(deliver.markers()[0].read_text())["worktree"], str(workdir))
         self.assertIn(".worktrees/", (self.repo / ".git" / "info" / "exclude").read_text())
 
     def test_a_dirty_tree_is_a_stop(self):
@@ -761,7 +761,7 @@ class InAWorktree(Fixture):
         self.assertEqual(subprocess.run(("git", "status", "--porcelain"), cwd=self.repo,
                                         capture_output=True, text=True).stdout, "")
         self.assertFalse((self.repo / "tests" / "test_guard.py").exists())
-        self.assertFalse(deliver.marker().exists())
+        self.assertFalse(deliver.markers())
 
     def test_release_removes_the_worktree_and_keeps_the_branch(self):
         package = self.prepare()

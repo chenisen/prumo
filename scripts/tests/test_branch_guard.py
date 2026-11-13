@@ -187,15 +187,18 @@ class ProtectedBranches(unittest.TestCase):
         self.config(None)
         self.assertEqual(self.merges(), [2, 2, 2])
 
-    def test_a_delegated_merge_is_still_blocked_while_a_review_or_a_delivery_runs(self):
+    def test_a_delegated_merge_is_blocked_while_a_review_runs_and_not_by_a_delivery(self):
+        """A delivery holds its own worktree; merging another proposal touches none."""
         self.config(None, delegated=True)
         (self.root / ".claude").mkdir(exist_ok=True)
-        for name in (".task-review-ativo", ".prumo-deliver-ativo"):
-            with self.subTest(marker=name):
-                marker = self.root / ".claude" / name
-                marker.write_text("{}", encoding="utf-8")
-                self.assertEqual(run_hook(self.root, "Bash", command="gh pr merge 25"), 2)
-                marker.unlink()
+        review = self.root / ".claude" / ".task-review-ativo"
+        review.write_text("{}", encoding="utf-8")
+        self.assertEqual(run_hook(self.root, "Bash", command="gh pr merge 25"), 2)
+        review.unlink()
+        deliveries = self.root / ".claude" / ".prumo-deliver-ativo.d"
+        deliveries.mkdir()
+        (deliveries / "d.json").write_text(json.dumps({"worktree": str(self.repo / ".worktrees" / "x"),
+                                                        "branch": "x", "allowed": []}), encoding="utf-8")
         self.assertEqual(run_hook(self.root, "Bash", command="gh pr merge 25"), 0)
 
     def test_delegation_is_a_boolean_and_a_configuration_that_fails_does_not_delegate(self):

@@ -25,6 +25,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import pathlib
 import re
@@ -207,6 +208,143 @@ def merge_delegated() -> bool:
         return False
 
 
+# --- while deliveries run ---------------------------------------------------------------
+#
+# One marker per delivery (`deliver.py mark`). A write or a git command is judged by the
+# delivery whose worktree it lands in — the most specific one, when a delivery made in
+# place holds the checkout and another one a worktree inside it — and by nobody when it
+# lands outside every worktree: another agent's task, the workspace, a package. Several
+# deliveries in the same repository, each in its own worktree, do not see each other.
+
+MARKER_VALIDITY_SECONDS = 4 * 3600   # a marker leaked by a crash must not wedge anything
+HISTORY_REWRITES = ("rebase", "cherry-pick", "revert", "merge")
+
+
+def _inside(path: str, root: str) -> bool:
+    return path == root or path.startswith(root.rstrip("/") + "/")
+
+
+def live_deliveries(directory: pathlib.Path) -> list[dict]:
+    import time
+    out = []
+    for f in sorted(directory.glob("*.json")):
+        try:
+            if time.time() - f.stat().st_mtime >= MARKER_VALIDITY_SECONDS:
+                continue
+            m = json.loads(f.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if m.get("worktree"):
+            m["worktree"] = os.path.realpath(m["worktree"])
+            out.append(m)
+    return out
+
+
+def owner(path: str, deliveries: list[dict]) -> dict | None:
+    real = os.path.realpath(path)
+    holding = [d for d in deliveries if _inside(real, d["worktree"])]
+    return max(holding, key=lambda d: len(d["worktree"])) if holding else None
+
+
+def judge_write(path: str, deliveries: list[dict]) -> str | None:
+    d = owner(path, deliveries)
+    if d is None:
+        return None
+    rel = os.path.relpath(os.path.realpath(path), d["worktree"])
+    package = pathlib.Path(d.get("package") or "")
+    # A plan whose shape asks a person's approval, and has none that matches it, admits
+    # no write: the gate is a file, and the guard reads it.
+    try:
+        plan = json.loads((package / "plan.json").read_text(encoding="utf-8"))
+        if plan.get("gate"):
+            try:
+                ok = json.loads((package / "approval.json").read_text(encoding="utf-8"))
+            except Exception:
+                ok = {}
+            if ok.get("digest") != plan.get("digest"):
+                return t("guard.delivery_write_before_approval", file=rel)
+    except Exception:
+        pass
+    # The files a write may touch are what the measurement named — written to the
+    # package between the two stages, so the guard reads them from disk and asks nobody.
+    allowed = list(d.get("allowed") or [])
+    try:
+        allowed += list(json.loads((package / "measure.json").read_text(encoding="utf-8")).get("files") or [])
+    except Exception:
+        pass
+    if not allowed:
+        return t("guard.delivery_write_unmeasured", file=rel)
+    if rel not in allowed:
+        return t("guard.delivery_write_unnamed", file=rel)
+    return None
+
+
+def judge_delivery_git(tokens: list[str], cwd: pathlib.Path, deliveries: list[dict]) -> str | None:
+    i, work = 1, cwd
+    while i < len(tokens):
+        tk = tokens[i]
+        if tk == "-C" and i + 1 < len(tokens):
+            work = (work / tokens[i + 1]).resolve()
+            i += 2
+        elif tk == "-c" and i + 1 < len(tokens):
+            i += 2
+        elif tk.startswith("-"):
+            i += 1
+        else:
+            break
+    if i >= len(tokens):
+        return None
+    sub, args = tokens[i], tokens[i + 1:]
+    d = owner(str(work), deliveries)
+    if sub == "push":
+        # a delivery's branch leaves the machine by a person's hand, from wherever
+        current = git_out(work, "symbolic-ref", "--short", "-q", "HEAD")
+        branches = {x.get("branch") for x in deliveries if x.get("branch")}
+        if d is not None or branches & set(push_targets(args, current)):
+            return t("guard.delivery_push")
+        return None
+    if d is None:
+        return None
+    if sub == "add" and any(a in ("-A", "--all", ".") for a in args):
+        return t("guard.delivery_add_all")
+    if sub in HISTORY_REWRITES or (sub == "reset" and "--hard" in args):
+        return t("guard.delivery_rewrite", action=sub)
+    if sub in ("checkout", "switch") and "--" not in args:
+        return t("guard.delivery_checkout")
+    return None
+
+
+def judge_delivery(directory: pathlib.Path, tool: str, path: str, command: str, pwd: str) -> str | None:
+    deliveries = live_deliveries(directory)
+    if not deliveries:
+        return None
+    if any(k in tool for k in ("move_card", "move_issue", "move_ticket", "transition",
+                               "update_status", "set_status")):
+        return t("guard.delivery_move_item")
+    if tool in ("Write", "Edit", "MultiEdit", "NotebookEdit") and path:
+        return judge_write(path, deliveries)
+    if not command:
+        return None
+    cwd = pathlib.Path(pwd)
+    for segment in SEGMENTS.split(command):
+        try:
+            tokens = shlex.split(segment)
+        except ValueError:
+            continue
+        while tokens and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", tokens[0]):
+            tokens = tokens[1:]
+        if not tokens:
+            continue
+        if tokens[0] == "cd" and len(tokens) > 1:
+            cwd = (cwd / os.path.expanduser(tokens[1])).resolve()
+            continue
+        if tokens[0] == "git":
+            reason = judge_delivery_git(tokens, cwd, deliveries)
+            if reason:
+                return reason
+    return None
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -216,7 +354,17 @@ def main() -> int:
                    help="print yes/no: does the command's git run under paths.repositories?")
     p.add_argument("--merge", action="store_true",
                    help="the command merges a proposal: exit 0 only when the installation delegated it")
+    p.add_argument("--delivery", metavar="MARKERS_DIR",
+                   help="judge the call against the deliveries running now; prints the reason")
+    p.add_argument("--tool", default="")
+    p.add_argument("--path", default="")
     a = p.parse_args()
+    if a.delivery:
+        reason = judge_delivery(pathlib.Path(a.delivery), a.tool, a.path, a.command, a.pwd)
+        if reason:
+            print(reason)
+            return 2
+        return 0
     if a.merge:
         if merge_delegated():
             return 0

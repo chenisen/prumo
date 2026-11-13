@@ -61,7 +61,11 @@ JSON only:
   that turns it red is wider than the guard, and the script blocks on that.
 - For `behaviour-change`: the production file and line where the behaviour is wrong or
   missing, the test file that will prove it, and `proving_tests` — the names the writer
-  must use, which the script requires red on the base and green on the branch. Name
+  must use, which the script requires red on the base and green on the branch. Write
+  each one **as the suite prints a test's name**: the test file, then every enclosing
+  group, then the title, joined by the runner's own separator (read it in the profile's
+  `red_name_pattern`, or in a neighbouring test's output). The script matches the name it
+  reads, not a paraphrase of it: `group: title` is not `file > group > title`. Name
   **no** mutation: the writer replaces the very lines a mutant would point at, so its
   `from` text is gone before the script applies it (a fix round's two mutants, on the
   lines the fix rewrote). The red-before-green is the proof; `deliver.py plan` drops any
