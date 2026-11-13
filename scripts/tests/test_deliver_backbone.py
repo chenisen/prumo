@@ -114,6 +114,21 @@ class FileStandsFor(unittest.TestCase):
             self.assertFalse(deliver.file_stands_for(name, self.FILES), name)
 
 
+class SameTest(unittest.TestCase):
+    """The measure names a test from the repository root; the runner prints it from
+    where it ran. The title must match whole; only the file's root may differ."""
+
+    def test_a_path_root_does_not_hide_the_same_test(self):
+        self.assertTrue(deliver.same_test("packages/kit/test/a.test.ts > g > t", "test/a.test.ts > g > t"))
+        self.assertTrue(deliver.same_test("a.test.ts > g > t", "test/a.test.ts > g > t"))
+        self.assertTrue(deliver.same_test("test_guard_refuses", "test_guard_refuses"))
+
+    def test_another_title_or_another_file_is_another_test(self):
+        self.assertFalse(deliver.same_test("packages/kit/test/a.test.ts > g > t", "test/a.test.ts > g > u"))
+        self.assertFalse(deliver.same_test("packages/kit/test/a.test.ts > g > t", "test/b.test.ts > g > t"))
+        self.assertFalse(deliver.same_test("packages/kit/test/a.test.ts > g > t", "pa.test.ts > g > t"))
+
+
 class Fixture(unittest.TestCase):
     """The throwaway repository, its profile and the two commands, shared by the
     spine in the checkout and the spine in a worktree."""
