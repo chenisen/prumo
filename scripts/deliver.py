@@ -957,8 +957,10 @@ def _workflow_name(name: str) -> str:
 
 # --- F6 F8 F9: conclude ------------------------------------------------------------------
 
-def changed_files(workdir: pathlib.Path, base_sha: str) -> tuple[list[str], int, int]:
-    """Every file the tree differs from the base in — tracked or new — with the lines."""
+def changed_files(workdir: pathlib.Path, base_sha: str,
+                  generated: list[str] | None = None) -> tuple[list[str], int, int]:
+    """Every file the tree differs from the base in — tracked or new — with the lines.
+    A file the profile declares generated is listed, and its lines are not counted."""
     untracked = [l for l in git(workdir, "ls-files", "--others", "--exclude-standard").splitlines() if l]
     for f in untracked:
         git(workdir, "add", "-N", "--", f)
@@ -969,6 +971,8 @@ def changed_files(workdir: pathlib.Path, base_sha: str) -> tuple[list[str], int,
             continue
         a, r, f = parts
         files.append(f)
+        if casa_algum(f, list(generated or [])):
+            continue
         added += int(a) if a.isdigit() else 0
         removed += int(r) if r.isdigit() else 0
     return files, added, removed
@@ -996,12 +1000,14 @@ def conclude(args) -> int:
     premises = measure.get("premises") or []
     allowed = list(measure.get("files") or []) + list(written.get("files") or [])
     kind = man["item"]["kind"]
+    generated = list(block.get("generated") or [])
     # Documentation the change makes stale travels with it, where the profile says
     # where documentation lives — except in a coverage gap, which only adds tests.
     roots = (block["test_roots"] if kind == "coverage-gap"
-             else block["source_roots"] + block["test_roots"] + list(block.get("doc_roots") or []))
+             else block["source_roots"] + block["test_roots"] + list(block.get("doc_roots") or [])
+             ) + generated
 
-    files, added, removed = changed_files(workdir, man["base"]["sha"])
+    files, added, removed = changed_files(workdir, man["base"]["sha"], generated)
     # What was written is what the tree holds, not what the writer remembered. A second
     # attempt on the same tree declared only the files it touched in that pass (three
     # tasks of the first story, 2026-11-12), and the record and the sceptic read a
@@ -1028,7 +1034,8 @@ def conclude(args) -> int:
                               "max_lines": int(budget.get("max_lines", 0))}}
     diff = {"files": files, "added": added, "removed": removed,
             "outside_scope": scope_guard(files, allowed, roots),
-            "within_budget": len(files) <= budget.get("max_files", 10 ** 9)
+            "within_budget": len([f for f in files if not casa_algum(f, generated)])
+                             <= budget.get("max_files", 10 ** 9)
                              and added + removed <= budget.get("max_lines", 10 ** 9)}
 
     check = (profile.get("checks") or {}).get("suite") or {}

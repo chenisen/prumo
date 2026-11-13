@@ -241,6 +241,21 @@ class Spine(Fixture):
                                capture_output=True, text=True).stdout.strip()
         self.assertEqual(after, before)
 
+    def test_a_generated_file_is_in_scope_and_outside_the_budget(self):
+        import yaml
+        path = self.root / "profiles" / "repo-x.yml"
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        data["delivery"]["generated"] = ["*.lock"]
+        path.write_text(yaml.safe_dump(data), encoding="utf-8")
+        package = self.prepare()
+        (self.repo / "deps.lock").write_text("pin\n" * 120, encoding="utf-8")
+        measure = dict(MEASURE, files=["tests/test_guard.py", "deps.lock"])
+        code, rec = self.conclude(package, PROVING_TEST, measure_data=measure)
+        self.assertEqual(code, 0, rec)
+        self.assertIn("deps.lock", rec["diff"]["files"])
+        self.assertEqual(rec["diff"]["outside_scope"], [])
+        self.assertTrue(rec["diff"]["within_budget"])
+
     # ---- see also: the shape tests above
 
     def test_a_proving_test_is_delivered_committed_and_handed_to_review(self):
