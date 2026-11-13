@@ -80,3 +80,24 @@ class TestReadingTheSuite(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestASuiteRunsAsLongAsItsProfileSays(unittest.TestCase):
+    """A front-end suite of seven thousand tests took twenty minutes and was cut at
+    fifteen on the base itself: the repository declares how long its check runs."""
+
+    def test_a_declared_limit_is_the_check_s(self):
+        from evidence import time_limit
+        self.assertEqual(time_limit({"command": "x", "timeout_seconds": 2400}), 2400)
+
+    def test_nothing_declared_keeps_the_method_s_default(self):
+        from evidence import time_limit, TIME_LIMIT
+        for check in (None, {}, {"timeout_seconds": None}, {"timeout_seconds": 0},
+                      {"timeout_seconds": "2400"}):
+            self.assertEqual(time_limit(check), TIME_LIMIT)
+
+    def test_a_command_past_its_limit_did_not_run(self):
+        from evidence import run_command
+        r = run_command("sleep 2", pathlib.Path("."), timeout=1)
+        self.assertFalse(r["ran"])
+        self.assertIn("1", r["reason"])

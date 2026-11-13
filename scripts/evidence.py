@@ -85,22 +85,32 @@ def resolve(command: str, profile: dict, workdir: pathlib.Path) -> str:
     return command.replace(WORKDIR, mapped_workdir(profile, workdir))
 
 
-def run_command(command: str, repo_dir: pathlib.Path, limit: int | None = 20000) -> dict:
+def time_limit(check: dict | None) -> int:
+    """How long a check may run: its own `timeout_seconds` in the profile, else
+    TIME_LIMIT. A front-end suite of seven thousand tests in a throwaway container takes
+    twenty minutes and was cut at fifteen, every time, on the base itself (2026-11-13);
+    the repository knows how long its suite takes, the method does not."""
+    declared = (check or {}).get("timeout_seconds")
+    return int(declared) if isinstance(declared, int) and declared > 0 else TIME_LIMIT
+
+
+def run_command(command: str, repo_dir: pathlib.Path, limit: int | None = 20000,
+                timeout: int = TIME_LIMIT) -> dict:
     """`limit` keeps the LAST bytes of the output: enough for a review to read the
     summary, and a cap on what a package carries. A delivery passes `None` — it reads
     the reds by NAME, and a runner prints the names before the traces that fill the
     tail, so a cut tail is a list of names cut to nothing. Measured on 2026-11-11: a
     mutation that turned 39 tests red came out `green` because every name sat above
-    the cut."""
+    the cut. `timeout` is the check's `time_limit()`."""
     try:
         r = subprocess.run(shlex.split(command), cwd=repo_dir, capture_output=True,
-                           text=True, timeout=TIME_LIMIT)
+                           text=True, timeout=timeout)
         output = (r.stdout or "") + (r.stderr or "")
         kept = output if limit is None else output[-limit:]
         return {"ran": True, "exit_code": r.returncode, "output": kept,
                 "truncated": len(kept) < len(output)}
     except subprocess.TimeoutExpired:
-        return {"ran": False, "reason": t("evidence.timed_out", seconds=TIME_LIMIT)}
+        return {"ran": False, "reason": t("evidence.timed_out", seconds=timeout)}
     except FileNotFoundError as e:
         return {"ran": False, "reason": t("evidence.executable_missing", error=e)}
     except Exception as e:                                   # noqa: BLE001
@@ -221,7 +231,8 @@ def main() -> int:
         return 0
 
     repo_dir = dir_repositories() / man["repo"]
-    result = run_command(resolve(command, profile, repo_dir), repo_dir)
+    result = run_command(resolve(command, profile, repo_dir), repo_dir,
+                         timeout=time_limit(check))
     (package / f"run-{args.role}.txt").write_text(
         result.get("output", result.get("reason", "")), encoding="utf-8")
     if args.role == "suite":

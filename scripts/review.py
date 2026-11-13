@@ -34,7 +34,7 @@ from common import (MissingConfiguration, dir_repositories, InvalidConfiguration
                    today, read_json, slug, cfg, capabilities_after_preflight, hint_config,
                    report_dir_name)
 from i18n import t
-from evidence import red_names, progress, authorise, resolve, run_command
+from evidence import red_names, progress, authorise, resolve, run_command, time_limit
 
 ROOT = pathlib.Path(__file__).resolve().parent
 # Where the package is assembled, when `--package` does not say. It is `paths.packages`
@@ -195,7 +195,7 @@ def run_secrets_check(package: pathlib.Path, profile: dict, repo_dir: pathlib.Pa
     command = (resolve(check["command"], profile, repo_dir)
                .replace("{base}", man.get("merge_base") or man["base"]["sha"])
                .replace("{head}", man["head_sha"]))
-    result = run_command(command, repo_dir)
+    result = run_command(command, repo_dir, timeout=time_limit(check))
     output = result.get("output", result.get("reason", ""))
     (package / SECRETS_RUN).write_text(output, encoding="utf-8")
     if not result.get("ran"):

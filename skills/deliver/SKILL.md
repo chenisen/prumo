@@ -127,7 +127,8 @@ left as it is, for a person to read.
 **Who executes is the script**, through the profile's allowlist (`checks.suite.command`,
 `delivery.mutation.command`, `delivery.worktree_setup`). An agent runs nothing. A wrapper
 can swallow an exit code, so the result is read from the output (`failure_pattern`,
-`red_name_pattern`).
+`red_name_pattern`). A check runs for 900 s unless the profile declares its own
+`timeout_seconds` — the repository knows how long its suite takes, the method does not.
 
 **Where it runs is the profile's.** With `delivery.worktree: true` the delivery lives in
 `.worktrees/<branch>` inside the repository and the person's checkout is never touched;

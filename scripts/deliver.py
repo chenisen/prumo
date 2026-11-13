@@ -224,12 +224,13 @@ def run_suite(profile: dict, cwd: pathlib.Path, package: pathlib.Path, label: st
     """The suite, through the profile's allowlist, output kept beside the package. The
     template is what the allowlist judges; `{workdir}` is filled in after, with `cwd`
     as the executor sees it."""
-    from evidence import authorise, resolve, run_command
+    from evidence import authorise, resolve, run_command, time_limit
     check = (profile.get("checks") or {}).get("suite") or {}
     ok, reason = authorise(check.get("command") or "", profile)
     if not ok:
         return {"ran": False, "reason": reason, "output": ""}
-    result = run_command(resolve(check["command"], profile, cwd), cwd, limit=None)
+    result = run_command(resolve(check["command"], profile, cwd), cwd, limit=None,
+                         timeout=time_limit(check))
     (package / f"run-suite-{label}.txt").write_text(
         result.get("output", result.get("reason", "")), encoding="utf-8")
     return result
@@ -238,14 +239,15 @@ def run_suite(profile: dict, cwd: pathlib.Path, package: pathlib.Path, label: st
 def run_lint(profile: dict, cwd: pathlib.Path, package: pathlib.Path) -> dict:
     """The profile's lint check, read like the suite: the output first, the exit code
     second. No command declared is `not_run`, said in words — never green."""
-    from evidence import authorise, resolve, run_command
+    from evidence import authorise, resolve, run_command, time_limit
     check = (profile.get("checks") or {}).get("lint") or {}
     if not check.get("command"):
         return {"state": "not_run", "reason": t("evidence.not_in_allowlist"), "run": None}
     ok, reason = authorise(check["command"], profile)
     if not ok:
         return {"state": "not_run", "reason": reason, "run": None}
-    r = run_command(resolve(check["command"], profile, cwd), cwd, limit=None)
+    r = run_command(resolve(check["command"], profile, cwd), cwd, limit=None,
+                    timeout=time_limit(check))
     (package / "run-lint.txt").write_text(r.get("output", r.get("reason", "")), encoding="utf-8")
     if not r.get("ran"):
         return {"state": "not_run", "reason": r.get("reason", ""), "run": None}
