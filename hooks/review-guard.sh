@@ -7,17 +7,21 @@
 #
 # SCOPE, and this is the delicate point of this guard:
 #
-#   * **merging a proposal is blocked ALWAYS.** No skill of this workspace should merge.
+#   * **merging a proposal is blocked**, unless the installation delegated it
+#     (`forge.delegated_merge: true`) — and then still blocked while a review runs. No skill of this workspace merges on its own.
 #   * **landing on a protected branch is blocked ALWAYS** — push, commit, rewrite — in any
 #     repository under `paths.repositories`; `scripts/branch_guard.py` judges it, with the
 #     list from `forge.protected_branches` (`homolog`, `main`, `master`, `prod`, `develop`
 #     by default). The prumo's own checkout is not under that root, and is not guarded.
 #   * **push, commit and moving the item are blocked ONLY during a review**, marked by
 #     `.claude/.task-review-ativo`, which `review.py` creates and removes.
-#   * **during a delivery** — `.claude/.prumo-deliver-ativo`, which `deliver.py` creates
-#     and removes — push, moving the item, `git add -A`, rewriting the base and any write
-#     outside the worktree or outside the files the measurement named are blocked. A commit
-#     WITH a pathspec passes: one commit per step is the rule, and this is how it is kept.
+#   * **during a delivery** — one marker per delivery in `.claude/.prumo-deliver-ativo.d/`,
+#     which `deliver.py` creates and removes — inside THAT delivery's worktree: a write
+#     outside the files its measurement named (or before its plan was approved), `git
+#     add -A`, rewriting history, checkout; pushing its worktree or its branch from
+#     anywhere; and moving the item. Outside every delivery's worktree nothing of this
+#     applies: another agent's task, the workspace, a package. A commit WITH a pathspec
+#     passes: one commit per step is the rule, and this is how it is kept.
 #
 # Without that scope the guard would break every skill that legitimately pushes, commits
 # or moves an item in this workspace. A guarantee that runs over the rest of the
@@ -31,7 +35,7 @@ set -uo pipefail
 # anything — failing open here is correct, because blocking a merge does not depend on
 # the marker.
 MARKER="${CLAUDE_PROJECT_DIR:-$PWD}/.claude/.task-review-ativo"
-DELIVER_MARKER="${CLAUDE_PROJECT_DIR:-$PWD}/.claude/.prumo-deliver-ativo"
+DELIVER_MARKERS="${CLAUDE_PROJECT_DIR:-$PWD}/.claude/.prumo-deliver-ativo.d"
 VALIDITY_SECONDS=14400   # 4h: a marker leaked by a crash must not wedge the workspace
 
 input=$(cat)
@@ -54,7 +58,7 @@ path=$(read_field path)
 fresh() {
   [ -f "$1" ] || return 1
   local age
-  age=$(( $(date +%s) - $(stat -c %Y "$1" 2>/dev/null || echo 0) ))
+  age=$(( $(date +%s) - $(stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0) ))  # GNU, then BSD
   [ "$age" -lt "$VALIDITY_SECONDS" ]
 }
 
@@ -66,10 +70,17 @@ block() {
 
 # ---------- always, review running or not ----------
 if [ -n "$cmd" ]; then
-  printf '%s' "$cmd" | grep -Eqi '(^|[[:space:]])(glab|gh)[[:space:]]+(mr|pr)[[:space:]]+merge' \
-    && block "merging a proposal from the CLI"
-  printf '%s' "$cmd" | grep -Eqi 'merge_requests?/[0-9]+/merge|/pulls?/[0-9]+/merge' \
-    && block "merging a proposal through the API"
+  if printf '%s' "$cmd" | grep -Eqi '(^|[[:space:]])(glab|gh)[[:space:]]+(mr|pr)[[:space:]]+merge|merge_requests?/[0-9]+/merge|/pulls?/[0-9]+/merge'; then
+    # Never while a review runs, delegated or not. A delivery does not stop it: merging
+    # another proposal touches no delivery's worktree.
+    fresh "$MARKER" && block "merging a proposal while a review runs"
+    # Otherwise only when the installation delegated it. The script answers, from the
+    # project's directory so that a `prumo.yml` found by walking up is found; anything
+    # but a clean 0 — no configuration, a crash — blocks.
+    SCRIPTS="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}/scripts"
+    why=$(cd "${CLAUDE_PROJECT_DIR:-$PWD}" 2>/dev/null && python3 "$SCRIPTS/branch_guard.py" --pwd "$PWD" --command "$cmd" --merge 2>/dev/null)
+    [ $? -eq 0 ] || block "${why:-merging a proposal}"
+  fi
   # Nothing lands directly on a protected branch — push, commit or rewrite — in any
   # repository the prumo works on. The list and the scope come from prumo.yml; the
   # judgement is a script, so it is tested like one.
@@ -107,70 +118,15 @@ if fresh "$MARKER"; then
   fi
 fi
 
-# ---------- only while a delivery is in progress ----------
-if fresh "$DELIVER_MARKER"; then
-  moves_the_item && block "moving the item during a delivery"
-  if [ -n "$cmd" ]; then
-    printf '%s' "$cmd" | grep -Eq '(^|[[:space:]])git[[:space:]]+push([[:space:]]|$)' \
-      && block "git push during a delivery — handing the branch over is a person's act"
-    printf '%s' "$cmd" | grep -Eq '(^|[[:space:]])git[[:space:]]+add[[:space:]]+(-A|--all|\.)([[:space:]]|$)' \
-      && block "git add without a pathspec — name the files"
-    printf '%s' "$cmd" | grep -Eq '(^|[[:space:]])git[[:space:]]+(reset[[:space:]]+--hard|rebase|cherry-pick|revert|merge)' \
-      && block "a delivery does not rewrite history"
-    printf '%s' "$cmd" | grep -Eq '(^|[[:space:]])git[[:space:]]+checkout([[:space:]]|$)' \
-      && ! printf '%s' "$cmd" | grep -Eq 'git[[:space:]]+checkout[[:space:]]+--[[:space:]]' \
-      && block "a delivery stays on its own branch"
-  fi
-  case "$tool" in
-    Write|Edit|MultiEdit|NotebookEdit)
-      verdict=$(python3 - "$DELIVER_MARKER" "$path" <<'PY'
-import json, os, sys
-marker, target = sys.argv[1], sys.argv[2]
-try:
-    m = json.load(open(marker, encoding="utf-8"))
-except Exception:
-    sys.exit(0)
-worktree = os.path.realpath(m.get("worktree") or "")
-allowed = list(m.get("allowed") or [])
-# The files a write may touch are what the measurement named — written to the package
-# by the skill between the two stages of the workflow, so the guard reads them from
-# disk and asks nobody.
-try:
-    measure = json.load(open(os.path.join(m.get("package") or "", "measure.json"), encoding="utf-8"))
-    allowed += list(measure.get("files") or [])
-except Exception:
-    pass
-real = os.path.realpath(target or "")
-if not worktree or not real.startswith(worktree.rstrip("/") + "/"):
-    print("outside the worktree " + worktree); sys.exit(0)
-rel = os.path.relpath(real, worktree)
-# A plan whose shape asks a person's approval, and has none that matches it, admits no
-# write: the gate is a file, and the guard reads it.
-try:
-    pkg = m.get("package") or ""
-    plan = json.load(open(os.path.join(pkg, "plan.json"), encoding="utf-8"))
-    if plan.get("gate"):
-        try:
-            ok = json.load(open(os.path.join(pkg, "approval.json"), encoding="utf-8"))
-        except Exception:
-            ok = {}
-        if ok.get("digest") != plan.get("digest"):
-            print("before a person approved the plan: " + rel); sys.exit(0)
-except FileNotFoundError:
-    pass
-except Exception:
-    pass
-# Before the measurement named anything, nothing may be written: the surveyor reads,
-# and a write with no named file to land in is a write nobody measured.
-if not allowed:
-    print("before any file was named by the measurement: " + rel); sys.exit(0)
-if rel not in allowed:
-    print("outside the named files: " + rel); sys.exit(0)
-PY
-)
-      [ -n "$verdict" ] && block "a write $verdict"
-      ;;
-  esac
+# ---------- while deliveries run ----------
+# One marker per delivery. The judgement is a script: a write, or a git command, is
+# judged by the delivery whose worktree it lands in, and by nobody outside every
+# worktree — several agents deliver several items in one repository at once.
+if ls "$DELIVER_MARKERS"/*.json >/dev/null 2>&1; then
+  SCRIPTS="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}/scripts"
+  why=$(python3 "$SCRIPTS/branch_guard.py" --delivery="$DELIVER_MARKERS" --tool="$tool" \
+        --path="$path" --command="$cmd" --pwd="$PWD" 2>/dev/null)
+  [ -n "$why" ] && block "$why"
 fi
 
 exit 0

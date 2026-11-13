@@ -142,6 +142,11 @@ forge:
   # for the default: homolog, main, master, prod, develop.
   # protected_branches: [homolog, main, master, prod, develop]
 
+  # Merging a proposal is a person's act, and the hook blocks it. The person who owns
+  # THIS installation may hand it to the agent that conducts it — never while a review
+  # or a delivery runs, and the method itself still approves at most. Off by default.
+  # delegated_merge: true
+
   # How the HARNESS reaches this forge's API: mcp | token | none.
   #   mcp    a connector the harness already carries — it reads the proposal's
   #          description and its pipeline, and publishing still asks for a yes

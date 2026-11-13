@@ -322,6 +322,15 @@ preflight:
 guard:
   push_protected: 'pushing to `{branch}` in {repo} — nothing of the prumo lands directly on a protected branch; hand over a proposal'
   write_protected: '`git {action}` on `{branch}` in {repo} — nothing of the prumo writes directly on a protected branch'
+  merge_not_delegated: 'merging a proposal is a person''s act — unless the owner of this installation delegated it with `forge.delegated_merge: true` in prumo.yml'
+  delivery_push: 'git push of a running delivery — its worktree or its branch; handing the branch over is a person''s act, after the delivery concludes'
+  delivery_add_all: 'git add without a pathspec inside a delivery''s worktree — name the files'
+  delivery_rewrite: '`git {action}` inside a delivery''s worktree — a delivery does not rewrite history'
+  delivery_checkout: 'a delivery stays on its own branch — no checkout inside its worktree'
+  delivery_move_item: 'moving the item while a delivery runs'
+  delivery_write_before_approval: 'a write before a person approved the plan: {file}'
+  delivery_write_unmeasured: 'a write before the measurement named any file: {file}'
+  delivery_write_unnamed: 'a write inside a delivery''s worktree, outside the files its measurement named: {file}'
 findings:
   colliding_ids: 'findings.json carries {n} id(s) given to more than one finding: {ids}. An id is what the verification, the judge and the report key by, so two findings sharing one means findings were LOST — overwritten by a copy of each other — and the result is shaped exactly like a correct one.'
   colliding_remedy: 'The id belongs to the METHOD, not to the reviewer: each agent numbers from `F1` inside its own context and cannot know what the others chose. The workflow stamps a unique id per reviewer; a collision here means it did not run, or ran an older version. Re-run the workflow rather than renumbering by hand.'

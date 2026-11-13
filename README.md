@@ -113,8 +113,8 @@ prumo/
 │   ├── task-review.js           the reviewer fan-out, the verifier, the manual plan
 │   └── deliver.js               measure; then write and refute — two stages, one file
 ├── hooks/
-│   ├── review-guard.sh          blocks merge and landing on a protected branch always; push/commit while a review runs;
-│                                push, `add -A`, the base, and writes outside the named files while a delivery runs
+│   ├── review-guard.sh          blocks merge (unless delegated) and landing on a protected branch always; push/commit while a review runs;
+│                                inside a running delivery's worktree: push, `add -A`, the base, writes outside its named files
 │   └── hooks.json               registers the hook — you edit no settings.json
 │
 ├── messages/{en,pt-BR}.yml      every user-facing string
@@ -503,8 +503,13 @@ against it, returning a record that states the fact. Measured on the second real
 without it, five criteria the delivery had already proven came back as "verify by hand".
 
 **A delivery is written beside the checkout, never in it.** With `delivery.worktree: true`
-the branch is cut in `.worktrees/<branch>` inside the repository, and the person's
-checkout keeps its branch and its pending work. What git does not hold — a dependency
+— what `derive_profile.py` drafts, and what the author turns off only by saying so — the
+branch is cut in `.worktrees/<branch>` inside the repository, and the person's checkout
+keeps its branch and its pending work. Each delivery has its own marker
+(`.claude/.prumo-deliver-ativo.d/<package>.json`), and the hook judges a write or a git
+command by the delivery whose worktree it lands in: several agents deliver several items
+in one repository at once, and outside every worktree — the checkout, the workspace, a
+package — none of a delivery's rules applies. What git does not hold — a dependency
 tree, a cache directory a framework wants writable — arrives by the profile's
 `worktree_setup`, one plain command per line, run by the script and never composed. A
 suite that runs somewhere else — a container, a runner — reaches the worktree through
@@ -540,7 +545,9 @@ from the packages by `run.py next` and pasted, never composed.
 
 Across every capability:
 
-- **Merge.** The hook blocks it, always.
+- **Merge.** The hook blocks it — unless the person who owns the installation delegated
+  it with `forge.delegated_merge: true` in `prumo.yml`, and even then never while a review
+  or a delivery runs. The method itself still approves at most.
 - **Move an item between columns.**
 - **Push.** A branch leaves the machine by a person's hand.
 - **Publish without authorisation.** The item comment, the proposal comment and the

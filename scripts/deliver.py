@@ -171,13 +171,23 @@ def deliver_judge(record: dict, profile: dict, reference: str | None = None) -> 
 # --- the marker ------------------------------------------------------------------------
 #
 # Same origin as `review.marker()`: `CLAUDE_PROJECT_DIR`, else where `prumo.yml` sits,
-# never the shell's directory. The hook reads the same file, and it is JSON on purpose:
-# the worktree and the files the writer may touch travel in it, so the hook refuses a
-# write outside them without asking the model whether it meant to.
+# never the shell's directory. ONE marker PER DELIVERY, in one directory the hook reads:
+# several agents deliver several items in the same repository at once, each in its own
+# worktree, and the hook judges a write or a git command by the delivery whose worktree
+# it lands in — never the whole workspace by whichever delivery started last. JSON on
+# purpose: the worktree, the branch and the files the writer may touch travel in it.
 
-def marker() -> pathlib.Path:
+MARKERS_DIR = ".prumo-deliver-ativo.d"
+
+
+def marker(package: pathlib.Path) -> pathlib.Path:
     base = os.environ.get("CLAUDE_PROJECT_DIR") or _installation_root() or os.getcwd()
-    return pathlib.Path(base) / ".claude" / ".prumo-deliver-ativo"
+    return pathlib.Path(base) / ".claude" / MARKERS_DIR / f"{pathlib.Path(package).name}.json"
+
+
+def markers() -> list[pathlib.Path]:
+    """The deliveries running now in this workspace."""
+    return sorted(marker(pathlib.Path("x")).parent.glob("*.json"))
 
 
 def _installation_root() -> str | None:
@@ -188,16 +198,21 @@ def _installation_root() -> str | None:
     return str(source.parent) if source else None
 
 
-def mark(package: pathlib.Path, worktree: pathlib.Path, allowed: list[str]) -> None:
-    target = marker()
+def mark(package: pathlib.Path, worktree: pathlib.Path, allowed: list[str],
+         branch: str | None = None) -> None:
+    target = marker(package)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps({"package": str(package), "worktree": str(worktree),
-                                  "allowed": allowed, "started_at": today()}) + "\n",
+                                  "branch": branch, "allowed": allowed,
+                                  "started_at": today()}) + "\n",
                       encoding="utf-8")
 
 
-def unmark() -> None:
-    marker().unlink(missing_ok=True)
+def unmark(package: pathlib.Path | None = None) -> None:
+    """This delivery's marker; with no package, every one — the `release` of a stuck
+    workspace, which a person runs knowing what else is running."""
+    for m in ([marker(package)] if package else markers()):
+        m.unlink(missing_ok=True)
 
 
 # --- git, suite, mutation ----------------------------------------------------------------
@@ -653,7 +668,7 @@ def prepare(args) -> int:
     }
     write_json(package / "deliver-manifest.json", manifest)
 
-    mark(package, workdir, [])
+    mark(package, workdir, [], branch=name)
     write_json(package / "workflow-args.json", {
         "package": str(package), "repo": args.repo, "item": manifest["item"],
         "shape": shape, "plan_depth": rules["plan"],
@@ -1196,7 +1211,7 @@ def conclude(args) -> int:
     destination = dir_reports() / man["repo"] / f"{man['item']['id']}-deliver"
     destination.mkdir(parents=True, exist_ok=True)
     shutil.copy2(package / "report.md", destination / f"deliver-{today()}.md")
-    unmark()
+    unmark(package)
     print(report)
     print(t("review.report_at", path=destination / f"deliver-{today()}.md"))
     if man.get("in_worktree"):
@@ -1354,17 +1369,19 @@ def main() -> int:
             return story_status(args)
         if args.command == "approve":
             return approve(args)
-        if args.package:
-            release_worktree(pathlib.Path(args.package))
-        unmark()
-        print(t("review.marker_removed", path=marker()))
+        package = pathlib.Path(args.package) if args.package else None
+        if package:
+            release_worktree(package)
+        unmark(package)
+        print(t("review.marker_removed", path=marker(package) if package else marker(pathlib.Path("x")).parent))
         return 0
     except (MissingConfiguration, InvalidConfiguration) as e:
         print(t("config.impediment", reason=e))
         return 2
     except UsageError as e:
         print(t("review.stop", reason=e))
-        unmark()
+        if getattr(args, "package", None):
+            unmark(pathlib.Path(args.package))
         return 1
 
 

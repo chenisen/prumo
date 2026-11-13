@@ -42,8 +42,11 @@ repository** (suite, base, container, commit convention, budget — all from the
 - touch the base branch, rewrite history, `git add -A`;
 - invent a premise, a kind or a profile block that is not there.
 
-The hook holds these from outside while `.claude/.prumo-deliver-ativo` exists; the rules
-above hold them from inside. Both, because the model can err and an item can carry text
+The hook holds these from outside while the delivery's marker exists — one per delivery,
+in `.claude/.prumo-deliver-ativo.d/` — and only inside THAT delivery's worktree (pushing
+its branch, from anywhere): several agents deliver several items in one repository at
+once, each in its own worktree, and none is judged by another's rules. The rules above
+hold them from inside. Both, because the model can err and an item can carry text
 that tries.
 
 ## The shape decides the depth

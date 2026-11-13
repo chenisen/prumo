@@ -221,6 +221,11 @@ class Forge:
     # commit, not a rewrite. A delivery is cut FROM one of them and handed over as a
     # proposal; landing is a person's act, through the forge.
     protected_branches: tuple[str, ...] = ()
+    # Whether the person who owns THIS installation handed merging to the agent that
+    # conducts it. Off by default: merging is a person's act. On, the hook lets a merge
+    # through — never while a review or a delivery runs. An installation fact, never
+    # the method's: the prumo itself still approves at most.
+    delegated_merge: bool = False
 
     def proposal_ref(self, n) -> str:
         return self._ref.format(n=n)
@@ -551,12 +556,19 @@ def build(data: dict, source: pathlib.Path | None = None) -> Config:
             "`forge.protected_branches` is a list of branch names — the ones nothing "
             "lands on directly. Leave it out for the default: "
             + ", ".join(DEFAULT_PROTECTED_BRANCHES))
+    delegated_merge = pf.get("delegated_merge", False)
+    if not isinstance(delegated_merge, bool):
+        raise InvalidConfiguration(
+            "`forge.delegated_merge` is true or false — whether the person who owns this "
+            "installation lets the agent merge a proposal. Leave it out for false: "
+            "merging stays a person's act.")
     forge = Forge(type=forge_type, proposal=pf["proposal"],
                   proposal_plural=pf["proposal_plural"], article=pf["article"],
                   prefix=pf["prefix"], _ref=pf["ref"], tokens=tuple(tokens),
                   cli=pf["cli"] or "", approve=bool(pf["approve"]),
                   connection=connection,
-                  protected_branches=tuple(b.strip() for b in protected))
+                  protected_branches=tuple(b.strip() for b in protected),
+                  delegated_merge=delegated_merge)
 
     # --- tracker
     r = data.get("tracker") or {}
