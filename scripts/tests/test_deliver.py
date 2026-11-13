@@ -204,6 +204,48 @@ class TestStops(unittest.TestCase):
         self.assertEqual(out["state"], "blocked")
         self.assertEqual(out["reason"], t("deliver.blocked.no_red_on_base"))
 
+    BEHAVIOUR = {"profile": "repo-x", "delivery": {"kinds": ["behaviour-change"],
+                                                   "budget": {"max_files": 4, "max_lines": 120}}}
+
+    def behaviour(self, red_on_base, **override):
+        proof = dict(record()["proof"], red_on_base=red_on_base,
+                     green_on_branch={"test": "t_x", "result": "green"}, mutations=[])
+        return record(item={"id": "ITEM-1", "kind": "behaviour-change", "source": "tracker"}, proof=proof, **override)
+
+    def test_a_test_that_is_green_without_the_change_blocks(self):
+        out = judge(self.behaviour({"test": "t_x", "result": "green"}), profile=self.BEHAVIOUR)
+        self.assertEqual((out["state"], out["reason"]),
+                         ("blocked", t("deliver.blocked.test_not_red_on_base", test="t_x")))
+
+    def test_a_red_on_the_base_read_under_another_name_does_not_block(self):
+        """Something went red on the base and one named test was not read among the reds:
+        a name is the runner's spelling. The record says which; the delivery stands."""
+        rec = self.behaviour({"test": "t_x", "result": "partial", "missing": ["t_x"]})
+        jsonschema.validate(rec, SCHEMA)
+        self.assertEqual(judge(rec, profile=self.BEHAVIOUR)["state"], "delivered")
+
+    def test_a_writer_that_stopped_is_a_person_s_call(self):
+        out = judge(record(writer_blocked="src/a.py:41 already refuses"))
+        self.assertEqual((out["state"], out["owner"]), ("blocked", "person"))
+        self.assertIn("src/a.py:41 already refuses", out["reason"])
+
+    def test_a_story_with_a_task_not_delivered_blocks_naming_it(self):
+        out = judge(record(tasks={"T1": "delivered", "T2": "pending", "T3": "pending"}))
+        self.assertEqual((out["state"], out["reason"]),
+                         ("blocked", t("deliver.blocked.tasks_pending", tasks="T2, T3")))
+
+    def test_a_red_branch_whose_base_could_not_be_measured_blocks_and_says_why(self):
+        base = dict(record()["baseline"], new_reds=None, base="not_run: timed out after 900s")
+        out = judge(record(baseline=base))
+        self.assertEqual((out["state"], out["reason"]),
+                         ("blocked", t("deliver.blocked.base_not_measured", reason="timed out after 900s")))
+
+    def test_the_size_and_the_scope_of_the_suite_are_in_the_record(self):
+        rec = record(size={"size": "small", "reason": "2 file(s)"},
+                     baseline=dict(record()["baseline"], scope="focused", base="not_needed"))
+        jsonschema.validate(rec, SCHEMA)
+        self.assertEqual(judge(rec)["state"], "delivered")
+
     def test_a_behaviour_change_red_on_base_and_green_on_branch_is_delivered(self):
         proof = dict(record()["proof"], red_on_base={"test": "t_x", "result": "red"},
                      green_on_branch={"test": "t_x", "result": "green"}, mutations=[])
@@ -355,16 +397,18 @@ class TestTheBranchName(unittest.TestCase):
 
 class TestATaskSCriteriaAreNotPremises(unittest.TestCase):
     """The first story task measured (2026-11-12) was blocked before a line was written:
-    the surveyor read the task's target state as a failing central premise and named a
-    mutation on the line the writer was about to replace."""
+    the surveyor read the task's target state as a failing central premise. A task is no
+    longer surveyed — the person approved the design, and the writer reads the code it
+    changes — and the brief still says what its bullets are."""
 
-    def test_the_task_brief_says_so_to_the_surveyor(self):
+    def test_the_task_brief_says_so_to_its_writer(self):
         workflow = (PRUMO_ROOT / "workflows" / "deliver.js").read_text(encoding="utf-8")
-        self.assertIn("The task's bullets are its CRITERIA", workflow)
+        self.assertIn("The task\\'s bullets are its CRITERIA", workflow)
         self.assertIn("name NO mutation", workflow)
-        agent = (PRUMO_ROOT / "agents" / "premise-surveyor.md").read_text(encoding="utf-8")
-        self.assertIn("## A task of a story", agent)
-        self.assertIn("never a failing premise", agent)
+        self.assertIn("return `blocked` with the address", workflow)
+        writer = (PRUMO_ROOT / "agents" / "change-writer.md").read_text(encoding="utf-8")
+        self.assertIn("## A task of a story", writer)
+        self.assertIn("A premise the code\ndenies is a person's call", writer)
 
 
 class TestABlockedAttemptIsWrittenAgainWithItsReason(unittest.TestCase):
@@ -406,17 +450,17 @@ class TheSecondReadingOfTheFirstStory(unittest.TestCase):
         self.assertIn("This is a SECOND attempt on the same tree", self.WORKFLOW)
         self.assertIn("**A second attempt**", self.WRITER)
 
-    def test_the_writer_and_the_sceptic_read_the_story_s_earlier_tasks(self):
-        self.assertIn("input.story_context", self.WORKFLOW)
+    def test_the_writer_reads_the_story_s_earlier_tasks(self):
+        """The writer of each task reads the tasks before it; the sceptic no longer reads
+        a story task by task — the review reads the whole branch, once."""
         self.assertIn("EARLIER TASKS OF THIS STORY", self.WORKFLOW)
-        self.assertIn("Question 5 applies", self.WORKFLOW)
-        self.assertIn("5. **Does it break an earlier task of the same story?**", self.SCEPTIC)
-        self.assertIn("`does_not_prove`, with that criterion", self.SCEPTIC)
+        self.assertIn("earlier: [...earlier]", self.WORKFLOW)
         self.assertIn("undoes an earlier task of the same story", self.WRITER)
+        self.assertIn("nor about each task of a story", self.SCEPTIC)
 
     def test_any_behaviour_change_names_no_mutation(self):
         self.assertIn("This item changes behaviour: name NO mutation", self.WORKFLOW)
-        self.assertIn("item.kind === 'behaviour-change' && !input.task", self.WORKFLOW)
+        self.assertIn("if (item.kind === 'behaviour-change') measure.mutations = []", self.WORKFLOW)
         self.assertIn("Name\n  **no** mutation", self.SURVEYOR)
 
 
@@ -439,3 +483,50 @@ class TestATestBesideTheCodeIsNotProduction(unittest.TestCase):
         block = {"source_roots": ["app"], "test_roots": ["tests/Unit"]}
         self.assertEqual(production_files(["app/A.php", "tests/Unit/ATest.php"], block),
                          ["app/A.php"])
+
+
+class TestTheWriterExecutes(unittest.TestCase):
+    """Until 3.0 the writer had no shell: it wrote blind, a script ran the whole suite
+    after it, and a red sent the item back for a second write. Six of the first story's
+    thirteen tasks were written twice. The writer now runs what it touches; the whole
+    suite and the environment for showing a change stay out of its hands."""
+
+    WRITER = (PRUMO_ROOT / "agents" / "change-writer.md").read_text(encoding="utf-8")
+    WORKFLOW = (PRUMO_ROOT / "workflows" / "deliver.js").read_text(encoding="utf-8")
+
+    def test_the_writer_has_a_shell_and_the_readers_do_not(self):
+        self.assertIn("tools: Read, Write, Edit, Grep, Glob, Bash", self.WRITER)
+        for reader in ("premise-surveyor", "proof-skeptic", "task-planner"):
+            text = (PRUMO_ROOT / "agents" / f"{reader}.md").read_text(encoding="utf-8")
+            self.assertIn("tools: Read, Grep, Glob\n", text, reader)
+
+    def test_it_runs_the_tests_it_touches_and_never_the_whole_suite(self):
+        self.assertIn("See it **red**", self.WRITER)
+        self.assertIn("- the whole suite — it is the script's, once", self.WRITER)
+        self.assertIn("a script that writes or patches code", self.WRITER)
+        self.assertIn("Never the whole suite, never an environment for showing the change", self.WORKFLOW)
+        self.assertIn("Read a result in the OUTPUT, never in the exit code", self.WORKFLOW)
+
+    def test_an_item_with_no_gate_is_measured_and_written_in_one_call(self):
+        self.assertIn("if (stage === 'deliver')", self.WORKFLOW)
+        self.assertIn("const refutation = size === 'small' || written.blocked ? null : await refute(measure, written)",
+                      self.WORKFLOW)
+
+    def test_a_story_s_tasks_are_written_in_one_call_and_committed_by_their_writers(self):
+        self.assertIn("if (stage === 'tasks')", self.WORKFLOW)
+        self.assertIn("commit it yourself, with a pathspec and never `git add -A`", self.WORKFLOW)
+        self.assertIn("Do NOT commit: the script commits a delivery that stands.", self.WORKFLOW)
+
+
+class TestTheEvidenceIsCollectedOnceAtTheEnd(unittest.TestCase):
+    COLLECTOR = (PRUMO_ROOT / "agents" / "evidence-collector.md").read_text(encoding="utf-8")
+    WORKFLOW = (PRUMO_ROOT / "workflows" / "deliver.js").read_text(encoding="utf-8")
+
+    def test_the_collector_runs_last_and_stops_nothing(self):
+        self.assertIn("**last, once per item**", self.COLLECTOR)
+        self.assertIn("raise the environment more than once, or leave it up", self.COLLECTOR)
+        self.assertIn("change a file of the repository", self.COLLECTOR)
+
+    def test_without_a_declared_way_the_stage_raises_nothing(self):
+        self.assertIn("if (!input.evidence) {", self.WORKFLOW)
+        self.assertIn("return { stage, evidence: null }", self.WORKFLOW)

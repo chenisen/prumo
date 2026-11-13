@@ -49,6 +49,48 @@ def resolve(shape: str | None, tracker_type: str | None, mapping: dict | None) -
     raise UnknownShape(f"no shape: pass --shape or --type (one of: {', '.join(SHAPES)})")
 
 
+# --- the size ---------------------------------------------------------------------------
+#
+# The shape says what was ASKED; the size says how much was TOUCHED, and it is the size
+# that decides how much machinery a delivery buys: a two-file fix that ran three whole
+# suites of twenty minutes, a surveyor, a plan, a writer, a sceptic and a review was the
+# method charging every item the price of its largest one (2026-11-13).
+#
+#   small     a handful of files and lines, on a shape with no gate, away from the
+#             paths the profile calls wide: the tests it touched, no sceptic.
+#   standard  everything else that is one item: the whole suite, once; the sceptic, once.
+#   large     a story: its tasks are written one after another and proven together.
+SMALL_DEFAULT = {"max_files": 3, "max_lines": 80}
+SIZES = ("small", "standard", "large")
+
+
+def small_limits(block: dict) -> dict:
+    declared = block.get("small") or {}
+    return {k: int(declared.get(k, v)) for k, v in SMALL_DEFAULT.items()}
+
+
+def size_of(shape: str, files: list[str], lines: int | None, block: dict) -> dict:
+    """`{size, reason}` — a pure function over what the change touches. `lines` is None
+    before anything is written: the measurement names files, not lines, and the size is
+    then provisional; `conclude` asks again over the diff that landed."""
+    from common import casa_algum
+    rules = SHAPES[shape]
+    if rules["decomposes"]:
+        return {"size": "large", "reason": f"a {shape} is written task by task"}
+    if rules["gate"]:
+        return {"size": "standard", "reason": f"a {shape} waits for a person: never small"}
+    wide = [f for f in files if casa_algum(f, list(block.get("wide_paths") or []))]
+    if wide:
+        return {"size": "standard", "reason": f"touches a wide path: {', '.join(wide)}"}
+    limit = small_limits(block)
+    if len(files) > limit["max_files"]:
+        return {"size": "standard", "reason": f"{len(files)} files, small is up to {limit['max_files']}"}
+    if lines is not None and lines > limit["max_lines"]:
+        return {"size": "standard", "reason": f"{lines} lines, small is up to {limit['max_lines']}"}
+    return {"size": "small", "reason": f"{len(files)} file(s)"
+            + (f", {lines} line(s)" if lines is not None else "") + ", no wide path"}
+
+
 def budget_for(block: dict, shape: str) -> dict:
     """The profile's budget, scaled by the shape, rounded up — a half of 3 files is 2."""
     import math

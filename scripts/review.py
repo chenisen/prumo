@@ -457,6 +457,10 @@ def suite_from_record(record: dict) -> tuple[str, str] | None:
         return None
     if b["new_reds"]:
         return "red_attributable", t("review.suite_from_delivery_red", names=", ".join(b["new_reds"]))
+    if b.get("scope") == "focused":
+        # A small delivery is checked by the test files it touched, and the gate says
+        # so in words: a reader must never take those for the whole suite.
+        return "green", t("review.suite_from_delivery_focused", executed=b["executed"])
     return "green", t("review.suite_from_delivery", executed=b["executed"],
                       reds=len(b.get("base_reds") or []))
 

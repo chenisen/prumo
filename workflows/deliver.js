@@ -1,22 +1,25 @@
 export const meta = {
   name: 'deliver',
-  description: 'Delivers a prepared item in stages: design (a story or an epic), measure the premises, then write inside the named files and try to refute the proof',
-  whenToUse: 'Called by the deliver skill after `deliver.py prepare`: `stage: "design"` for a story or an epic, `stage: "measure"`, then — once measure.json is on disk — `stage: "write"`. Do not invoke it directly: with no package there is nothing to deliver.',
+  description: 'Delivers a prepared item: measures it, and a writer with a shell writes it and runs its tests in the item\'s own worktree; a story is written task by task; the evidence is collected once, at the end',
+  whenToUse: 'Called by the deliver skill after `deliver.py prepare`, with the stage that script printed: `deliver` (an item with no gate: measure and write in one call), `design` (a story or an epic), `measure` then `write` (a shape a person approves in between), `tasks` (an approved story), `evidence` (a delivered item). Do not invoke it directly: with no package there is nothing to deliver.',
   phases: [
     { title: 'Design', detail: 'a story cut into tasks, an epic into stories, before anything is written' },
     { title: 'Measure', detail: 'every premise of the item against the code, with an address' },
-    { title: 'Write', detail: 'the smallest change, inside the files the measurement named' },
-    { title: 'Refute', detail: 'a sceptic that has not seen the writer tries to break the proof' },
+    { title: 'Write', detail: 'the smallest change, written and run by one agent in the item\'s worktree' },
+    { title: 'Refute', detail: 'a sceptic that has not seen the writer tries to break the proof — never on a small item' },
+    { title: 'Evidence', detail: 'what was done, shown — once, after the item is delivered' },
   ],
 }
 
-// The judge does NOT live here. `deliver.py conclude` runs the suite and the mutation and
+// The judge does NOT live here. `deliver.py conclude` checks what landed, once, and
 // judges with a pure function; this workflow only produces what the agents produce. Who
 // writes does not approve, and who approves — task-review — never sees this run.
-
-// Two stages in one file, because the hook needs `measure.json` ON DISK before the writer
-// starts: it is from that file that the guard learns which files a write may touch. A
-// workflow cannot write files, so the skill writes the measure between the two calls.
+//
+// The agents EXECUTE. Until 3.0 the writer had no shell: it wrote blind, a script ran the
+// whole suite after it, a red sent the item back for a second write with the first one's
+// output pasted in — six of the first story's thirteen tasks were written twice that
+// way, and the conductor filled the gaps with throwaway scripts. Now the writer runs the
+// tests it touches, in the worktree, until they are green, and the script checks once.
 function readArgs(raw) {
   if (raw && typeof raw === 'object') return raw
   if (typeof raw !== 'string' || !raw.trim().startsWith('{')) {
@@ -38,10 +41,9 @@ const { package: bundle, repo, item, delivery, stage } = input
 const workdir = input.workdir ?? '(no working directory: nothing is written at this stage)'
 const PREFIX = input.agent_prefix ?? 'prumo:'
 // The agents travel with the plugin and answer by `${PREFIX}${name}`. A checkout that is
-// not the installed plugin — a branch under development, a Codex-style harness with no
-// named subagents — hands their prompts in `agent_prompts` instead, and each runs as a
-// plain subagent with that prompt in front. The tool set is then the harness's default,
-// wider than the agent file declares, and the guard is what still holds the writer.
+// not the installed plugin — a branch under development, a harness with no named
+// subagents — hands their prompts in `agent_prompts` instead, and each runs as a plain
+// subagent with that prompt in front.
 const prompts = input.agent_prompts ?? {}
 const spawn = (name, opts) => prompts[name]
   ? { ...opts, prompt: `${prompts[name]}\n\n---\n\n` }
@@ -89,19 +91,30 @@ const MEASURE_SCHEMA = {
     },
     proving_tests: { type: 'array', items: { type: 'string' } },
     guarding_tests: { type: 'array', items: { type: 'string' } },
+    related_tests: { type: 'array', items: { type: 'string' } },
     checked: { type: 'array', items: { type: 'string' } },
   },
 }
 
 const WRITTEN_SCHEMA = {
   type: 'object',
-  required: ['files', 'skipped', 'reused'],
+  required: ['files', 'skipped', 'reused', 'tests_run', 'blocked'],
   additionalProperties: false,
   properties: {
     files: { type: 'array', items: { type: 'string' } },
     skipped: { type: 'array', items: { type: 'string' } },
     reused: { type: 'array', items: { type: 'string' } },
+    tests_run: {
+      type: 'object', required: ['command', 'red_first', 'green'], additionalProperties: false,
+      properties: {
+        command: { type: ['string', 'null'] },
+        red_first: { type: ['boolean', 'null'] },
+        green: { type: ['boolean', 'null'] },
+      },
+    },
+    blocked: { type: ['string', 'null'] },
     commit_message: { type: 'string' },
+    commit: { type: ['string', 'null'] },
   },
 }
 
@@ -122,44 +135,6 @@ const REFUTATION_SCHEMA = {
     },
   },
 }
-
-const common = [
-  `Repository: ${repo} · working directory: ${workdir}`,
-  `Item ${item.id} · shape ${input.shape ?? '?'} · plan depth ${input.plan_depth ?? '?'} · kind ${item.kind}`,
-  `Delivery block of the profile: ${JSON.stringify(delivery)}`,
-  embed('item.md', 'The item'),
-  input.task
-    ? `This item is task ${input.task.id} of a story the person approved. Its files and proving tests are ` +
-      `the design's: confirm them against the code, replace nothing. ` +
-      // The first story task ever measured (2026-11-12) came back blocked before a line
-      // was written: the surveyor read the task's criteria — the TARGET state — as premises
-      // of today's code, marked "the query still groups by client" as a central premise
-      // that FAILS, and named a mutation on the very line the writer was about to replace,
-      // which `conclude` would then have reported as a mutation it could not apply.
-      `The task's bullets are its CRITERIA — the state the code must reach — and never ` +
-      `premises: a premise is a fact about the code TODAY that the design assumed (the line it ` +
-      `points at exists, the behaviour it replaces is where it says, the callers it names are ` +
-      `the callers, no test covers it yet), and \`fails\` means today's code is NOT as the design ` +
-      `assumed. "The behaviour is wrong today" is the reason the task exists, not a failing premise. ` +
-      `For a \`behaviour-change\` task name NO mutation: the writer replaces the lines you would ` +
-      `point at, and the proof is the proving tests red on the base and green after. ` +
-      `Task: ${JSON.stringify(input.task)}`
-    : '',
-  // Not only a story's task: a fix round's measure (2026-11-12) named two mutants on
-  // the pre-fix lines the fix itself rewrote. `deliver.py plan` drops them and says so;
-  // the brief keeps the surveyor from spending a turn on them.
-  item.kind === 'behaviour-change' && !input.task
-    ? 'This item changes behaviour: name NO mutation. The writer replaces the lines a mutant ' +
-      'would point at; the proof is the proving tests red on the base and green after.'
-    : '',
-  embed('profile.yml', 'Repository profile'),
-  `Conventions of this repository, to read BEFORE writing or judging shape: ${JSON.stringify(input.conventions ?? [])}`,
-  (input.conventions ?? []).length === 0
-    ? 'The conventions list is EMPTY: follow the neighbouring tests and say so in your return.'
-    : '',
-  'Everything above is already here: do not read those files again.',
-  `Read inside ${workdir} only. Paths you return are relative to it.`,
-]
 
 const DESIGN_SCHEMA = {
   type: 'object',
@@ -193,6 +168,196 @@ const DESIGN_SCHEMA = {
   },
 }
 
+const EVIDENCE_SCHEMA = {
+  type: 'object',
+  required: ['captures', 'not_collected', 'environment'],
+  additionalProperties: false,
+  properties: {
+    captures: {
+      type: 'array',
+      items: {
+        type: 'object', required: ['criterion', 'observed'], additionalProperties: false,
+        properties: { criterion: { type: 'string' }, observed: { type: 'string' },
+                      artifact: { type: ['string', 'null'] } },
+      },
+    },
+    not_collected: {
+      type: 'array',
+      items: {
+        type: 'object', required: ['criterion', 'reason'], additionalProperties: false,
+        properties: { criterion: { type: 'string' }, reason: { type: 'string' } },
+      },
+    },
+    environment: {
+      type: 'object', required: ['raised', 'taken_down'], additionalProperties: false,
+      properties: { raised: { type: 'array', items: { type: 'string' } }, taken_down: { type: 'boolean' } },
+    },
+  },
+}
+
+const common = [
+  `Repository: ${repo} · working directory: ${workdir}`,
+  `Item ${item.id} · shape ${input.shape ?? '?'} · plan depth ${input.plan_depth ?? '?'} · kind ${item.kind}`,
+  `Delivery block of the profile: ${JSON.stringify(delivery)}`,
+  embed('item.md', 'The item'),
+  embed('profile.yml', 'Repository profile'),
+  `Conventions of this repository, to read BEFORE writing or judging shape: ${JSON.stringify(input.conventions ?? [])}`,
+  (input.conventions ?? []).length === 0
+    ? 'The conventions list is EMPTY: follow the neighbouring tests and say so in your return.'
+    : '',
+  'Everything above is already here: do not read those files again.',
+  `Work inside ${workdir} only. Paths you return are relative to it.`,
+]
+
+// The size, before anything is written: the measurement names files, not lines. The two
+// numbers and the wide paths are the profile's, handed over by `deliver.py prepare` as it
+// will read them again over the diff that lands — `shape.size_of` is the rule, this is
+// its first reading. A small item buys no sceptic; the review that follows reads it.
+const smallLimit = input.small ?? { max_files: 3, max_lines: 80 }
+const widePatterns = (input.wide_patterns ?? []).map((p) => new RegExp(p))
+const sizeOf = (files) => {
+  if (input.gate) return 'standard'
+  if (files.some((f) => widePatterns.some((re) => re.test(f)))) return 'standard'
+  return files.length <= smallLimit.max_files ? 'small' : 'standard'
+}
+
+// What the writer may run, resolved by `deliver.py prepare` from the profile's allowlist
+// for this very tree. The whole suite is never among them: `conclude` runs it once, and
+// only for an item whose size asks it.
+const commands = input.commands ?? {}
+const shell = [
+  commands.tests
+    ? `You have a shell, and you use it. Run the tests you touch with exactly this command, the test files in place of {tests}: ${commands.tests}`
+    : 'The profile declares no command that runs named test files: run no test, and say so in `skipped`.',
+  commands.lint ? `Before you return, run the lint once: ${commands.lint}` : '',
+  'Read a result in the OUTPUT, never in the exit code — a wrapped executor swallows it.' +
+  (commands.red_name_pattern ? ` A red test is a line matching ${JSON.stringify(commands.red_name_pattern)}.` : '') +
+  (commands.failure_pattern ? ` A failed run matches ${JSON.stringify(commands.failure_pattern)}.` : ''),
+  'Never the whole suite, never an environment for showing the change, never a push, never another branch. ' +
+  'No script that writes code: you edit the files yourself.',
+].filter(Boolean)
+
+async function measureItem() {
+  phase('Measure')
+  const measure = await run('premise-surveyor', [
+    ...common,
+    // A fix round's measure (2026-11-12) named two mutants on the pre-fix lines the fix
+    // itself rewrote. `deliver.py` drops them; the brief keeps the surveyor off them.
+    item.kind === 'behaviour-change'
+      ? 'This item changes behaviour: name NO mutation. The writer replaces the lines a mutant ' +
+        'would point at; the proof is the proving tests red on the base and green after.'
+      : '',
+    'Measure every premise of the item against the code. Name the files a writer may ' +
+    'touch for this kind, the tests that will prove the delivery, and in `related_tests` ' +
+    'the existing test FILES that exercise the code those files hold. Propose no fix.',
+  ].filter(Boolean).join('\n'), { label: 'premise-surveyor', phase: 'Measure', schema: MEASURE_SCHEMA })
+  if (!measure) throw new Error('premise-surveyor returned nothing — nothing was measured')
+  if (item.kind === 'behaviour-change') measure.mutations = []
+  log(`${measure.premises.length} premises · ${measure.files.length} file(s) named · ` +
+      `${measure.mutations.length} mutation(s)`)
+  return measure
+}
+
+const centralFails = (measure) => measure.premises.filter((p) => p.central && p.state === 'fails')
+
+// One writer, one task of work: it reads, writes the test and sees it red, writes the
+// code and sees it green, runs the lint, and says what it left out. `task` is a story's
+// task; `earlier` the tasks already written on this branch.
+async function writeItem(measure, { task = null, earlier = [], previous = null } = {}) {
+  phase('Write')
+  // A blocked delivery is written again on the same tree, and the previous verdict
+  // travels with the prompt — `deliver.py conclude` writes it into workflow-args.json.
+  const again = previous
+    ? 'A PREVIOUS ATTEMPT AT THIS ITEM WAS BLOCKED on this same tree — the files below ' +
+      'already hold it. Fix the cause before anything else, inside the same files. ' +
+      `Reason: ${previous.reason}` +
+      (previous.output ? `\nWhat the run printed:\n${previous.output}` : '') +
+      (previous.hint ? `\n${previous.hint}` : '')
+    : ''
+  // What the story already holds on this branch. A write in the tenth task of the first
+  // story (2026-11-12) removed a field before the call the ninth task had made read it.
+  const storyContext = earlier.length
+    ? 'EARLIER TASKS OF THIS STORY, already written on this branch — every criterion below ' +
+      `must still hold after this change: ${JSON.stringify(earlier)}\n` +
+      'Do not undo any of them: read how this change meets their files before writing.'
+    : ''
+  const subject = (delivery.commit_format ?? '{item} - {message}').replace('{item}', String(item.id))
+  const written = await run('change-writer', [
+    ...common,
+    again,
+    task
+      ? `This is task ${task.id} of a story a person approved: ${JSON.stringify(task)}\n` +
+        'The task\'s bullets are its CRITERIA — the state the code must reach. Its files and ' +
+        'proving tests are the design\'s: confirm them against the code as you read, and when the ' +
+        'code is not as the design assumed, write nothing and return `blocked` with the address.'
+      : '',
+    storyContext,
+    `Measurement: ${JSON.stringify(measure)}`,
+    `The files named for this change: ${measure.files.join(', ')}. A file outside them, that the change ` +
+    'cannot be delivered without, is declared in `files` with the reason in `skipped`; anything else is a defect.',
+    measure.mutations.length
+      ? `Name the test exactly: ${measure.mutations.map((m) => m.test).join(', ')}. Turn the guard wrong ` +
+        'yourself at the named line, see that test red, and put the line back before you return.'
+      : '',
+    ...shell,
+    'Write the smallest change that delivers the item, by the ladder: the test first, red; ' +
+    'the code, green; the lint. `tests_run` says what you ran and what you saw.',
+    // Twice in the first story a test double of a method with a declared return type
+    // returned nothing; the runtime threw inside a try, the catch ran, and new reds came
+    // from the double, not from the change.
+    'A test double of a method with a declared return type returns a value of that type, ' +
+    'explicitly — never the double\'s default.',
+    // The first story's refactor round (2026-11-12): the person reviewing the merge request
+    // found the worker the writer had grown — loops and branches nested three deep, one method
+    // doing five things — and a construction convention changed in files no test needed it in.
+    'The code you write is clean on the first pass: one purpose per method, named for it; ' +
+    'one level of nesting in what you add; nothing written twice; no comment explaining code. ' +
+    'Keep the file\'s conventions — how it builds collaborators, how it names — and change one ' +
+    'only where a test you write depends on it.',
+    // The first front-end delivery (2026-11-13) committed the item's title with its id
+    // twice, against a log written in another voice: the script cannot know the
+    // repository's voice, the writer read it.
+    '`commit_message` in your return: what the change does, in the voice of this repository\'s ' +
+    'recent commit subjects and its conventions — without the item\'s id, which the format adds.',
+    task
+      ? 'When this task\'s tests are green, commit it yourself, with a pathspec and never `git add -A`: ' +
+        `\`git add -- <the files you wrote>\`, then \`git commit -m "${subject.replace('{message}', '<your commit_message>')}"\`. ` +
+        'Return the commit\'s short hash in `commit`. A task whose tests you could not turn green is not committed: return `blocked`.'
+      : 'Do NOT commit: the script commits a delivery that stands.',
+    previous
+      ? '`files` in your return lists EVERY file changed since the task base — the earlier ' +
+        'attempt\'s included — not only the ones you touched in this pass.'
+      : '',
+  ].filter(Boolean).join('\n'), {
+    label: task ? `change-writer:${task.id}` : 'change-writer', phase: 'Write', schema: WRITTEN_SCHEMA,
+  })
+  if (!written) throw new Error('change-writer returned nothing — nothing was written')
+  log(written.blocked
+    ? `writer stopped: ${written.blocked}`
+    : `${written.files.length} file(s) written · tests ${written.tests_run.green ? 'green' : 'not green'} · ` +
+      `${written.skipped.length} skipped item(s) declared`)
+  return written
+}
+
+// The sceptic sees the measurement and the files, never the writer's return: the one who
+// writes does not confirm, and the blindness is what makes the reading worth anything.
+async function refute(measure, written, previous = null) {
+  phase('Refute')
+  const refutation = await run('proof-skeptic', [
+    ...common,
+    `Measurement: ${JSON.stringify(measure)}`,
+    `Files written: ${written.files.join(', ')}`,
+    previous
+      ? 'This is a SECOND attempt on the same tree: the change under review is every file of ' +
+        'the measurement that differs from the base, not only the files listed above.'
+      : '',
+    'Try to show the test does NOT prove the guard. When in doubt, `uncertain`.',
+  ].filter(Boolean).join('\n'), { label: 'proof-skeptic', phase: 'Refute', schema: REFUTATION_SCHEMA })
+  log(refutation ? `sceptic: ${refutation.verdict} — ${refutation.reason}`
+                 : 'sceptic returned nothing — recorded as uncertain')
+  return refutation ?? { verdict: 'uncertain', reason: 'the sceptic did not answer', evidence: [] }
+}
+
 if (stage === 'design') {
   // A story is cut into tasks, an epic into stories, before anything is measured or
   // written. The cut is read by a person at the gate; nothing here decides what a task
@@ -209,109 +374,110 @@ if (stage === 'design') {
 }
 
 if (stage === 'measure') {
-  phase('Measure')
-  const measure = await run('premise-surveyor', [
-    ...common,
-    'Measure every premise of the item against the code. Name the files a writer may ' +
-    'touch for this kind, and the mutation that will prove the delivery. Propose no fix.',
-  ].join('\n'), { label: 'premise-surveyor', phase: 'Measure', schema: MEASURE_SCHEMA })
-  if (!measure) throw new Error('premise-surveyor returned nothing — nothing was measured')
-  const failed = measure.premises.filter((p) => p.central && p.state === 'fails')
+  const measure = await measureItem()
+  const failed = centralFails(measure)
   if (failed.length) {
     log(`${failed.length} central premise(s) fail — the delivery stops before anything is written`)
   }
-  log(`${measure.premises.length} premises · ${measure.files.length} file(s) named · ` +
-      `${measure.mutations.length} mutation(s)`)
   return { stage, measure, written: null, refutation: null }
 }
 
-if (stage !== 'write') throw new Error(`unknown stage \`${stage}\` — design, measure or write`)
-if (!input.measure) {
-  throw new Error('stage `write` needs `measure` — the object the measure stage returned, ' +
-                  'already written to <package>/measure.json so the guard can read it.')
+if (stage === 'deliver') {
+  // An item with no gate, in ONE call: measured, sized, written and — unless it is
+  // small — read by the sceptic. Nothing waits on the conductor in between.
+  if (input.gate) {
+    throw new Error(`a ${input.shape} waits for a person between the measure and the write — ` +
+                    'stage `measure`, then `deliver.py plan`, then stage `write`')
+  }
+  const measure = await measureItem()
+  if (centralFails(measure).length) {
+    log('a central premise fails — the delivery stops before anything is written')
+    return { stage, size: null, measure, written: null, refutation: null }
+  }
+  const size = sizeOf(measure.files)
+  log(`size: ${size}`)
+  const written = await writeItem(measure)
+  const refutation = size === 'small' || written.blocked ? null : await refute(measure, written)
+  return { stage, size, measure, written, refutation }
 }
-const measure = input.measure
 
-phase('Write')
-// A blocked delivery can be written again on the same tree. The second task of the first
-// story (2026-11-12) was blocked by two new reds: the writer had stubbed the query builder
-// by hand, warned in `skipped` that the stub had never run, and the suite proved it. The
-// writer of the second attempt would have seen the same files and the same measurement
-// and written the same stub again — so the previous verdict travels with the prompt:
-// the reason the judge gave and what the suite printed for the reds. Composed by whoever
-// resumes, from `delivery.json` and the run file; never invented here.
-const previous = input.previous
-  ? 'A PREVIOUS ATTEMPT AT THIS ITEM WAS BLOCKED on this same tree — the files below ' +
-    'already hold it. Fix the cause before anything else, inside the same files. ' +
-    `Reason: ${input.previous.reason}` +
-    (input.previous.output ? `\nWhat the suite printed for the reds:\n${input.previous.output}` : '') +
-    (input.previous.hint ? `\n${input.previous.hint}` : '')
-  : ''
-// What the story already delivered on this branch. A write in the tenth task of the
-// first story (2026-11-12) removed a field before the call the ninth task had made read
-// it, and the sceptic — asked only about the tenth task's own tests — said `proves`.
-// `deliver.py prepare --story` inlines the earlier tasks; both agents read them.
-const storyContext = (input.story_context ?? []).length
-  ? 'EARLIER TASKS OF THIS STORY, already delivered on this branch — every criterion below ' +
-    `must still hold after this change: ${JSON.stringify(input.story_context)}`
-  : ''
-const written = await run('change-writer', [
-  ...common,
-  previous,
-  storyContext ? `${storyContext}\nDo not undo any of them: read how this change meets their files before writing.` : '',
-  `Measurement: ${JSON.stringify(measure)}`,
-  `You may write ONLY these files: ${measure.files.join(', ')}. The hook refuses any other.`,
-  measure.mutations.length
-    ? `Name the test exactly: ${measure.mutations.map((m) => m.test).join(', ')}.`
-    : '',
-  'Write the smallest change that delivers the item, by the ladder. Run nothing.',
-  // Twice in the first story a test double of a method with a declared return type
-  // returned nothing; the runtime threw inside a try, the catch ran, and new reds came
-  // from the double, not from the change.
-  'A test double of a method with a declared return type returns a value of that type, ' +
-  'explicitly — never the double\'s default.',
-  // The first story's refactor round (2026-11-12): the person reviewing the merge request
-  // found the worker the writer had grown — loops and branches nested three deep, one method
-  // doing five things — and a construction convention changed in files no test needed it in.
-  'The code you write is clean on the first pass: one purpose per method, named for it; ' +
-  'one level of nesting in what you add; nothing written twice; no comment explaining code. ' +
-  'Keep the file\'s conventions — how it builds collaborators, how it names — and change one ' +
-  'only where a test you write depends on it.',
-  // The first front-end delivery (2026-11-13) committed the item's Portuguese title with its
-  // id twice, against a log written in lowercase English: the script cannot know the
-  // repository's voice, the writer read it.
-  `\`commit_message\` in your return: what the change does, in the voice of this repository's ` +
-  `recent commit subjects and its conventions — without the item's id, which the profile's ` +
-  `format (${JSON.stringify(delivery.commit_format ?? '{item} - {message}')}) adds.`,
-  previous
-    ? '`files` in your return lists EVERY file changed since the task base — the earlier ' +
-      'attempt\'s included — not only the ones you touched in this pass.'
-    : '',
-].filter(Boolean).join('\n'), { label: 'change-writer', phase: 'Write', schema: WRITTEN_SCHEMA })
-if (!written) throw new Error('change-writer returned nothing — nothing was written')
-log(`${written.files.length} file(s) written · ${written.skipped.length} skipped item(s) declared`)
+if (stage === 'write') {
+  // After a person's approval, or again after a blocked attempt: the measurement is on
+  // disk, and `deliver.py plan` (or `conclude`) put it in workflow-args.json.
+  if (!input.measure) {
+    throw new Error('stage `write` needs `measure` — `deliver.py plan` writes it into ' +
+                    'workflow-args.json; pass that object, plus `stage`.')
+  }
+  const measure = input.measure
+  const written = await writeItem(measure, { previous: input.previous ?? null })
+  const refutation = sizeOf(measure.files) === 'small' || written.blocked
+    ? null : await refute(measure, written, input.previous ?? null)
+  return { stage, measure, written, refutation }
+}
 
-phase('Refute')
-// The sceptic sees the measurement and the files, never the writer's return: the one who
-// writes does not confirm, and the blindness is what makes the reading worth anything.
-const refutation = await run('proof-skeptic', [
-  ...common,
-  `Measurement: ${JSON.stringify(measure)}`,
-  `Files written: ${written.files.join(', ')}`,
-  // A second attempt sits on the first one's tree: the change is every measured file
-  // that differs from the base, whatever this pass's list says (the twelfth task of the
-  // first story came back `uncertain` for reading a one-file list).
-  input.previous
-    ? 'This is a SECOND attempt on the same tree: the change under review is every file of ' +
-      'the measurement that differs from the base, not only the files listed above.'
-    : '',
-  storyContext
-    ? `${storyContext}\nQuestion 5 applies: does this change break a criterion of an earlier task listed here?`
-    : '',
-  'Try to show the test does NOT prove the guard. When in doubt, `uncertain`.',
-].filter(Boolean).join('\n'), { label: 'proof-skeptic', phase: 'Refute', schema: REFUTATION_SCHEMA })
-log(refutation ? `sceptic: ${refutation.verdict} — ${refutation.reason}`
-               : 'sceptic returned nothing — recorded as uncertain')
+if (stage === 'tasks') {
+  // An approved story: its tasks, in the design's order, each written, run and
+  // committed by one writer before the next begins. No surveyor per task, no sceptic
+  // per task, no suite per task: the story is checked once, by `conclude`, and read
+  // once, by the review. The first story (2026-11-12) paid a prepare, a measure, a plan,
+  // a write, a sceptic and a whole suite for each of thirteen tasks.
+  if (!input.design) {
+    throw new Error('stage `tasks` needs `design` — `deliver.py plan --design` writes it into ' +
+                    'workflow-args.json; pass that object, plus `stage`.')
+  }
+  const done = new Set(input.done ?? [])
+  const earlier = []
+  const tasks = []
+  for (const task of input.design.tasks) {
+    const brief = { id: task.id, title: task.title, criteria: task.criteria, files: task.files }
+    if (done.has(task.id)) { earlier.push(brief); continue }
+    const measure = { premises: [], files: task.files, mutations: [], proving_tests: task.proving_tests, checked: [] }
+    const written = await writeItem(measure, { task, earlier: [...earlier],
+                                                previous: input.previous?.task === task.id ? input.previous : null })
+    tasks.push({ id: task.id, written })
+    if (written.blocked) {
+      log(`task ${task.id} stopped — the tasks after it wait`)
+      break
+    }
+    earlier.push(brief)
+  }
+  // Every task is written and the story's check found something: one more write, over
+  // the whole story, with what the check printed. It is no task of the design.
+  if (!tasks.length && input.previous) {
+    const whole = { premises: [], mutations: [], checked: [],
+                    files: [...new Set(input.design.tasks.flatMap((t) => t.files))],
+                    proving_tests: input.design.tasks.flatMap((t) => t.proving_tests) }
+    const fix = { id: 'FIX', title: 'repair what the story\'s check found', criteria: [input.previous.reason],
+                  files: whole.files, proving_tests: [], depends_on: [] }
+    tasks.push({ id: fix.id, written: await writeItem(whole, { task: fix, earlier, previous: input.previous }) })
+  }
+  return { stage, tasks }
+}
 
-return { stage, measure, written,
-         refutation: refutation ?? { verdict: 'uncertain', reason: 'the sceptic did not answer', evidence: [] } }
+if (stage === 'evidence') {
+  // Evidence illustrates a delivery that is already done. It runs once per item, after
+  // its last task; nothing it finds changes the delivery's state; and it is the only
+  // place where an environment for showing the change is raised — the first front-end
+  // delivery raised one, and rewrote its capture scripts, while the work was still open.
+  if (!input.evidence) {
+    log('the profile declares no `delivery.evidence` — the tests are the evidence')
+    return { stage, evidence: null }
+  }
+  phase('Evidence')
+  const evidence = await run('evidence-collector', [
+    ...common,
+    `The delivery's record: ${bundle}/delivery.json · its report: ${bundle}/report.md`,
+    `How this repository shows a change to a person: ${input.evidence.how}`,
+    `What raises the environment, in order: ${JSON.stringify(input.evidence.setup ?? [])}`,
+    `What takes it down: ${JSON.stringify(input.evidence.teardown ?? [])}`,
+    `Keep every artifact under ${input.evidence_dir}, and name it in \`artifact\`.`,
+    'Show each acceptance criterion of the item once. Change no file of the repository. ' +
+    'What you could not show is `not_collected`, with the reason — never a blocker.',
+  ].join('\n'), { label: 'evidence-collector', phase: 'Evidence', schema: EVIDENCE_SCHEMA })
+  log(evidence ? `${evidence.captures.length} shown · ${evidence.not_collected.length} not collected`
+               : 'the collector returned nothing — recorded as not collected')
+  return { stage, evidence: evidence ?? { captures: [], not_collected: [{ criterion: '*', reason: 'the collector did not answer' }],
+                                           environment: { raised: [], taken_down: true } } }
+}
+
+throw new Error(`unknown stage \`${stage}\` — deliver, design, measure, write, tasks or evidence`)

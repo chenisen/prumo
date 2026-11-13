@@ -88,6 +88,30 @@ class DeliveryGuard(unittest.TestCase):
         self.deliver("item-1", self.worktree, [], package=self.project / "no-such-pkg")
         self.assertEqual(self.write(self.worktree / "tests" / "test_a.py"), 2)
 
+    def test_before_a_measurement_the_writer_is_held_to_the_roots_its_kind_may_touch(self):
+        """An item with no gate is measured and written in ONE workflow call: no
+        measure.json sits on disk when the writer starts. The marker names the roots,
+        and `conclude` holds the diff to the scope afterwards."""
+        (self.markers / "item-1.json").write_text(json.dumps({
+            "worktree": str(self.worktree), "branch": "item-1", "allowed": [],
+            "roots": ["src", "tests", "docs/guide.md"], "package": str(self.project / "no-such-pkg")}), encoding="utf-8")
+        self.assertEqual(self.write(self.worktree / "tests" / "test_a.py"), 0)
+        self.assertEqual(self.write(self.worktree / "src" / "deep" / "a.py"), 0)
+        self.assertEqual(self.write(self.worktree / "docs" / "guide.md"), 0)
+        self.assertEqual(self.write(self.worktree / "docs" / "other.md"), 2)
+        self.assertEqual(self.write(self.worktree / "build.cfg"), 2)
+
+    def test_the_roots_do_not_open_a_gate_nobody_approved(self):
+        package = self.project / "pkg"
+        package.mkdir()
+        (package / "plan.json").write_text(json.dumps({"gate": True, "digest": "d1"}), encoding="utf-8")
+        (self.markers / "item-1.json").write_text(json.dumps({
+            "worktree": str(self.worktree), "branch": "item-1", "allowed": [],
+            "roots": ["src", "tests"], "package": str(package)}), encoding="utf-8")
+        self.assertEqual(self.write(self.worktree / "src" / "a.py"), 2)
+        (package / "approval.json").write_text(json.dumps({"by": "x", "digest": "d1"}), encoding="utf-8")
+        self.assertEqual(self.write(self.worktree / "src" / "a.py"), 0, "an approved story writes from its design")
+
     def test_a_plan_that_asks_a_gate_admits_no_write_until_the_approval_matches(self):
         package = self.project / "pkg"
         package.mkdir()

@@ -93,19 +93,22 @@ class TestEveryRoutingDecisionIsReadFromDisk(unittest.TestCase):
         self.run["kind"] = "behaviour-change"
         self.assertTrue(self.decide()["text"].endswith(" --kind behaviour-change"))
 
-    def test_a_prepared_delivery_asks_for_the_measure_stage(self):
-        self.put(self.deliver, "deliver-manifest.json", {})
+    def test_a_prepared_delivery_with_no_gate_is_one_workflow_call_then_the_conclude(self):
+        """Measure, plan, write and conclude used to be four steps the conductor ran one
+        by one. An item nobody has to approve is measured and written in one call."""
+        self.put(self.deliver, "deliver-manifest.json", {"gate": False})
+        out = self.decide()["text"]
+        self.assertIn("stage: 'deliver'", out)
+        self.assertIn(f"{self.deliver}/workflow-result.json", out)
+        self.put(self.deliver, "workflow-result.json", {})
+        self.assertEqual(self.decide()["text"],
+                         f"deliver.py conclude --package {self.deliver} --result {self.deliver}/workflow-result.json")
+
+    def test_a_shape_with_a_gate_is_measured_planned_and_waits_for_a_person(self):
+        self.put(self.deliver, "deliver-manifest.json", {"gate": True})
         self.assertIn("stage: 'measure'", self.decide()["text"])
-
-    def test_a_measured_delivery_asks_for_the_plan_then_the_write_stage(self):
-        self.put(self.deliver, "deliver-manifest.json", {})
-        self.put(self.deliver, "measure.json", {"premises": [{"central": True, "state": "holds"}]})
+        self.put(self.deliver, "measure-result.json", {})
         self.assertTrue(self.decide()["text"].startswith("deliver.py plan"))
-        self.put(self.deliver, "plan.json", {"gate": False, "digest": "d"})
-        self.assertIn("stage: 'write'", self.decide()["text"])
-
-    def test_a_shape_with_a_gate_stops_until_a_person_approves_the_plan_as_it_stands(self):
-        self.put(self.deliver, "deliver-manifest.json", {})
         self.put(self.deliver, "measure.json", {"premises": []})
         self.put(self.deliver, "plan.json", {"gate": True, "digest": "d1"})
         out = self.decide()
@@ -115,27 +118,19 @@ class TestEveryRoutingDecisionIsReadFromDisk(unittest.TestCase):
         self.assertEqual(self.decide()["class"], "plan", "an approval of another measurement does not count")
         self.put(self.deliver, "approval.json", {"by": "someone", "digest": "d1"})
         self.assertIn("stage: 'write'", self.decide()["text"])
+        self.put(self.deliver, "workflow-result.json", {})
+        self.assertIn(f"--result {self.deliver}/workflow-result.json", self.decide()["text"])
 
     def test_the_shape_travels_into_the_prepare_invocation(self):
         self.run["shape"] = "bug"
         self.assertIn("--shape bug", self.decide()["text"])
 
     def test_a_central_premise_that_fails_skips_the_write_and_concludes(self):
-        self.put(self.deliver, "deliver-manifest.json", {})
+        self.put(self.deliver, "deliver-manifest.json", {"gate": True})
         self.put(self.deliver, "measure.json", {"premises": [{"central": True, "state": "fails"}]})
         self.put(self.deliver, "plan.json", {"gate": True, "digest": "d"})
         out = self.decide()
-        self.assertTrue(out["text"].startswith("deliver.py conclude"), out)
-        self.assertNotIn("--written", out["text"])
-
-    def test_a_written_delivery_concludes_with_every_return_it_has(self):
-        self.put(self.deliver, "deliver-manifest.json", {})
-        self.put(self.deliver, "measure.json", {"premises": []})
-        self.put(self.deliver, "plan.json", {"gate": False, "digest": "d"})
-        self.put(self.deliver, "written.json", {})
-        self.put(self.deliver, "refutation.json", {})
-        out = self.decide()["text"]
-        self.assertIn("--written", out); self.assertIn("--refutation", out)
+        self.assertEqual(out["text"], f"deliver.py conclude --package {self.deliver}", out)
 
     def test_a_blocked_delivery_is_a_stop_with_its_class_and_reason(self):
         self.put(self.deliver, "deliver-manifest.json", {})
@@ -162,16 +157,53 @@ class TestEveryRoutingDecisionIsReadFromDisk(unittest.TestCase):
     def test_a_verdict_ends_the_run(self):
         self.put(self.deliver, "deliver-manifest.json", {})
         self.put(self.deliver, "delivery.json", {"state": "delivered", "branch": {"name": "b"}})
+        self.put(self.deliver, "evidence.json", {})
         self.put(self.review, "manifest.json", {})
         self.put(self.review, "verdict.json", {"verdict": "APPROVED"})
         self.assertEqual(self.decide()["class"], "approved")
         self.put(self.review, "verdict.json", {"verdict": "INTERVENTION_REQUIRED"})
         self.assertEqual(self.decide()["class"], "intervention")
 
+    def test_the_evidence_comes_once_after_the_approval_and_before_the_worktree_goes(self):
+        """Evidence illustrates a finished item: nothing asks for it before the verdict,
+        and an intervention asks for none."""
+        workdir = self.root / "wt"; workdir.mkdir()
+        self.put(self.deliver, "deliver-manifest.json", {"in_worktree": True, "workdir": str(workdir),
+                                                         "delivery": {"evidence": {"how": "a screen, captured"}}})
+        self.put(self.deliver, "delivery.json", {"state": "delivered", "branch": {"name": "b"}})
+        self.put(self.review, "manifest.json", {})
+        self.assertNotIn("evidence", self.decide()["text"], "not before the verdict")
+        self.put(self.review, "verdict.json", {"verdict": "APPROVED"})
+        self.assertIn("stage: 'evidence'", self.decide()["text"])
+        self.put(self.deliver, "evidence-result.json", {})
+        self.assertEqual(self.decide()["text"],
+                         f"deliver.py evidence --package {self.deliver} --collected {self.deliver}/evidence-result.json")
+        self.put(self.deliver, "evidence.json", {})
+        self.assertEqual(self.decide()["text"], f"deliver.py release --package {self.deliver}")
+        workdir.rmdir()
+        self.assertEqual(self.decide()["class"], "approved")
+
+    def test_a_profile_that_declares_no_way_of_showing_raises_nothing(self):
+        self.put(self.deliver, "deliver-manifest.json", {"delivery": {}})
+        self.put(self.deliver, "delivery.json", {"state": "delivered", "branch": {"name": "b"}})
+        self.put(self.review, "manifest.json", {})
+        self.put(self.review, "verdict.json", {"verdict": "APPROVED"})
+        self.assertEqual(self.decide()["text"], f"deliver.py evidence --package {self.deliver}")
+
+    def test_an_intervention_asks_for_no_evidence(self):
+        workdir = self.root / "wt"; workdir.mkdir()
+        self.put(self.deliver, "deliver-manifest.json", {"in_worktree": True, "workdir": str(workdir),
+                                                         "delivery": {"evidence": {"how": "a screen, captured"}}})
+        self.put(self.deliver, "delivery.json", {"state": "delivered", "branch": {"name": "b"}})
+        self.put(self.review, "manifest.json", {})
+        self.put(self.review, "verdict.json", {"verdict": "INTERVENTION_REQUIRED"})
+        self.assertEqual(self.decide()["text"], f"deliver.py release --package {self.deliver}")
+
     def test_a_verdict_releases_a_standing_worktree_before_the_stop(self):
         workdir = self.root / "wt"; workdir.mkdir()
         self.put(self.deliver, "deliver-manifest.json", {"in_worktree": True, "workdir": str(workdir)})
         self.put(self.deliver, "delivery.json", {"state": "delivered", "branch": {"name": "b"}})
+        self.put(self.deliver, "evidence.json", {})
         self.put(self.review, "manifest.json", {})
         self.put(self.review, "verdict.json", {"verdict": "APPROVED"})
         out = self.decide()
@@ -260,7 +292,7 @@ class TestTheRouteOverRealPackages(unittest.TestCase):
 
     def setUp(self):
         from tests.test_deliver_backbone import Spine
-        self.spine = Spine("test_prepare_cuts_the_branch_reads_the_baseline_and_marks")
+        self.spine = Spine("test_prepare_cuts_the_branch_runs_no_suite_and_marks")
         self.spine.setUp()
         self.root, self.repo = self.spine.root, self.spine.repo
 
@@ -277,18 +309,22 @@ class TestTheRouteOverRealPackages(unittest.TestCase):
 
         deliver_pkg = self.spine.prepare()
         run.bind(pkg, "deliver", str(deliver_pkg))
-        self.assertIn("stage: 'measure'", run.next_step(pkg)["text"])
-        (deliver_pkg / "measure.json").write_text(json.dumps(MEASURE), encoding="utf-8")
-        self.assertTrue(run.next_step(pkg)["text"].startswith("deliver.py plan"))
+        self.assertIn("stage: 'deliver'", run.next_step(pkg)["text"], "a debt asks no gate: one call")
+        tree = self.spine.tree_of(deliver_pkg)
+        (tree / "tests" / "test_guard.py").write_text(PROVING_TEST, encoding="utf-8")
+        (deliver_pkg / "workflow-result.json").write_text(json.dumps({
+            "summary": "the harness's envelope", "result": {
+                "stage": "deliver", "size": "small", "measure": MEASURE, "refutation": None,
+                "written": {"files": MEASURE["files"], "skipped": [], "reused": [], "blocked": None,
+                            "tests_run": {"command": None, "red_first": None, "green": None}}}}), encoding="utf-8")
+        step = run.next_step(pkg)["text"]
+        self.assertEqual(step, f"deliver.py conclude --package {deliver_pkg} --result {deliver_pkg}/workflow-result.json")
         import deliver
         with contextlib.redirect_stdout(io.StringIO()):
-            deliver.plan(argparse.Namespace(package=str(deliver_pkg), measure=str(deliver_pkg / "measure.json")))
-        self.assertTrue((deliver_pkg / "plan.md").exists())
-        self.assertIn("stage: 'write'", run.next_step(pkg)["text"], "a debt asks no gate")
-        code, rec = self.spine.conclude(deliver_pkg, PROVING_TEST)
-        self.assertEqual(rec["state"], "delivered")
-        # the real spine writes measure.json and written.json into the package itself
-        self.assertTrue((deliver_pkg / "measure.json").exists())
+            deliver.conclude(argparse.Namespace(package=str(deliver_pkg), result=str(deliver_pkg / "workflow-result.json")))
+        rec = json.loads((deliver_pkg / "delivery.json").read_text(encoding="utf-8"))
+        self.assertEqual(rec["state"], "delivered", rec)
+        self.assertTrue((deliver_pkg / "plan.md").exists(), "the plan is rendered even when nobody waits on it")
         step = run.next_step(pkg)
         self.assertTrue(step["text"].startswith("review.py prepare --repo repo-x --branch "), step)
 
@@ -308,7 +344,12 @@ class TestTheRouteOverRealPackages(unittest.TestCase):
             review.conclude(args)
         self.assertTrue((review_pkg / "verdict.json").exists())
         stop = run.next_step(pkg)
-        self.assertEqual(stop["kind"], "stop")
+        if stop["kind"] == "invoke":                 # approved: the evidence, once, then the stop
+            self.assertEqual(stop["text"], f"deliver.py evidence --package {deliver_pkg}")
+            with contextlib.redirect_stdout(io.StringIO()):
+                deliver.evidence(argparse.Namespace(package=str(deliver_pkg), collected=None))
+            stop = run.next_step(pkg)
+        self.assertEqual(stop["kind"], "stop", stop)
         self.assertIn(stop["class"], ("approved", "intervention"))
         log = (pkg / "orchestration.md").read_text(encoding="utf-8").splitlines()
         self.assertTrue(log[-1].startswith(("stop:", "parada:")), log[-1])
@@ -356,45 +397,36 @@ class TestAStoryAndAnEpicAreRouted(unittest.TestCase):
     def test_a_story_is_designed_then_planned_then_approved(self):
         self.put(self.d, "deliver-manifest.json", {"shape": "story", "deliverable": True})
         self.assertIn("stage: 'design'", self.decide()["text"])
-        self.put(self.d, "design.json", {"summary": "s", "tasks": [], "stories": [], "checked": []})
+        self.put(self.d, "design-result.json", {})
         self.assertTrue(self.decide()["text"].startswith("deliver.py plan") and "--design" in self.decide()["text"])
         self.story(gate_ok=False)
         self.assertEqual(self.decide()["class"], "plan")
 
-    def test_the_tasks_are_prepared_in_the_design_s_order_under_the_story(self):
+    def test_an_approved_story_is_written_in_one_call_and_checked_once(self):
+        """Every task used to be a delivery of its own: a prepare, a measure, a plan, a
+        write and a conclude each. The tasks are written by one workflow call, and the
+        story is concluded once."""
         self.story()
         out = self.decide()["text"]
-        self.assertTrue(out.startswith(f"deliver.py prepare --repo repo-x --story {self.d} --task T1"), out)
-        self.assertIn(f"--package {self.d / 'tasks' / 'T1'}", out)
-        self.put(self.d / "tasks" / "T1", "deliver-manifest.json", {"shape": "bug", "item": {"id": "S-1-T1"}})
-        self.put(self.d / "tasks" / "T1", "delivery.json", {"state": "delivered", "branch": {"name": "S-1-b"}})
-        self.assertIn("--task T2", self.decide()["text"])
+        self.assertIn("stage: 'tasks'", out)
+        self.assertNotIn("--task", out)
+        self.put(self.d, "workflow-result.json", {})
+        self.assertEqual(self.decide()["text"],
+                         f"deliver.py conclude --package {self.d} --result {self.d}/workflow-result.json")
 
-    def test_a_task_in_progress_is_walked_like_any_delivery(self):
+    def test_a_story_whose_task_stopped_is_a_stop_naming_it(self):
         self.story()
-        self.put(self.d / "tasks" / "T1", "deliver-manifest.json", {"shape": "bug"})
-        self.assertIn("stage: 'measure'", self.decide()["text"])
-        self.put(self.d / "tasks" / "T1", "measure.json", {"premises": []})
-        self.put(self.d / "tasks" / "T1", "plan.json", {"gate": False, "digest": "x"})
-        self.assertIn("stage: 'write'", self.decide()["text"])
-
-    def test_a_blocked_task_stops_the_story_naming_it(self):
-        self.story()
-        self.put(self.d / "tasks" / "T1", "deliver-manifest.json", {"shape": "bug"})
-        self.put(self.d / "tasks" / "T1", "delivery.json", {"state": "blocked", "reason": "new red",
-                                                             "branch": {"name": "S-1-b"}})
+        self.put(self.d, "delivery.json", {"state": "blocked", "reason": "tasks not delivered: T2",
+                                           "branch": {"name": "S-1-b"}})
         out = self.decide()
         self.assertEqual((out["kind"], out["class"]), ("stop", "blocked"))
-        self.assertIn("T1", out["text"])
+        self.assertIn("T2", out["text"])
 
-    def test_every_task_delivered_asks_for_the_story_s_record_then_the_review(self):
+    def test_a_delivered_story_goes_to_the_review_once(self):
         self.story()
-        for t_ in ("T1", "T2"):
-            self.put(self.d / "tasks" / t_, "deliver-manifest.json", {"shape": "bug"})
-            self.put(self.d / "tasks" / t_, "delivery.json", {"state": "delivered", "branch": {"name": "S-1-b"}})
-        self.assertTrue(self.decide()["text"].startswith(f"deliver.py story --package {self.d}"))
         self.put(self.d, "delivery.json", {"state": "delivered", "branch": {"name": "S-1-b"},
                                            "tasks": {"T1": "delivered", "T2": "delivered"}})
+        self.put(self.d, "evidence.json", {})
         self.assertTrue(self.decide()["text"].startswith("review.py prepare --repo repo-x --branch S-1-b --item S-1"))
         self.put(self.r, "manifest.json", {})
         self.put(self.r, "verdict.json", {"verdict": "APPROVED"})
@@ -404,8 +436,6 @@ class TestAStoryAndAnEpicAreRouted(unittest.TestCase):
         self.run["shape"] = "epic"
         self.put(self.d, "deliver-manifest.json", {"shape": "epic", "deliverable": False})
         self.assertIn("stage: 'design'", self.decide()["text"])
-        self.put(self.d, "design.json", {"summary": "e", "tasks": [], "checked": [],
-                                         "stories": [{"title": "s1", "criteria": ["c"], "out_of_scope": "x"}]})
         self.put(self.d, "plan.json", {"gate": True, "digest": "d1"})
         self.assertEqual(self.decide()["class"], "plan")
         self.put(self.d, "approval.json", {"by": "x", "digest": "d1"})
@@ -716,6 +746,29 @@ class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
             rec = json.loads((pkg / "delivery-record.json").read_text()); rec["baseline"]["new_reds"] = ["t_new"]
             (pkg / "delivery-record.json").write_text(json.dumps(rec))
             self.assertEqual(review.initial_evidence(pkg)["suite"], "red_attributable")
+
+
+class TestASmallDeliverysSuiteIsNamedForWhatItWas(unittest.TestCase):
+    """A small delivery is checked by the test files it touched. Its record stands as the
+    review's suite on that head — and the sentence says the whole suite did not run, so
+    nobody reads one for the other."""
+
+    BASELINE = {"base_reds": [], "branch_reds": [], "new_reds": [], "vanished_reds": [],
+                "predicted": 4, "executed": 4}
+
+    def test_a_focused_run_is_green_and_says_it_was_focused(self):
+        import review
+        from i18n import t
+        state, reason = review.suite_from_record({"baseline": dict(self.BASELINE, scope="focused", base="not_needed")})
+        self.assertEqual(state, "green")
+        self.assertEqual(reason, t("review.suite_from_delivery_focused", executed=4))
+        whole = review.suite_from_record({"baseline": dict(self.BASELINE, scope="whole", base="not_needed")})
+        self.assertEqual(whole, ("green", t("review.suite_from_delivery", executed=4, reds=0)))
+
+    def test_a_new_red_in_a_focused_run_is_still_red(self):
+        import review
+        state, _ = review.suite_from_record({"baseline": dict(self.BASELINE, new_reds=["t_x"], scope="focused")})
+        self.assertEqual(state, "red_attributable")
 
 
 class TestTheVerifierReadsTheSeverityASecondTime(unittest.TestCase):

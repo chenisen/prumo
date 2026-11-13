@@ -209,10 +209,15 @@ def delivery_draft(repo_dir: pathlib.Path, profile: dict) -> dict:
     return {
         "branch_format": "{item}-{slug}",
         "commit_format": "{item} - {message}",
-        # a dedicated worktree per delivery: several agents, several items, one
-        # repository. What it needs outside git goes in `worktree_setup`.
-        "worktree": True,
+        # Every item is delivered in a worktree of its own — the default, which the
+        # draft does not repeat. What it needs outside git goes in `worktree_setup`.
         "budget": {"max_files": 4, "max_lines": 120},
+        # up to where a change is small here: checked by the test files it touched
+        "small": {"max_files": 3, "max_lines": 80},
+        # globs of what everything leans on: a change there runs the whole suite
+        "wide_paths": [],
+        # how a finished delivery is shown to a person; null: the tests are the evidence
+        "evidence": None,
         "source_roots": sources or ["<fill in>"],
         "test_roots": tests or ["<fill in>"],
         "mutation": {"command": None,

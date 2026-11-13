@@ -15,9 +15,11 @@ reads what the delivery and the review packages hold and answers with ONE thing:
 invocation that comes next, or the stop that ends the run. It composes nothing a step
 did not already hand over, and it decides nothing the disk does not show.
 
-The route is fixed: deliver (prepare · measure · write · conclude) → task-review
-(prepare · workflow · conclude) → stop. What the review decides ends the run. Nothing
-here merges, pushes, moves the item, or repairs a finding.
+The route is fixed: deliver (prepare · ONE workflow call · conclude) → task-review
+(prepare · workflow · conclude) → evidence, once, when the review approved → stop. A
+shape a person approves waits at its plan, between a measure (or a design) and the
+write. What the review decides ends the run. Nothing here merges, pushes, moves the
+item, or repairs a finding.
 """
 from __future__ import annotations
 
@@ -130,32 +132,40 @@ def decide(run: dict, root: pathlib.Path) -> dict:
         return invoke(f"deliver.py prepare --repo {repo} --item {item} --item-file {item_file}"
                       + (f" --shape {run['shape']}" if run.get("shape") else "")
                       + (f" --kind {run['kind']}" if run.get("kind") else ""))
+    man = read_json(pathlib.Path(d) / "deliver-manifest.json")
+    result = f"{d}/workflow-result.json"
     if _exists(d, "delivery.json"):
         rec = read_json(pathlib.Path(d) / "delivery.json")
         if rec.get("state") != "delivered":
             return stop(rec.get("state", "blocked"), rec.get("reason", "?"))
         branch = rec["branch"]["name"]
+    elif not man.get("gate"):
+        # No gate: measured, sized and written in ONE workflow call, checked once.
+        if not _exists(d, "workflow-result.json"):
+            return invoke(_stage(d, "deliver") + f" → {t('run.save_result', path=result)}")
+        return invoke(f"deliver.py conclude --package {d} --result {result}")
     elif not _exists(d, "measure.json"):
-        return invoke(f"Workflow({{name: '{_wf('deliver')}', args: <{d}/workflow-args.json + stage: 'measure'>}})")
+        if not _exists(d, "measure-result.json"):
+            return invoke(_stage(d, "measure") + f" → {t('run.save_result', path=f'{d}/measure-result.json')}")
+        return invoke(f"deliver.py plan --package {d} --measure {d}/measure-result.json")
     else:
         measure = read_json(pathlib.Path(d) / "measure.json")
         central_failed = any(p.get("central") and p.get("state") == "fails"
                              for p in measure.get("premises") or [])
-        # The plan is rendered from the measurement, and a shape that asks a gate
-        # waits here for a person's file — the route never writes it.
+        # The plan is rendered from the measurement, and the gate waits here for a
+        # person's file — the route never writes it.
         if not _exists(d, "plan.json"):
             return invoke(f"deliver.py plan --package {d} --measure {d}/measure.json")
         plan = read_json(pathlib.Path(d) / "plan.json")
-        if plan.get("gate") and not central_failed:
+        if not central_failed:
             ok = read_json(pathlib.Path(d) / "approval.json") if _exists(d, "approval.json") else {}
             if ok.get("digest") != plan.get("digest"):
                 return stop("plan", t("run.plan_stop", path=f"{d}/plan.md",
                                       command=f"/prumo:approve {d}"))
-        if not central_failed and not _exists(d, "written.json"):
-            return invoke(f"Workflow({{name: '{_wf('deliver')}', args: <{d}/workflow-args.json + stage: 'write', measure>}})")
-        return invoke(f"deliver.py conclude --package {d} --measure {d}/measure.json"
-                      + (f" --written {d}/written.json" if _exists(d, "written.json") else "")
-                      + (f" --refutation {d}/refutation.json" if _exists(d, "refutation.json") else ""))
+            if not _exists(d, "workflow-result.json"):
+                return invoke(_stage(d, "write") + f" → {t('run.save_result', path=result)}")
+        return invoke(f"deliver.py conclude --package {d}"
+                      + (f" --result {result}" if _exists(d, "workflow-result.json") else ""))
 
     # --- the review. The door out of an intervention is handed over, never taken: a
     # fix is a new delivery on the person's own ask, and the invocation is what the
@@ -163,6 +173,12 @@ def decide(run: dict, root: pathlib.Path) -> dict:
     if not _exists(r, "manifest.json") or _review_read_another_head(r, rec):
         return invoke(f"review.py prepare --repo {repo} --branch {branch} --item {item} --item-file {item_file} --delivery {d}")
     return _review_step(run, r, repo, stop, invoke)
+
+
+def _stage(d: str, stage: str) -> str:
+    """One stage of the deliver workflow, over the object `prepare` (and `plan`) wrote:
+    pasted with the stage's name, nothing composed."""
+    return f"Workflow({{name: '{_wf('deliver')}', args: <{d}/workflow-args.json + stage: '{stage}'>}})"
 
 
 def _review_read_another_head(r: str, rec: dict) -> bool:
@@ -174,15 +190,15 @@ def _review_read_another_head(r: str, rec: dict) -> bool:
 
 
 def decide_decomposed(run: dict, root: pathlib.Path, d: str, man: dict, invoke, stop) -> dict:
-    """A story: design → plan → a person's approval → each task as a child delivery, in
-    the design's order, on the story's branch → the story's record → the review. An
-    epic: design → plan → stop, with the stories for a person to open."""
+    """A story: design → plan → a person's approval → its tasks written one after another
+    in ONE workflow call, each committed by its writer → one conclude over the whole
+    branch → the review, once. An epic: design → plan → stop, with the stories for a
+    person to open."""
     repo, item = run["repo"], run["item"]
-    if not _exists(d, "design.json"):
-        if not _exists(d, "plan.json"):
-            return invoke(f"Workflow({{name: '{_wf('deliver')}', args: <{d}/workflow-args.json + stage: 'design'>}})")
     if not _exists(d, "plan.json"):
-        return invoke(f"deliver.py plan --package {d} --design {d}/design.json")
+        if not _exists(d, "design-result.json"):
+            return invoke(_stage(d, "design") + f" → {t('run.save_result', path=f'{d}/design-result.json')}")
+        return invoke(f"deliver.py plan --package {d} --design {d}/design-result.json")
     plan = read_json(pathlib.Path(d) / "plan.json")
     if plan.get("gate"):
         ok = read_json(pathlib.Path(d) / "approval.json") if _exists(d, "approval.json") else {}
@@ -190,28 +206,16 @@ def decide_decomposed(run: dict, root: pathlib.Path, d: str, man: dict, invoke, 
             return stop("plan", t("run.plan_stop", path=f"{d}/plan.md", command=f"/prumo:approve {d}"))
     if man.get("shape") == "epic" or not man.get("deliverable", True):
         return stop("decomposed", t("deliver.cli.decomposed", shape=man["shape"]) + f" — {d}/plan.md")
-    design = read_json(pathlib.Path(d) / "design.json")
-    tasks = design.get("tasks") or []
-    for x in tasks:
-        # a task's package lives under the story's, by construction — nothing to bind
-        tp = str(pathlib.Path(d) / "tasks" / x["id"])
-        if not _exists(tp, "deliver-manifest.json"):
-            return invoke(f"deliver.py prepare --repo {repo} --story {d} --task {x['id']} --package {tp}")
-        if _exists(tp, "delivery.json"):
-            rec = read_json(pathlib.Path(tp) / "delivery.json")
-            if rec.get("state") == "delivered":
-                continue
-            return stop(rec.get("state", "blocked"), f"{x['id']}: {rec.get('reason', '?')}")
-        child = dict(run, deliver_package=tp, item=f"{item}-{x['id']}")
-        return decide(child, root)
-    # every task delivered: the story's own record, then the review of the branch
-    if not _exists(d, "delivery.json") or read_json(pathlib.Path(d) / "delivery.json").get("tasks") is None:
-        return invoke(f"deliver.py story --package {d}")
+    result = f"{d}/workflow-result.json"
+    if not _exists(d, "delivery.json"):
+        if not _exists(d, "workflow-result.json"):
+            return invoke(_stage(d, "tasks") + f" → {t('run.save_result', path=result)}")
+        return invoke(f"deliver.py conclude --package {d} --result {result}")
     rec = read_json(pathlib.Path(d) / "delivery.json")
     if rec.get("state") != "delivered":
         return stop(rec.get("state", "blocked"), rec.get("reason", "?"))
     r = run.get("review_package")
-    if not _exists(r, "manifest.json"):
+    if not _exists(r, "manifest.json") or _review_read_another_head(r, rec):
         return invoke(f"review.py prepare --repo {repo} --branch {rec['branch']['name']} --item {item} --item-file {root / 'item.md'} --delivery {d}")
     return _review_step(run, r, repo, stop, invoke)
 
@@ -225,13 +229,28 @@ def _worktree_standing(d: str | None) -> bool:
     return bool(man.get("in_worktree")) and pathlib.Path(man.get("workdir") or "/nonexistent").exists()
 
 
+def _tree_standing(d: str | None) -> bool:
+    """The tree the delivery was written in is still there to be shown from."""
+    man = read_json(pathlib.Path(d) / "deliver-manifest.json") if _exists(d, "deliver-manifest.json") else {}
+    return bool(man.get("workdir")) and pathlib.Path(man["workdir"]).exists()
+
+
 def _review_step(run: dict, r: str, repo: str, stop, invoke) -> dict:
     if _exists(r, "verdict.json"):
         d = run.get("deliver_package")
-        if _worktree_standing(d):
-            return invoke(f"deliver.py release --package {d}")
         v = read_json(pathlib.Path(r) / "verdict.json")
         verdict = v.get("verdict")
+        # The evidence, ONCE, after the whole item is delivered and approved, while the
+        # worktree still stands: it illustrates what was done and decides nothing.
+        if verdict == "APPROVED" and _exists(d, "delivery.json") and not _exists(d, "evidence.json"):
+            declared = (read_json(pathlib.Path(d) / "deliver-manifest.json").get("delivery") or {}).get("evidence")
+            collected = f"{d}/evidence-result.json"
+            if declared and _tree_standing(d) and not _exists(d, "evidence-result.json"):
+                return invoke(_stage(d, "evidence") + f" → {t('run.save_result', path=collected)}")
+            return invoke(f"deliver.py evidence --package {d}"
+                          + (f" --collected {collected}" if _exists(d, "evidence-result.json") else ""))
+        if _worktree_standing(d):
+            return invoke(f"deliver.py release --package {d}")
         if verdict == "APPROVED":
             return stop("approved", str(verdict))
         fact = str(verdict)

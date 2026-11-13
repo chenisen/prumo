@@ -127,7 +127,7 @@ properties:
       command handed back — never a default. Nothing here names a stack: the suite is
       `checks.suite`, the base is `base.branch`.
     additionalProperties: false
-    required: [branch_format, commit_format, worktree, budget, source_roots, test_roots, mutation, kinds]
+    required: [branch_format, commit_format, budget, source_roots, test_roots, mutation, kinds]
     properties:
       branch_format:
         type: string
@@ -139,7 +139,11 @@ properties:
         description: "the repository's commit convention; `{item}` and `{message}` are filled in"
       worktree:
         type: boolean
-        description: deliver in an isolated worktree inside the repository, never in the checkout
+        description: >
+          Every item is delivered in a worktree of its own inside the repository — the
+          person's checkout is never touched, and several items are delivered at once.
+          That is the default, and `true` only says it again. `false` is the opt-out of a
+          repository whose suite cannot reach a worktree, and each prepare says so.
       worktree_setup:
         type: array
         items: {type: string, minLength: 1}
@@ -170,6 +174,47 @@ properties:
           max_files: {type: integer, minimum: 1}
           max_lines: {type: integer, minimum: 1}
         description: over it the run stops and proposes the split; `waiver` lifts it, with a name and an expiry
+      small:
+        type: object
+        additionalProperties: false
+        properties:
+          max_files: {type: integer, minimum: 1}
+          max_lines: {type: integer, minimum: 1}
+        description: >
+          Up to where a delivery is SMALL in this repository (3 files and 80 lines when
+          absent). A small delivery on a shape with no gate is checked by the test files
+          it touched, with no sceptic; anything larger runs the whole suite, once.
+      wide_paths:
+        type: array
+        items: {type: string, minLength: 1}
+        description: >
+          Globs of what everything else leans on — a shared kernel, a base class, a
+          build or dependency manifest, a schema migration. A change that touches one is
+          never small, however few lines it has: it runs the whole suite.
+      evidence:
+        type: [object, "null"]
+        additionalProperties: false
+        required: [how]
+        properties:
+          how:
+            type: string
+            minLength: 1
+            description: >
+              how a change is SHOWN to a person in this repository — a screen captured, an
+              exchange recorded, a command's output kept — in the words of whoever does it
+          setup:
+            type: array
+            items: {type: string, minLength: 1}
+            description: what raises the environment the showing needs; run by the collector, at that stage only
+          teardown:
+            type: array
+            items: {type: string, minLength: 1}
+            description: what takes that environment down again
+        description: >
+          How a finished delivery is illustrated. Read ONCE per item, after its last task
+          is delivered, by the `evidence` stage — never while the work is being written,
+          and nothing it finds changes the delivery's state. Absent, the tests are the
+          evidence and nothing is raised.
       source_roots:
         type: array
         minItems: 1
@@ -292,8 +337,17 @@ $defs:
         type: [string, "null"]
         description: >
           The suite over named test files only, with `{tests}` where the paths go (each
-          quoted). A behaviour change's red on the base runs only the test files the
-          delivery changed; absent, the whole suite runs again.
+          quoted). It is what the writer runs while it works, what a small delivery is
+          checked by, and what the proof — the red on the base, a mutant — runs over.
+          Absent, the whole suite runs in each of those places, and a small item pays
+          for the largest.
+      test_files:
+        type: array
+        items: {type: string, minLength: 1}
+        description: >
+          Globs naming what a test FILE is called in this repository, among everything
+          under `delivery.test_roots`. A fixture or a helper changed beside the tests is
+          not handed to the runner. Absent, every changed file under a test root is.
       timeout_seconds:
         type: [integer, "null"]
         minimum: 1

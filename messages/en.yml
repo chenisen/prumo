@@ -86,11 +86,14 @@ owner:
   source_assistant: the assistant itself
 deliver:
   blocked:
+    writer_blocked: 'the writer stopped — {reason}'
+    tasks_pending: 'tasks not delivered: {tasks}'
+    base_not_measured: 'the branch has reds and the base could not be measured — {reason}'
     baseline_not_assessable: 'no `red_name_pattern` in the profile — the baseline cannot be compared by name'
     budget_exceeded: '{files} files and {lines} lines; the profile allows {max_files} and {max_lines} — split the item or waive it'
     lint_red: 'the profile''s lint check is red — {reason}'
     mutation_too_wide: 'the mutation at {file}:{line} also turned `{test}` red — it is wider than the guard'
-    no_red_on_base: 'no test went red on the base — a behaviour change without a red before the green is not proven'
+    no_red_on_base: 'a behaviour change with no test of its own — nothing could go red before the green'
     mutation_survived: 'the mutation at {file}:{line} left the suite green — the test does not prove the guard'
     new_red: 'new red by name: {names}'
     no_guarding_tests: 'no test guards the behaviour this refactor preserves — write the guard first, as a coverage-gap'
@@ -102,8 +105,11 @@ deliver:
     suite_incomplete: 'the suite ran {executed} of {predicted} — not green'
     progress_not_declared: 'the suite ran, but nothing counted it. The profile names no `checks.suite.progress_pattern`.'
     suite_not_run: 'the suite did not run: {reason}'
-    test_not_red_on_base: '`{test}` was not red on the base — no proof'
+    test_not_red_on_base: 'nothing went red on the base under `{test}` — the test passes without the change'
   cli:
+    no_worktree: 'profile `{repo}` opts out of the worktree — this delivery is cut in the checkout itself'
+    evidence_needs_delivered: '{path} holds no delivered record — evidence illustrates a delivery that is done'
+    evidence_is_the_tests: 'the profile declares no `delivery.evidence` — the tests above are the evidence'
     approval_needs_name: 'an approval needs a name — pass --by, or set TASK_REVIEW_RESPONSAVEL'
     approved: 'plan approved by {by}: {path}'
     plan_at: 'plan: {path} ({shape}, {depth}{gate})'
@@ -113,13 +119,6 @@ deliver:
     kind_not_for_shape: 'kind `{kind}` does not deliver a {shape} — allowed: {kinds}'
     hotfix_base_missing: 'the profile declares no `delivery.hotfix_base` — a hotfix has no branch to be cut from'
     decomposed: 'an {shape} is decomposed, never delivered — the plan holds its stories, for a person to open'
-    story_task_missing: 'task `{task}` is not in the design at {path}'
-    story_tasks_pending: '{done} of {total} tasks delivered — next: {task}'
-    story_budget: 'the story''s tasks spent {lines} lines over {files} files; the shape allows {max_lines} and {max_files}'
-    story_budget_waived: 'the story''s tasks spent {lines} lines over {files} files. The shape allows {max_lines} and {max_files}. Waived by {approver} until {expires}.'
-    story_no_task_at_head: 'no delivered task of the story is at the branch head {head}. The suite was not measured on it. Re-conclude the last task.'
-    story_suite_at_head: 'suite at the head, from task {task}: {executed}/{predicted} executed · {reds} red on the base · {new} new red(s)'
-    baseline: 'baseline: {reds} red by name · {executed}/{predicted} executed'
     branch_at: 'branch `{branch}` at {path}, cut from {base}'
     delivery_block_draft: 'a `delivery:` draft for `{repo}` — paste it into the profile and confirm it:'
     fix_item: 'Fix the routes the review opened on {item}'
@@ -131,7 +130,7 @@ deliver:
     mutation_file_missing: '{file} is not in the tree'
     mutation_text_missing: '{file}:{line} does not contain `{text}`'
     mutation_dropped_behaviour_change: 'dropped: the mutant at {file}:{line} for {test}. A behaviour change replaces the lines a mutant points at. Its proof is red on the base, green after.'
-    then_conclude: 'Then: deliver.py conclude --package {path} --measure <file> --written <file>'
+    then_conclude: 'Then: deliver.py conclude --package {path} --result <the file the workflow''s return was saved to>'
     tree_dirty: '{path} has pending changes — somebody''s work in progress; commit or stash it first'
     worktree_exists: '{path} already exists — a branch of that name is under way'
     branch_exists: '`{branch}` already exists in {path} — a worktree never resets a branch; pass --branch, or delete it first'
@@ -150,6 +149,10 @@ deliver:
     person: person
     profile: profile owner
   report:
+    evidence: EVIDENCE
+    commits: COMMITS
+    shown: SHOWN
+    size: SIZE
     plan: PLAN
     shape: SHAPE
     gate_open: approved by {by}
@@ -166,7 +169,6 @@ deliver:
     measured: MEASURED
   record:
     measured_note: "what the writer declared before the script ran. The script's runs are under `measured`, and decide"
-    story_measured_note: "the story's suite is task {task}'s run at the branch head, re-read against the story's base. Each task's red-on-base run travels beside it."
   state:
     blocked: BLOCKED
     delivered: DELIVERED
@@ -458,6 +460,7 @@ review:
   help_delivery: 'the package of the delivery that produced this branch: its record is evidence for the suite and the criteria'
   help_criteria: 'the reviewers'' reading of each criterion, with its record (JSON list of {{id, state, record}})'
   suite_from_delivery: 'measured by the delivery on this very head: {executed} executed, {reds} red on the base, none new by name'
+  suite_from_delivery_focused: 'measured by the delivery on this very head, over the test files the change touched: {executed} executed, none new by name. A small change — the whole suite did not run'
   suite_from_delivery_red: 'measured by the delivery on this very head: new red by name — {names}'
   help_coverage: what each reviewer looked at and how many never answered (JSON). Optional, but without it a slice nobody read goes unnoticed
   act_approve: 3. Approve the {proposal}

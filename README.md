@@ -6,7 +6,8 @@
 Reviews a **whole delivery** as one package — the item that asked for it, the context it
 was built in, and the code it produced — and closes with a two-valued verdict:
 **APPROVED** or **INTERVENTION REQUIRED**. And, since 2.0, **delivers** one item as the
-smallest change that pays for it, proved by mutation, and hands the branch to that review.
+smallest change that pays for it — written and run by an agent in the item's own
+worktree, checked once by its size — and hands the branch to that review.
 
 There is one question only:
 
@@ -47,8 +48,8 @@ what is judgement.
 
 | | |
 |---|---|
-| **23 Python scripts** | Resolve the base, assemble the package, triage the risk, judge; cut the branch, prove by mutation, hand over. No dependency beyond `yaml` and `jsonschema`. Both judges are pure functions: same input, same answer. |
-| **14 agents** | One question each. Ten read-only for the review — seven reviewers of one axis, a criteria extractor, a manual-verification planner, and a **sceptical verifier** that tries to *refute* every finding without having seen the reasoning behind it. Four for the delivery — a surveyor that measures, a writer with no shell, a **sceptic** that never saw the writer, and a planner that cuts a story into tasks. |
+| **23 Python scripts** | Resolve the base, assemble the package, triage the risk, judge; cut the worktree, check what landed once, hand over. No dependency beyond `yaml` and `jsonschema`. Both judges are pure functions: same input, same answer. |
+| **15 agents** | One question each. Ten read-only for the review — seven reviewers of one axis, a criteria extractor, a manual-verification planner, and a **sceptical verifier** that tries to *refute* every finding without having seen the reasoning behind it. Five for the delivery — a surveyor that measures, a **writer with a shell** that edits the code and runs the tests it touches, a sceptic that never saw the writer, a planner that cuts a story into tasks, and a collector that shows a finished delivery. |
 | **3 knowledge skills** | What the reviewers load to read a diff: five axes, OWASP/ASVS, personal data. Neutral of language, framework and project. |
 | **18 risk classes** | A guardrail has three states — `fired`, `did_not_fire`, `not_assessable`. |
 | **2 message catalogues** | 484 keys each. Everything a person reads, in the configured language. |
@@ -83,8 +84,8 @@ prumo/
 │   ├── judge.py                 F7 — pure function: gates, routes, verdict
 │   ├── render.py                F9 — report and comments
 │   ├── review.py                the two entry points: `prepare` and `conclude`
-│   ├── shape.py                 the six shapes: plan depth, gate, kinds, budget, review effort
-│   ├── deliver.py               the delivery: cut the branch, plan, prove by mutation, judge, hand over
+│   ├── shape.py                 the six shapes — plan depth, gate, kinds, budget — and the size of what was touched
+│   ├── deliver.py               the delivery: cut the worktree, plan, check once by size, judge, hand over, evidence
 │   ├── run.py                   the route: every next step read from disk, every stop classed
 │   ├── branch_guard.py          the hook's judge: nothing lands directly on a protected branch
 │   ├── delta.py, closure.py     the loops: re-judgement and item resolutions
@@ -102,7 +103,7 @@ prumo/
 │                                a writer with no shell, a sceptic, a planner
 ├── skills/
 │   ├── task-review/SKILL.md     what Claude Code loads as `/prumo:task-review`
-│   ├── deliver/SKILL.md         the delivery's eleven rules and its sequence
+│   ├── deliver/SKILL.md         the delivery's twelve rules and its sequence
 │   ├── run/SKILL.md             the route, closed to the model
 │   ├── approve/SKILL.md         a person's approval of a plan, closed to the model
 │   ├── five-axis-review/        correctness, readability, architecture, security, performance
@@ -111,10 +112,10 @@ prumo/
 │
 ├── workflows/
 │   ├── task-review.js           the reviewer fan-out, the verifier, the manual plan
-│   └── deliver.js               measure; then write and refute — two stages, one file
+│   └── deliver.js               measure, write and run in one call; a story's tasks; the evidence, last
 ├── hooks/
 │   ├── review-guard.sh          blocks merge (unless delegated) and landing on a protected branch always; push/commit while a review runs;
-│                                inside a running delivery's worktree: push, `add -A`, the base, writes outside its named files
+│                                inside a running delivery's worktree: push, `add -A`, the base, writes outside its roots or named files
 │   └── hooks.json               registers the hook — you edit no settings.json
 │
 ├── messages/{en,pt-BR}.yml      every user-facing string
@@ -477,7 +478,7 @@ its own skill, its own record and its own tests — never a flag on an existing 
 | Capability | Question | Entry | Ends with |
 |---|---|---|---|
 | **task-review** | is what the item asked for delivered in this proposal? | `/prumo:task-review <item url>` | APPROVED or INTERVENTION REQUIRED |
-| **deliver** | what is the smallest change that delivers this item, and what proves it? | `deliver.py prepare` → `Workflow deliver` (measure, write) → `deliver.py conclude` | `delivered`, `blocked` or `unsupported`, and the `task-review` invocation ready to paste |
+| **deliver** | what is the smallest change that delivers this item, and what proves it? | `deliver.py prepare` → `Workflow deliver` (one call) → `deliver.py conclude` | `delivered`, `blocked` or `unsupported`, and the `task-review` invocation ready to paste |
 | **run** | carry this item end to end, on my own words, and stop where only I decide | `/prumo:run --ask-file ASK.md …` — closed to the model | the review's verdict, or a stop with its class |
 
 **The shape decides the depth.** An item is a `debt`, a `bug`, a `hotfix`, a `refactor`,
@@ -488,12 +489,40 @@ hard the review reads it (`reference/shapes.md`). The plan is a file, rendered f
 the measurement; the approval is a file, written by `/prumo:approve`, closed to the
 model; the guard refuses every write while a required approval is missing.
 
-**A story is cut, then delivered task by task; an epic is cut and stops.** The
-`task-planner` returns the tasks — files, falsifiable criteria, proving tests, what each
-builds on — the person approves the plan, and each task is a delivery of its own on the
-story's branch, its base the branch's head; the story's record sums them inside the
-shape's budget and the branch is reviewed once. An epic's plan holds the stories it
-decomposes into, for a person to open; nothing is delivered from it.
+**The agents execute.** The writer has a shell. It edits the code itself, writes the
+test and sees it red, writes the code and sees it green, runs the lint — over the test
+files it touches, with the commands the profile declares, in the item's own worktree.
+An item nobody has to approve is measured and written in **one** workflow call, between
+one `prepare` and one `conclude`. Until 3.0 the writer wrote blind and a script ran the
+whole suite after it: six of the first story's thirteen tasks were written twice, and
+the conductor filled the gaps with throwaway scripts.
+
+**The size decides what is paid.** The shape says what was asked; the size — `small`,
+`standard`, `large`, computed from the diff, the profile's `delivery.small` and its
+`delivery.wide_paths` — says how much was touched. A small change is checked by the test
+files it touched and read by no sceptic. Anything larger runs the whole suite, **once**.
+The base is never measured up front: a green branch owes no baseline, and a red one is
+compared by name against a base measured then, or reused from a package that measured
+the same tree. Measured on the first front-end delivery: three whole suites of twenty
+minutes, and a base timed out twice, for a change of two files and sixteen lines.
+
+**A story is cut, written task by task in one call, and checked once; an epic is cut and
+stops.** The `task-planner` returns the tasks — files, falsifiable criteria, proving
+tests, what each builds on — and the person approves the plan. One workflow call then
+writes them in order: each task has one writer, which reads the tasks before it, sees
+its tests green and commits its own task. Nothing is measured, proven or reported per
+task; one `conclude` checks the whole branch inside the shape's budget, and the branch
+is reviewed once. An epic's plan holds the stories it decomposes into, for a person to
+open; nothing is delivered from it.
+
+**Evidence comes last, and decides nothing.** The tests the change wrote and the checks
+`conclude` ran are what hold the quality. Showing the change to a person — an
+environment raised, a screen captured, an exchange recorded — happens once per item,
+after its last task is delivered and, on the `run` route, after the review approved:
+the `evidence-collector` follows the profile's `delivery.evidence`, raises the
+environment once, takes one capture per acceptance criterion and takes it down. What it
+could not show is written with the reason. A profile that declares nothing raises
+nothing: the tests are the evidence.
 
 **A branch the prumo delivered carries its proof into its review.** The delivery's
 record — mutations by hand with what went red and what stayed green, the suite by name
@@ -502,8 +531,8 @@ suite it measured stands as evidence, and the reviewers read each criterion of t
 against it, returning a record that states the fact. Measured on the second real run:
 without it, five criteria the delivery had already proven came back as "verify by hand".
 
-**A delivery is written beside the checkout, never in it.** With `delivery.worktree: true`
-— what `derive_profile.py` drafts, and what the author turns off only by saying so — the
+**Every item is delivered in a worktree of its own, never in the checkout.** That is the
+default — a profile opts out only by saying `worktree: false`, in words — and the
 branch is cut in `.worktrees/<branch>` inside the repository, and the person's checkout
 keeps its branch and its pending work. Each delivery has its own marker
 (`.claude/.prumo-deliver-ativo.d/<package>.json`), and the hook judges a write or a git
@@ -516,20 +545,21 @@ suite that runs somewhere else — a container, a runner — reaches the worktre
 `{workdir}` in the check's command, translated by `delivery.path_map`; the allowlist
 judges the template, and the substitution comes after. `deliver.py release --package P`
 removes the worktree and keeps the branch, and the `run` route does that by itself once
-the verdict is in — a blocked tree stays, for a person to read. Measured on the third real run: the suite ran
+the verdict is in and the evidence is written — a blocked tree stays, for a person to read. Measured on the third real run: the suite ran
 over the worktree inside the container, every test executed, the same reds by name as
 the base, and the checkout never moved.
 
 **Who writes does not approve.** `deliver` ends where `task-review` begins, and the two
-never share a context. The writer has no shell; the suite, the mutation and the baseline
-are run by a script through the profile's allowlist; a sceptic that never saw the writer
-reads the proof; and the judge is a pure function over the record.
+never share a context. The writer runs the tests it touches and nothing else; what
+landed is checked once by a script through the profile's allowlist; a sceptic that
+never saw the writer reads the proof of an item of some size; and the judge is a pure
+function over the record.
 
 **Delivery kinds are closed recipes.** `reference/delivery-kinds.md` holds them:
 `coverage-gap` — a guard with no test, proved by a mutation the script makes by hand and
-reverts, with the tests the item says must stay green checked beside it — and
-`behaviour-change` — the code does the wrong thing, proved red on the base's files and
-green on the writer's — and `refactor` — the shape changes and the behaviour does not,
+reverts, over the test files the change touched, with the tests the item says must stay
+green checked beside it — and `behaviour-change` — the code does the wrong thing, proved
+red on the base's files and green on the writer's, the changed test files only — and `refactor` — the shape changes and the behaviour does not,
 proved by the existing tests that guard it staying green, and refused outright when none
 stands guard. An `author_fix` route a review opened is a `behaviour-change`
 delivered with `--fix`, on the reviewed branch, against its head. A kind the profile
@@ -564,9 +594,10 @@ And per capability:
   proposal; landing is a person's act, through the forge.
 - **task-review** writes nothing into the repository under review, and never fixes — the
   author fixes.
-- **deliver** writes only inside the files the measurement named, on a branch cut from
-  the base, and never judges its own work: its end is the review's beginning. A blocked
-  tree is left as it is, for a person to read.
+- **deliver** writes only inside the item's own worktree, on a branch cut from the base,
+  runs the whole suite at most once per item, raises nothing to show a change before the
+  item is done, and never judges its own work: its end is the review's beginning. A
+  blocked tree is left as it is, for a person to read.
 - **run** never decides what comes next, never repairs a finding, and never starts on an
   inference.
 

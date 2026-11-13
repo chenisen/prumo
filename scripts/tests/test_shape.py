@@ -4,7 +4,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
-from shape import SHAPES, resolve, budget_for, UnknownShape
+from shape import SHAPES, resolve, budget_for, UnknownShape, size_of, small_limits
 from providers import test_config, InvalidConfiguration
 
 
@@ -68,3 +68,43 @@ class TestTheMappingLivesInTheConfiguration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheSizeIsWhatWasTouched(unittest.TestCase):
+    """The shape says what was asked; the size says how much was touched, and it is the
+    size that decides what a delivery pays: the test files it touched, or the whole
+    suite; a sceptic, or none. A two-file fix once paid three whole suites."""
+
+    BLOCK = {"wide_paths": ["src/kernel/**", "*.lock"]}
+
+    def test_a_handful_of_files_on_a_shape_with_no_gate_is_small(self):
+        for shape in ("debt", "bug"):
+            self.assertEqual(size_of(shape, ["src/a.x", "tests/a.x"], 16, self.BLOCK)["size"], "small", shape)
+
+    def test_before_anything_is_written_the_files_alone_decide(self):
+        self.assertEqual(size_of("bug", ["src/a.x"], None, {})["size"], "small")
+
+    def test_past_either_limit_it_is_standard(self):
+        self.assertEqual(size_of("bug", ["a", "b", "c", "d"], 10, {})["size"], "standard")
+        self.assertEqual(size_of("bug", ["a"], 81, {})["size"], "standard")
+
+    def test_the_limits_are_the_profile_s(self):
+        self.assertEqual(small_limits({}), {"max_files": 3, "max_lines": 80})
+        block = {"small": {"max_files": 6, "max_lines": 200}}
+        self.assertEqual(size_of("bug", ["a", "b", "c", "d"], 150, block)["size"], "small")
+
+    def test_a_wide_path_is_never_small_however_few_its_lines(self):
+        out = size_of("bug", ["src/kernel/base.x"], 1, self.BLOCK)
+        self.assertEqual(out["size"], "standard")
+        self.assertIn("src/kernel/base.x", out["reason"])
+        self.assertEqual(size_of("debt", ["deps.lock"], 1, self.BLOCK)["size"], "standard")
+
+    def test_a_shape_a_person_approves_is_never_small_and_a_story_is_large(self):
+        self.assertEqual(size_of("hotfix", ["a"], 1, {})["size"], "standard")
+        self.assertEqual(size_of("refactor", ["a"], 1, {})["size"], "standard")
+        self.assertEqual(size_of("story", ["a"], 1, {})["size"], "large")
+
+    def test_same_change_same_size(self):
+        answers = {size_of("bug", ["a", "b"], 30, self.BLOCK)["size"] for _ in range(50)}
+        self.assertEqual(answers, {"small"})
+

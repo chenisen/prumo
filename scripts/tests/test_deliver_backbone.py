@@ -206,19 +206,55 @@ class Fixture(unittest.TestCase):
             code = deliver.conclude(args)
         return code, json.loads((package / "delivery.json").read_text(encoding="utf-8"))
 
+    def conclude_result(self, package, result):
+        """The way the route concludes: one file, the workflow's whole return."""
+        (package / "workflow-result.json").write_text(json.dumps(result), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = deliver.conclude(argparse.Namespace(package=str(package),
+                                                       result=str(package / "workflow-result.json")))
+        return code, json.loads((package / "delivery.json").read_text(encoding="utf-8"))
+
+    def profile_with(self, **changes):
+        """The profile, with `checks.suite` or `delivery` keys changed for one test."""
+        import yaml
+        data = json.loads(json.dumps(PROFILE))
+        for key, value in changes.items():
+            section, _, name = key.partition("__")
+            target = data["checks"]["suite"] if section == "suite" else data["delivery"]
+            if value is None:
+                target.pop(name, None)
+            else:
+                target[name] = value
+        (self.root / "profiles" / "repo-x.yml").write_text(yaml.safe_dump(data), encoding="utf-8")
+
+    def tree_of(self, package):
+        return pathlib.Path(json.loads((package / "deliver-manifest.json")
+                                       .read_text(encoding="utf-8"))["workdir"])
+
 
 
 class Spine(Fixture):
-    def test_prepare_cuts_the_branch_reads_the_baseline_and_marks(self):
+    def test_prepare_cuts_the_branch_runs_no_suite_and_marks(self):
+        """The base used to be measured here — a whole suite before a line was written.
+        Now prepare cuts and marks; the base is measured by `conclude`, and only when
+        the branch turns something red."""
         package = self.prepare()
         man = json.loads((package / "deliver-manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(man["branch"]["name"], "ITEM-1-prove-the-refusal-above-ten")
-        self.assertEqual(man["baseline"], {"base_reds": [], "predicted": 1, "executed": 1})
+        self.assertNotIn("baseline", man)
+        self.assertEqual(list(package.glob("run-suite-*.txt")), [])
         head = subprocess.run(("git", "branch", "--show-current"), cwd=self.repo,
                               capture_output=True, text=True).stdout.strip()
         self.assertEqual(head, man["branch"]["name"])
         self.assertTrue(deliver.markers())
-        self.assertEqual(json.loads(deliver.markers()[0].read_text())["worktree"], str(self.repo))
+        mark = json.loads(deliver.markers()[0].read_text())
+        self.assertEqual(mark["worktree"], str(self.repo))
+        self.assertEqual(mark["roots"], ["tests"], "a coverage gap may write tests, and nothing else")
+        args = json.loads((package / "workflow-args.json").read_text(encoding="utf-8"))
+        self.assertEqual(args["small"], {"max_files": 3, "max_lines": 80})
+        self.assertEqual(args["commands"]["lint"], "python3 lint.py")
+        self.assertIsNone(args["commands"]["tests"], "no files_command declared: the writer runs no test")
+        self.assertFalse(args["gate"])
 
     def test_a_dirty_tree_is_a_stop(self):
         (self.repo / "src" / "a.py").write_text(SOURCE + "# pending\n", encoding="utf-8")
@@ -279,10 +315,10 @@ class Spine(Fixture):
         self.assertTrue((self.root / "reports" / "repo-x" / "ITEM-1-deliver").is_dir())
 
     def test_the_record_names_every_run_the_script_made_beside_what_the_writer_declared(self):
-        """The writer has no shell and says so in `skipped`; the script runs the suite, the
-        lint and the mutants afterwards. A reviewer once read the two side by side as a
-        contradiction and blocked a sound delivery, so the record names each run as a
-        file, and says in words which of the two decides."""
+        """What the writer declared travels beside what the script ran. A reviewer once
+        read the two side by side as a contradiction and blocked a sound delivery, so
+        the record names each run as a file, and says in words which of the two decides.
+        The branch came out green, so no base was measured."""
         package = self.prepare()
         code, rec = self.conclude(package, PROVING_TEST)
         self.assertEqual(code, 0, rec)
@@ -291,7 +327,10 @@ class Spine(Fixture):
         self.assertEqual(rec["proof"]["mutations"][0]["reds"], ["test_guard_refuses"])
         self.assertEqual(rec["lint"]["run"], "run-lint.txt")
         self.assertEqual(rec["measured"]["suite"], "run-suite-branch.txt")
-        self.assertEqual(rec["measured"]["base"], "run-suite-base.txt")
+        self.assertIsNone(rec["measured"]["base"])
+        self.assertEqual((rec["baseline"]["base"], rec["baseline"]["scope"]), ("not_needed", "whole"))
+        self.assertFalse((package / "run-suite-base.txt").exists())
+        self.assertEqual(rec["size"]["size"], "small")
         self.assertEqual(rec["measured"]["lint"], "run-lint.txt")
         self.assertEqual(rec["measured"]["mutations"], ["run-suite-mutation-1.txt"])
         self.assertIn("measured", rec["measured"]["note"])
@@ -542,16 +581,10 @@ class Spine(Fixture):
         self.assertIn("story  refuse ten", text); self.assertIn("not: eight", text)
         self.assertTrue(json.loads((package / "plan.json").read_text())["gate"])
 
-    def test_a_story_is_delivered_task_by_task_on_one_branch_and_judged_as_a_whole(self):
-        """Two tasks, the second building on the first: each is a child delivery with
-        its own measure, proof and commit on the story's branch, its base the branch's
-        head; the story's record sums them inside the shape's budget."""
-        import contextlib, io
+    def story(self):
         (self.repo / "src" / "a.py").write_text(BUGGY, encoding="utf-8")
         git(self.repo, "add", "-A"); git(self.repo, "commit", "-q", "-m", "buggy base")
         story = self.prepare(kind="behaviour-change", shape="story")
-        man = json.loads((story / "deliver-manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual(man["budget"], {"max_files": 6, "max_lines": 180})
         design = {"summary": "a limit, then the guard uses it", "stories": [], "checked": [],
                   "tasks": [{"id": "T1", "title": "a limit module", "criteria": ["limit() is 10"],
                              "files": ["src/b.py", "tests/test_b.py"], "proving_tests": ["test_limit_is_ten"],
@@ -559,134 +592,86 @@ class Spine(Fixture):
                             {"id": "T2", "title": "the guard refuses the limit", "criteria": ["ten is refused"],
                              "files": ["src/a.py", "tests/test_guard.py"], "proving_tests": ["test_guard_refuses"],
                              "depends_on": ["T1"]}]}
-        (story / "design.in").write_text(json.dumps(design), encoding="utf-8")
+        (story / "design.in").write_text(json.dumps({"stage": "design", "design": design}), encoding="utf-8")
         with contextlib.redirect_stdout(io.StringIO()):
             deliver.plan(argparse.Namespace(package=str(story), measure=None, design=str(story / "design.in")))
             deliver.approve(argparse.Namespace(package=str(story), by="someone"))
-        branch = man["branch"]["name"]
+        return story
 
-        def child(task_id, writes, measure):
-            pkg = story / "tasks" / task_id
-            with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(deliver.prepare(argparse.Namespace(
-                    repo="repo-x", item=None, item_file=None, kind=None, branch=None, package=str(pkg),
-                    fix=None, shape=None, type=None, story=str(story), task=task_id)), 0)
-            cm = json.loads((pkg / "deliver-manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual((cm["shape"], cm["branch"]["name"], cm["base"]["name"]), ("bug", branch, branch))
-            for path, text in writes.items():
-                (self.repo / path).parent.mkdir(parents=True, exist_ok=True)
-                (self.repo / path).write_text(text, encoding="utf-8")
-            (pkg / "m.json").write_text(json.dumps(measure), encoding="utf-8")
-            (pkg / "w.json").write_text(json.dumps({"files": list(writes), "skipped": []}), encoding="utf-8")
-            with contextlib.redirect_stdout(io.StringIO()):
-                deliver.plan(argparse.Namespace(package=str(pkg), measure=str(pkg / "m.json"), design=None))
-                deliver.conclude(argparse.Namespace(package=str(pkg), measure=str(pkg / "m.json"),
-                                                    written=str(pkg / "w.json"), refutation=None))
-            return json.loads((pkg / "delivery.json").read_text(encoding="utf-8"))
+    TASKS = {
+        "T1": {"src/b.py": "def limit():\n    return 10\n",
+               "tests/test_b.py": "import sys, unittest\nsys.path.insert(0, 'src')\nfrom b import limit\n\nclass B(unittest.TestCase):\n    def test_limit_is_ten(self):\n        self.assertEqual(limit(), 10)\n"},
+        "T2": {"src/a.py": "from b import limit\n\n\ndef accept(x):\n    if x >= limit():\n        return False\n    return True\n",
+               "tests/test_guard.py": PROVING_TEST},
+    }
 
-        t1 = child("T1", {"src/b.py": "def limit():\n    return 10\n",
-                          "tests/test_b.py": "import sys, unittest\nsys.path.insert(0, 'src')\nfrom b import limit\n\nclass B(unittest.TestCase):\n    def test_limit_is_ten(self):\n        self.assertEqual(limit(), 10)\n"},
-                   {"premises": [], "files": ["src/b.py", "tests/test_b.py"], "mutations": [],
-                    "proving_tests": ["test_limit_is_ten"]})
-        self.assertEqual(t1["state"], "delivered", t1)
-        self.assertEqual(t1["proof"]["red_on_base"]["result"], "red")
-        t2 = child("T2", {"src/a.py": "from b import limit\n\n\ndef accept(x):\n    if x >= limit():\n        return False\n    return True\n",
-                          "tests/test_guard.py": PROVING_TEST},
-                   {"premises": [], "files": ["src/a.py", "tests/test_guard.py"], "mutations": [],
-                    "proving_tests": ["test_guard_refuses"]})
-        self.assertEqual(t2["state"], "delivered", t2)
-        self.assertEqual(t2["base"]["sha"], t1["branch"]["sha"], "the second task's base is the first's head")
-        with contextlib.redirect_stdout(io.StringIO()):
-            code = deliver.story_status(argparse.Namespace(package=str(story)))
-        rec = json.loads((story / "delivery.json").read_text(encoding="utf-8"))
-        self.assertEqual((code, rec["state"], rec["tasks"]), (0, "delivered", {"T1": "delivered", "T2": "delivered"}))
+    def write_task(self, task_id):
+        """What the writer of one task does: writes its files and commits them."""
+        for path, text in self.TASKS[task_id].items():
+            (self.repo / path).parent.mkdir(parents=True, exist_ok=True)
+            (self.repo / path).write_text(text, encoding="utf-8")
+        git(self.repo, "add", "--", *self.TASKS[task_id])
+        git(self.repo, "commit", "-q", "-m", f"ITEM-1 - {task_id}")
+        return {"id": task_id, "written": {"files": list(self.TASKS[task_id]), "skipped": [], "reused": [],
+                                           "tests_run": {"command": None, "red_first": True, "green": True},
+                                           "blocked": None, "commit_message": task_id, "commit": "abc"}}
+
+    def test_a_story_is_written_task_by_task_and_checked_once(self):
+        """Two tasks, each written and committed by its writer on the story's branch;
+        nothing is measured, proven or reported per task. One conclude over the whole
+        branch: the scope, the budget, the red on the base, the suite — once."""
+        story = self.story()
+        man = json.loads((story / "deliver-manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(man["budget"], {"max_files": 6, "max_lines": 180})
+        args = json.loads((story / "workflow-args.json").read_text(encoding="utf-8"))
+        self.assertEqual([x["id"] for x in args["design"]["tasks"]], ["T1", "T2"],
+                         "the tasks stage reads the design from workflow-args.json")
+        self.assertFalse((story / "tasks").exists(), "a task has no package of its own")
+        code, rec = self.conclude_result(story, {"stage": "tasks", "tasks": [self.write_task("T1"), self.write_task("T2")]})
+        self.assertEqual((code, rec["state"], rec["tasks"]), (0, "delivered", {"T1": "delivered", "T2": "delivered"}), rec)
+        self.assertEqual(rec["size"]["size"], "large")
         self.assertEqual(sorted(rec["diff"]["files"]), ["src/a.py", "src/b.py", "tests/test_b.py", "tests/test_guard.py"])
         log = subprocess.run(("git", "log", "--format=%s", "main..HEAD"), cwd=self.repo,
                              capture_output=True, text=True).stdout.strip().splitlines()
-        self.assertEqual(len(log), 2, log)
-
-        # The story carries the proof its tasks measured (2026-11-12: the first real
-        # story wrote `baseline` all null, and the review read "the suite never ran at
-        # the head" of a branch whose last task had run it on that very commit).
-        self.assertEqual(rec["branch"]["sha"], t2["branch"]["sha"])
-        self.assertIsNotNone(rec["baseline"]["executed"], rec["baseline"])
+        self.assertEqual(log, ["ITEM-1 - T2", "ITEM-1 - T1"], "one commit per task, and none added by the check")
+        self.assertEqual(rec["baseline"]["scope"], "whole")
         self.assertEqual(rec["baseline"]["new_reds"], [])
         self.assertEqual(rec["measured"]["suite"], "run-suite-branch.txt")
-        self.assertTrue((story / "run-suite-branch.txt").is_file())
+        self.assertEqual(len(list(story.glob("run-suite-branch*.txt"))), 1, "the suite ran once for the whole story")
         self.assertEqual(rec["proof"]["red_on_base"]["result"], "red")
         self.assertEqual(rec["proof"]["green_on_branch"]["result"], "green")
-        for task_id in ("T1", "T2"):
-            self.assertTrue((story / f"run-suite-base-with-test-{task_id}.txt").is_file(), task_id)
+        self.assertEqual(subprocess.run(("git", "status", "--porcelain"), cwd=self.repo, capture_output=True,
+                                        text=True).stdout.strip(), "", "the red on the base left the tree as it was")
         jsonschema.validate(rec, json.loads((PRUMO_ROOT / "schemas" / "delivery.schema.json").read_text(encoding="utf-8")))
 
-        # The second task was told what the first delivered, so neither the writer nor
-        # the sceptic can undo it unseen (2026-11-12: a write in task 10 defeated task 9).
-        args_t2 = json.loads((story / "tasks" / "T2" / "workflow-args.json").read_text(encoding="utf-8"))
-        self.assertEqual([x["id"] for x in args_t2["story_context"]], ["T1"])
-        self.assertEqual(args_t2["story_context"][0]["criteria"], ["limit() is 10"])
-        self.assertEqual(args_t2["story_context"][0]["files"], ["src/b.py", "tests/test_b.py"])
-        args_t1 = json.loads((story / "tasks" / "T1" / "workflow-args.json").read_text(encoding="utf-8"))
-        self.assertEqual(args_t1["story_context"], [])
+    def test_a_story_whose_task_stopped_is_blocked_and_resumes_from_it(self):
+        story = self.story()
+        stopped = {"id": "T2", "written": {"files": [], "skipped": [], "reused": [], "blocked": "src/a.py:2 is not as the design assumed",
+                                           "tests_run": {"command": None, "red_first": None, "green": None}}}
+        code, rec = self.conclude_result(story, {"stage": "tasks", "tasks": [self.write_task("T1"), stopped]})
+        self.assertEqual((code, rec["state"], rec["owner"]), (1, "blocked", "person"))
+        self.assertIn("T2: src/a.py:2", rec["reason"])
+        self.assertEqual(rec["tasks"], {"T1": "delivered", "T2": "blocked"})
+        self.assertEqual(list(story.glob("run-suite-*.txt")), [], "nothing is run over a story that did not finish")
+        # the next call of the tasks stage returns only what it wrote; the earlier task is kept
+        code, rec = self.conclude_result(story, {"stage": "tasks", "tasks": [self.write_task("T2")]})
+        self.assertEqual((code, rec["state"], rec["tasks"]), (0, "delivered", {"T1": "delivered", "T2": "delivered"}), rec)
 
-        # Over the story's budget: blocked for a person — unless the person's waiver in
-        # the profile is in force. An expired waiver is as if it never existed.
+    def test_a_story_over_its_budget_waits_for_a_person_or_a_waiver(self):
+        import yaml
+        story = self.story()
+        man = json.loads((story / "deliver-manifest.json").read_text(encoding="utf-8"))
         man["budget"] = {"max_files": 1, "max_lines": 1}
         (story / "deliver-manifest.json").write_text(json.dumps(man), encoding="utf-8")
-        import yaml
-        profile_file = self.root / "profiles" / "repo-x.yml"
-        original = yaml.safe_load(profile_file.read_text(encoding="utf-8"))
-
-        def status(waiver):
-            profile = json.loads(json.dumps(original))
-            if waiver:
-                profile["delivery"]["waiver"] = waiver
-            profile_file.write_text(yaml.safe_dump(profile), encoding="utf-8")
-            with contextlib.redirect_stdout(io.StringIO()):
-                code = deliver.story_status(argparse.Namespace(package=str(story)))
-            return code, json.loads((story / "delivery.json").read_text(encoding="utf-8"))
-
-        code, over = status(None)
+        result = {"stage": "tasks", "tasks": [self.write_task("T1"), self.write_task("T2")]}
+        code, over = self.conclude_result(story, result)
         self.assertEqual((code, over["state"], over["owner"]), (1, "blocked", "person"))
-        code, waived = status({"approver": "someone", "reason": "a person said so", "expires": "2999-12-31"})
+        self.profile_with(delivery__waiver={"approver": "someone", "reason": "a person said so", "expires": "2999-12-31"})
+        code, waived = self.conclude_result(story, result)
         self.assertEqual((code, waived["state"]), (0, "delivered"), waived["reason"])
-        self.assertEqual(waived["waiver"]["approver"], "someone")
-        code, expired = status({"approver": "someone", "reason": "a person said so", "expires": "2000-01-01"})
+        self.profile_with(delivery__waiver={"approver": "someone", "reason": "a person said so", "expires": "2000-01-01"})
+        code, expired = self.conclude_result(story, result)
         self.assertEqual((code, expired["state"]), (1, "blocked"))
-        profile_file.write_text(yaml.safe_dump(original), encoding="utf-8")
-
-        # A fix round after a review (`prepare --fix`) lands on the story's branch from a
-        # package of its own and moves the head past the last task. The story counts its
-        # diff and takes its suite as the head's (2026-11-12: the story read "no task at
-        # the head" right after the fix round of the first real story was delivered).
-        man["budget"] = {"max_files": 60, "max_lines": 6000}
-        (story / "deliver-manifest.json").write_text(json.dumps(man), encoding="utf-8")
-        (self.repo / "src" / "b.py").write_text("def limit():\n    return 10  # fixed\n", encoding="utf-8")
-        git(self.repo, "add", "-A"); git(self.repo, "commit", "-q", "-m", "fix round")
-        fix_head = subprocess.run(("git", "rev-parse", "HEAD"), cwd=self.repo,
-                                  capture_output=True, text=True).stdout.strip()
-        fix_pkg = story.parent / "the-fix-round"
-        fix_pkg.mkdir()
-        fix_rec = json.loads(json.dumps(t2))
-        fix_rec["branch"]["sha"] = fix_head
-        fix_rec["item"] = dict(man["item"])
-        fix_rec["diff"] = {"files": ["src/b.py", "src/c.py"], "added": 7, "removed": 3,
-                           "outside_scope": [], "within_budget": True}
-        (fix_pkg / "delivery.json").write_text(json.dumps(fix_rec), encoding="utf-8")
-        shutil.copy2(story / "tasks" / "T2" / "run-suite-branch.txt", fix_pkg / "run-suite-branch.txt")
-        with contextlib.redirect_stdout(io.StringIO()):
-            code = deliver.story_status(argparse.Namespace(package=str(story)))
-        fixed = json.loads((story / "delivery.json").read_text(encoding="utf-8"))
-        self.assertEqual((code, fixed["state"]), (0, "delivered"), fixed["reason"])
-        self.assertEqual(fixed["branch"]["sha"], fix_head)
-        self.assertIn("src/c.py", fixed["diff"]["files"])
-        self.assertEqual(fixed["diff"]["added"], rec["diff"]["added"] + 10)
-        self.assertIn("the-fix-round", fixed["measured"]["note"])
-        # Another item's delivery on the same branch is not this story's fix.
-        fix_rec["item"]["id"] = "SOMETHING-ELSE"
-        (fix_pkg / "delivery.json").write_text(json.dumps(fix_rec), encoding="utf-8")
-        with contextlib.redirect_stdout(io.StringIO()):
-            code = deliver.story_status(argparse.Namespace(package=str(story)))
-        self.assertEqual(code, 1)
 
     def test_a_kind_the_shape_does_not_allow_is_refused(self):
         with self.assertRaises(common.UsageError):
@@ -743,7 +728,8 @@ class InAWorktree(Fixture):
         import yaml
         data = json.loads(json.dumps(PROFILE))
         data["checks"]["suite"]["command"] = "python3 {workdir}/runner/run_tests.py"
-        data["delivery"].update({"worktree": True, "worktree_setup": setup,
+        data["delivery"].pop("worktree")      # the default: every item in its own worktree
+        data["delivery"].update({"worktree_setup": setup,
                                  "path_map": path_map or {"host": str(self.repo),
                                                           "container": str(self.repo)}})
         (self.root / "profiles" / "repo-x.yml").write_text(yaml.safe_dump(data), encoding="utf-8")
@@ -752,12 +738,11 @@ class InAWorktree(Fixture):
         return subprocess.run(("git", "branch", "--show-current"), cwd=cwd,
                               capture_output=True, text=True).stdout.strip()
 
-    def test_prepare_cuts_the_branch_reads_the_baseline_and_marks(self):
+    def test_prepare_cuts_the_branch_in_its_own_worktree_and_marks(self):
         package = self.prepare()
         man = json.loads((package / "deliver-manifest.json").read_text(encoding="utf-8"))
         workdir = self.repo / ".worktrees" / man["branch"]["name"]
         self.assertEqual((man["in_worktree"], man["workdir"]), (True, str(workdir)))
-        self.assertEqual(man["baseline"], {"base_reds": [], "predicted": 1, "executed": 1})
         self.assertEqual(self.branch_of(self.repo), "main")
         self.assertEqual(self.branch_of(workdir), man["branch"]["name"])
         self.assertTrue((workdir / "runner" / "run_tests.py").exists())
@@ -880,69 +865,214 @@ RUN_FILES = textwrap.dedent('''\
     ''')
 
 
-class FasterProof(Fixture):
-    """What the first front-end delivery paid in suites it did not need: a whole suite to
-    read the one red owed on the base, and a whole baseline over a tree already measured."""
+BEHAVIOUR = {"premises": [], "files": ["src/a.py", "tests/test_guard.py"], "mutations": [],
+             "proving_tests": ["test_guard_refuses"]}
 
-    def test_the_red_on_the_base_runs_only_the_changed_test_files(self):
-        import yaml
-        data = json.loads(json.dumps(PROFILE))
-        data["checks"]["suite"]["files_command"] = "python3 run_files.py {tests}"
-        (self.root / "profiles" / "repo-x.yml").write_text(yaml.safe_dump(data), encoding="utf-8")
+
+class TheSizeDecidesWhatRuns(Fixture):
+    """What the first front-end delivery paid for a change of two files: a whole suite on
+    the base before a line was written, one more to read a single red, one more on the
+    branch. The size of what landed now decides: the test files the change touched, or
+    the whole suite — once."""
+
+    def setUp(self):
+        super().setUp()
         (self.repo / "run_files.py").write_text(RUN_FILES, encoding="utf-8")
         (self.repo / "src" / "a.py").write_text(BUGGY, encoding="utf-8")
         git(self.repo, "add", "-A"); git(self.repo, "commit", "-q", "-m", "buggy base")
+        self.profile_with(suite__files_command="python3 run_files.py {tests}")
+
+    def test_a_small_delivery_runs_only_the_test_files_it_touched(self):
         package = self.prepare(kind="behaviour-change")
-        measure = {"premises": [], "files": ["src/a.py", "tests/test_guard.py"], "mutations": [],
-                   "proving_tests": ["test_guard_refuses"]}
+        args = json.loads((package / "workflow-args.json").read_text(encoding="utf-8"))
+        self.assertEqual(args["commands"]["tests"], "python3 run_files.py {tests}",
+                         "the writer is handed the command that runs named test files")
+        code, rec = self.conclude(package, PROVING_TEST, measure_data=BEHAVIOUR, source=SOURCE)
+        self.assertEqual((rec["state"], rec["size"]["size"], rec["baseline"]["scope"]),
+                         ("delivered", "small", "focused"), rec)
+        self.assertEqual(rec["proof"]["red_on_base"]["result"], "red")
+        self.assertIn("Ran 1 of 1", (package / "run-suite-base-with-test.txt").read_text(encoding="utf-8"))
+        self.assertIn("Ran 1 of 1", (package / "run-suite-branch-focused.txt").read_text(encoding="utf-8"))
+        self.assertFalse((package / "run-suite-branch.txt").exists(), "the whole suite never ran")
+        self.assertEqual(rec["measured"]["suite"], "run-suite-branch-focused.txt")
+
+    def test_the_related_test_files_the_measure_named_run_with_them(self):
+        package = self.prepare(kind="behaviour-change")
+        measure = dict(BEHAVIOUR, related_tests=["tests/test_a.py", "tests/gone.py"])
         code, rec = self.conclude(package, PROVING_TEST, measure_data=measure, source=SOURCE)
-        self.assertEqual((rec["state"], rec["proof"]["red_on_base"]["result"]), ("delivered", "red"), rec)
-        on_base = (package / "run-suite-base-with-test.txt").read_text(encoding="utf-8")
-        self.assertIn("Ran 1 of 1", on_base)
+        self.assertEqual(rec["state"], "delivered", rec)
+        self.assertIn("Ran 2 of 2", (package / "run-suite-branch-focused.txt").read_text(encoding="utf-8"))
+
+    def test_past_the_small_limit_the_whole_suite_runs_once(self):
+        self.profile_with(suite__files_command="python3 run_files.py {tests}", delivery__small={"max_files": 1})
+        package = self.prepare(kind="behaviour-change")
+        code, rec = self.conclude(package, PROVING_TEST, measure_data=BEHAVIOUR, source=SOURCE)
+        self.assertEqual((rec["state"], rec["size"]["size"], rec["baseline"]["scope"]),
+                         ("delivered", "standard", "whole"), rec)
         self.assertIn("Ran 2 of 2", (package / "run-suite-branch.txt").read_text(encoding="utf-8"))
+        self.assertIn("Ran 1 of 1", (package / "run-suite-base-with-test.txt").read_text(encoding="utf-8"),
+                      "the red on the base still runs only the changed test files")
+
+    def test_a_wide_path_is_never_small(self):
+        self.profile_with(suite__files_command="python3 run_files.py {tests}", delivery__wide_paths=["src/a.py"])
+        package = self.prepare(kind="behaviour-change")
+        code, rec = self.conclude(package, PROVING_TEST, measure_data=BEHAVIOUR, source=SOURCE)
+        self.assertEqual((rec["size"]["size"], rec["baseline"]["scope"]), ("standard", "whole"))
+        self.assertIn("src/a.py", rec["size"]["reason"])
+
+    def test_a_test_green_without_the_change_is_blocked(self):
+        package = self.prepare(kind="behaviour-change")
+        code, rec = self.conclude(package, WEAK_TEST, measure_data=BEHAVIOUR, source=SOURCE)
+        self.assertEqual((rec["state"], rec["proof"]["red_on_base"]["result"]), ("blocked", "green"))
+
+    def test_a_red_on_the_base_under_another_name_is_partial_and_passes(self):
+        """The measurement names a test the way a person would; the runner prints it its
+        own way. Something went red on the base: the proof stands, and the report says
+        which name was not read."""
+        package = self.prepare(kind="behaviour-change")
+        measure = dict(BEHAVIOUR, proving_tests=["the guard refuses ten"])
+        code, rec = self.conclude(package, PROVING_TEST, measure_data=measure, source=SOURCE)
+        red = rec["proof"]["red_on_base"]
+        self.assertEqual((rec["state"], red["result"], red["missing"]), ("delivered", "partial", ["the guard refuses ten"]), rec)
+        self.assertIn("not read among the reds", (package / "report.md").read_text(encoding="utf-8"))
+
+    def test_a_fixture_beside_the_tests_is_not_handed_to_the_runner(self):
+        self.profile_with(suite__files_command="python3 run_files.py {tests}", suite__test_files=["tests/test_*.py"],
+                          delivery__budget={"max_files": 3, "max_lines": 60})
+        package = self.prepare(kind="behaviour-change")
+        (self.tree_of(package) / "tests" / "helper.py").write_text("raise SystemExit('a helper is not a test')\n", encoding="utf-8")
+        measure = dict(BEHAVIOUR, files=BEHAVIOUR["files"] + ["tests/helper.py"])
+        code, rec = self.conclude(package, PROVING_TEST, measure_data=measure, source=SOURCE)
+        self.assertEqual(rec["state"], "delivered", rec)
 
     def test_the_writer_s_commit_message_is_the_subject(self):
-        package = self.prepare()
-        tree = pathlib.Path(json.loads((package / "deliver-manifest.json").read_text(encoding="utf-8"))["workdir"])
+        package = self.prepare(kind="behaviour-change")
+        tree = self.tree_of(package)
         (tree / "tests" / "test_guard.py").write_text(PROVING_TEST, encoding="utf-8")
-        (package / "m.json").write_text(json.dumps(MEASURE), encoding="utf-8")
-        (package / "w.json").write_text(json.dumps({"files": MEASURE["files"], "skipped": [],
-                                                    "commit_message": "proving the refusal at ten"}), encoding="utf-8")
-        with contextlib.redirect_stdout(io.StringIO()):
-            deliver.conclude(argparse.Namespace(package=str(package), measure=str(package / "m.json"),
-                                                written=str(package / "w.json"), refutation=None))
+        (tree / "src" / "a.py").write_text(SOURCE, encoding="utf-8")
+        code, rec = self.conclude_result(package, {"stage": "deliver", "size": "small", "measure": BEHAVIOUR, "refutation": None,
+                                                   "written": {"files": BEHAVIOUR["files"], "skipped": [], "reused": [], "blocked": None,
+                                                               "tests_run": {"command": "x", "red_first": True, "green": True},
+                                                               "commit_message": "refusing ten at the guard"}})
+        self.assertEqual(rec["state"], "delivered", rec)
         subject = subprocess.run(("git", "log", "-1", "--format=%s"), cwd=tree,
                                  capture_output=True, text=True).stdout.strip()
-        self.assertEqual(subject, "ITEM-1 - proving the refusal at ten")
+        self.assertEqual(subject, "ITEM-1 - refusing ten at the guard")
+        self.assertEqual(rec["branch"]["sha"], subprocess.run(("git", "rev-parse", "HEAD"), cwd=tree,
+                                                              capture_output=True, text=True).stdout.strip())
 
-class ABaselineThatFailsLeavesNothingBehind(InAWorktree):
-    def test_a_tree_already_measured_by_the_same_suite_is_not_measured_again(self):
+    def test_a_writer_that_stopped_blocks_for_a_person_and_nothing_runs(self):
+        package = self.prepare(kind="behaviour-change")
+        code, rec = self.conclude_result(package, {"stage": "deliver", "size": "small", "measure": BEHAVIOUR, "refutation": None,
+                                                   "written": {"files": [], "skipped": [], "reused": [],
+                                                               "blocked": "src/a.py:2 already refuses ten",
+                                                               "tests_run": {"command": None, "red_first": None, "green": None}}})
+        self.assertEqual((code, rec["state"], rec["owner"]), (1, "blocked", "person"))
+        self.assertIn("already refuses ten", rec["reason"])
+        self.assertEqual(list(package.glob("run-suite-*.txt")), [])
+
+
+class TheBaseIsMeasuredOnlyWhenTheBranchIsRed(Fixture):
+    """A green branch owes no baseline. A red one is compared by name against the base,
+    measured then — over the base's version of every changed file — or reused from a
+    package that measured the same tree with the same command."""
+
+    OLD_RED = "import unittest\n\nclass Old(unittest.TestCase):\n    def test_was_always_red(self):\n        self.fail('inherited')\n"
+
+    def inherit_a_red(self):
+        (self.repo / "tests" / "test_old.py").write_text(self.OLD_RED, encoding="utf-8")
+        git(self.repo, "add", "-A"); git(self.repo, "commit", "-q", "-m", "an inherited red")
+
+    def test_a_green_branch_measures_no_base(self):
+        package = self.prepare()
+        code, rec = self.conclude(package, PROVING_TEST)
+        self.assertEqual((rec["state"], rec["baseline"]["base"], rec["baseline"]["base_reds"]),
+                         ("delivered", "not_needed", []))
+        self.assertFalse((package / "run-suite-base.txt").exists())
+
+    def test_a_red_the_base_already_had_is_measured_then_and_is_not_new(self):
+        self.inherit_a_red()
+        package = self.prepare()
+        code, rec = self.conclude(package, PROVING_TEST)
+        self.assertEqual(rec["state"], "delivered", rec)
+        b = rec["baseline"]
+        self.assertEqual((b["base"], b["base_reds"], b["new_reds"]), ("measured", ["test_was_always_red"], []))
+        self.assertEqual(rec["measured"]["base"], "run-suite-base.txt")
+        self.assertIn("Ran 2 of 2", (package / "run-suite-base.txt").read_text(encoding="utf-8"),
+                      "the base ran without the test the delivery wrote")
+        self.assertTrue((self.tree_of(package) / "tests" / "test_guard.py").exists(), "and the delivery's file is back")
+
+    def test_a_base_already_measured_is_reused(self):
+        self.inherit_a_red()
         (self.root / "packages").mkdir(exist_ok=True)
         first = self.prepare(package="packages/repo-x-first")
-        branch = json.loads((first / "deliver-manifest.json").read_text(encoding="utf-8"))["branch"]["name"]
-        workdir = pathlib.Path(json.loads((first / "deliver-manifest.json").read_text(encoding="utf-8"))["workdir"])
-        (workdir / "runner" / "run_tests.py").write_text("raise SystemExit('ran again')\n", encoding="utf-8")
-        args = argparse.Namespace(repo="repo-x", item="ITEM-1", item_file=str(self.root / "item.md"),
-                                  kind=None, branch=branch, package=str(self.root / "packages" / "repo-x-again"),
-                                  fix=None, shape="debt", type=None, continue_branch=True)
+        self.conclude(first, PROVING_TEST)
+        git(self.repo, "checkout", "-q", "main")
+        second = self.root / "packages" / "repo-x-second"
+        with contextlib.redirect_stdout(io.StringIO()):
+            deliver.prepare(argparse.Namespace(repo="repo-x", item="ITEM-2", item_file=str(self.root / "item.md"),
+                                               kind=None, branch="ITEM-2-another", package=str(second),
+                                               fix=None, shape="debt", type=None))
+        out = io.StringIO()
+        (self.repo / "tests" / "test_guard.py").write_text(PROVING_TEST, encoding="utf-8")
+        (second / "m.json").write_text(json.dumps(MEASURE), encoding="utf-8")
+        with contextlib.redirect_stdout(out):
+            deliver.conclude(argparse.Namespace(package=str(second), measure=str(second / "m.json")))
+        rec = json.loads((second / "delivery.json").read_text(encoding="utf-8"))
+        self.assertEqual((rec["state"], rec["baseline"]["base"], rec["baseline"]["new_reds"]),
+                         ("delivered", "reused", []), rec)
+        self.assertIn(str(first / "run-suite-base.txt"), out.getvalue())
+
+    def test_a_new_red_blocks_and_leaves_the_next_write_what_it_needs(self):
+        package = self.prepare(kind="behaviour-change")
+        broken = "def accept(x):\n    return False\n"
+        code, rec = self.conclude(package, PROVING_TEST, measure_data=BEHAVIOUR, source=broken)
+        self.assertEqual((code, rec["state"], rec["owner"]), (1, "blocked", "author"))
+        self.assertEqual(rec["baseline"]["new_reds"], ["test_accept_small"])
+        args = json.loads((package / "workflow-args.json").read_text(encoding="utf-8"))
+        self.assertIn("test_accept_small", args["previous"]["reason"])
+        self.assertIn("FAIL: test_accept_small", args["previous"]["output"])
+        self.assertEqual(args["measure"]["files"], BEHAVIOUR["files"], "the write stage is pasted, not composed")
+
+
+class TheEvidenceComesLast(Fixture):
+    """Evidence illustrates a delivery that is done. It is produced once, after the
+    item is delivered, and what it holds changes nothing."""
+
+    def test_an_undelivered_package_has_no_evidence(self):
+        package = self.prepare()
+        with self.assertRaises(common.UsageError), contextlib.redirect_stdout(io.StringIO()):
+            deliver.evidence(argparse.Namespace(package=str(package), collected=None))
+
+    def test_without_a_declared_way_of_showing_the_tests_are_the_evidence(self):
+        package = self.prepare()
+        self.conclude(package, PROVING_TEST)
+        before = (package / "delivery.json").read_text(encoding="utf-8")
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            self.assertEqual(deliver.prepare(args), 0)
-        self.assertIn(str(first / "run-suite-base.txt"), out.getvalue())
-        man = json.loads((self.root / "packages" / "repo-x-again" / "deliver-manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual(man["baseline"]["executed"], 1)
+            self.assertEqual(deliver.evidence(argparse.Namespace(package=str(package), collected=None)), 0)
+        text = (package / "evidence.md").read_text(encoding="utf-8")
+        self.assertIn("ITEM-1 - ", text)                       # the commit
+        self.assertIn("tests/test_guard.py", text)
+        self.assertIn("test_guard_refuses red", text)          # the mutant it killed
+        self.assertIn("the tests above are the evidence", text)
+        self.assertEqual((package / "delivery.json").read_text(encoding="utf-8"), before)
+        self.assertTrue(list((self.root / "reports" / "repo-x" / "ITEM-1-deliver").glob("evidence-*.md")))
 
-    def test_the_fresh_branch_and_its_worktree_go(self):
-        (self.repo / "runner" / "run_tests.py").write_text("print('Ran 1 of 2')\n", encoding="utf-8")
-        args = argparse.Namespace(repo="repo-x", item="ITEM-1", item_file=str(self.root / "item.md"),
-                                  kind=None, branch=None, package=str(self.root / "pkg"),
-                                  fix=None, shape="debt", type=None)
-        with self.assertRaises(deliver.UsageError), contextlib.redirect_stdout(io.StringIO()):
-            deliver.prepare(args)
-        self.assertEqual(list((self.repo / ".worktrees").iterdir()), [])
-        branches = subprocess.run(("git", "branch", "--list", "ITEM-1-*"), cwd=self.repo,
-                                  capture_output=True, text=True).stdout.strip()
-        self.assertEqual(branches, "")
+    def test_what_the_collector_showed_and_could_not_show_are_both_written(self):
+        package = self.prepare()
+        self.conclude(package, PROVING_TEST)
+        collected = package / "evidence-result.json"
+        collected.write_text(json.dumps({"stage": "evidence", "evidence": {
+            "captures": [{"criterion": "ten is refused", "observed": "the screen shows the refusal", "artifact": "shots/ten.png"}],
+            "not_collected": [{"criterion": "nine passes", "reason": "the environment did not come up"}],
+            "environment": {"raised": ["up"], "taken_down": True}}}), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(deliver.evidence(argparse.Namespace(package=str(package), collected=str(collected))), 0)
+        text = (package / "evidence.md").read_text(encoding="utf-8")
+        self.assertIn("✔ ten is refused — the screen shows the refusal · shots/ten.png", text)
+        self.assertIn("? nine passes — the environment did not come up", text)
+        self.assertEqual(json.loads((package / "delivery.json").read_text(encoding="utf-8"))["state"], "delivered")
 
 
 class AStageReturnReadsFromAnyFileAtHand(unittest.TestCase):
@@ -960,6 +1090,12 @@ class AStageReturnReadsFromAnyFileAtHand(unittest.TestCase):
         workflow = {"stage": "measure", "measure": self.MEASURE, "written": None, "refutation": None}
         for data in (self.MEASURE, workflow, {"summary": "s", "logs": [], "result": workflow}):
             self.assertEqual(deliver.stage_return(self.write(data), "measure"), self.MEASURE)
+
+    def test_a_return_a_stage_may_leave_empty_reads_as_none(self):
+        """A small item has no sceptic: `refutation` is null in its return, and that is
+        not a wrong file."""
+        path = self.write({"stage": "deliver", "measure": {"files": []}, "written": {"files": []}, "refutation": None})
+        self.assertIsNone(deliver.stage_return(path, "refutation", optional=True))
 
     def test_a_stage_without_the_key_asked_is_refused(self):
         workflow = {"stage": "measure", "measure": self.MEASURE, "written": None, "refutation": None}

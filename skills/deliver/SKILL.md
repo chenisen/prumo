@@ -1,70 +1,90 @@
 ---
 name: deliver
-description: Delivers ONE item as the smallest change that pays for it, with proof — measures the item's premises against the remote base, writes only inside the files the measurement named, proves red before green, compares the suite by name, commits with a pathspec, and hands the branch to task-review. Never approves its own work, never pushes, never merges, never moves the item. Use when the request names an item and asks to deliver, fix, implement or pay it. Not for reviewing (that is task-review).
+description: Delivers ONE item as the smallest change that pays for it — cuts the item its own worktree, has an agent with a shell write the change and run the tests it touches until they are green, checks what landed once (by its size: the test files it touched, or the whole suite), commits with a pathspec, and hands the branch to task-review. Evidence is collected once, after the item is done. Never approves its own work, never pushes, never merges, never moves the item. Use when the request names an item and asks to deliver, fix, implement or pay it. Not for reviewing (that is task-review).
 ---
 
 # Deliver
 
-One item, one branch, one proof. Then `task-review`. **Who writes does not approve.**
+One item, one worktree, one branch. Then `task-review`. **Who writes does not approve.**
 
 The question this capability answers:
 
 > **What is the smallest change that delivers this item, and what proves it?**
 
+## The four things that keep it fast and honest
+
+1. **The agents execute.** The writer has a shell: it edits the code itself, runs the
+   tests it touches, reads what they print and fixes what it wrote, until it is green.
+   No script is written to write code. The conductor runs three things per item — one
+   prepare, one workflow call, one conclude — and composes nothing in between.
+2. **Every item has its own worktree.** The person's checkout is never touched, and
+   several items are delivered in one repository at once, each judged by its own marker.
+3. **The size decides what is paid.** A small change is checked by the test files it
+   touched and read by no sceptic; a larger one runs the whole suite — **once**. The
+   base is never measured up front: only when the branch turns something red.
+4. **Evidence comes last.** What the tests and the checks hold is the quality. Showing
+   the change — an environment raised, a screen captured — happens once per item, after
+   its last task is delivered, and decides nothing.
+
 ## Rules
 
 Each rule has a test that fails when it is broken (`scripts/tests/test_deliver.py`,
-`test_deliver_hook.py`, `test_run.py`).
+`test_deliver_backbone.py`, `test_deliver_hook.py`, `test_run.py`).
 
 | # | Rule | Held by |
 |---|---|---|
 | R1 | **One item per run.** An item asking two things stops and asks for the cut. | script |
-| R2 | **Measure before touching.** Every premise of the item becomes `holds`, `fails` or `not_assessable`, with `file:line`, against the **remote base** — never the checkout. | script + `premise-surveyor` |
-| R3 | **A failed premise records, it does not erase.** Scope is a person's call: a central premise that fails is a stop, before anything is written. | script |
-| R4 | **Red before green.** A behaviour change: the new test is red on the base and green on the branch. A coverage gap: a mutation by hand turns the guarded code wrong → the test goes red → the mutation is reverted. No red, no proof. | script runs, record keeps |
-| R5 | **Smallest diff that pays the item.** No drive-by refactor, rename or whole-file formatting. A line outside the scope is a defect. | `scope_guard` over the diff |
-| R6 | **Observable behaviour does not change** — unless the item says the behaviour IS the change. | the existing tests, by name |
-| R7 | **Baseline by name.** The set of reds on the base against the set on the branch. A new red stops. An old red that vanished is recorded. | script |
+| R2 | **Measure before touching.** Every premise of the item becomes `holds`, `fails` or `not_assessable`, with `file:line`. A story is measured by its design, which a person approves. | `premise-surveyor`, `task-planner` |
+| R3 | **A failed premise records, it does not erase.** A central premise that fails is a stop, before anything is written; a writer that finds the code other than assumed returns `blocked`. | script + writer |
+| R4 | **Red before green.** The writer sees its test red, then green. `conclude` reads it once more over the base's production files, the changed test files only: nothing red there is a test that passes without the change, and blocks. A coverage gap is proven by the mutant its test kills. | writer runs, script checks once |
+| R5 | **Smallest diff that pays the item.** No drive-by refactor, rename or whole-file formatting. | `scope_guard` over the diff |
+| R6 | **The size decides the suite.** Small: the test files the change touched, plus the ones the measurement named beside them. Otherwise: the whole suite, once. A wide path is never small. | `shape.size_of` |
+| R7 | **Baseline by name, and only when needed.** A green branch owes no baseline. A red one is compared by name against the base — measured then, or reused from a package that measured the same tree. A new red stops. | script |
 | R8 | **Predicted versus executed.** A suite that did not finish is not green. | script |
-| R9 | **One commit per step**, in the profile's `commit_format`. Never `git add -A`; always a pathspec. | hook + script |
-| R10 | **Budget.** `max_files` and `max_lines` from the profile. Over it stops and proposes the split; a waiver in the profile lifts it, with a name and an expiry. | script |
+| R9 | **One commit per step**, in the profile's `commit_format`. Never `git add -A`; always a pathspec. A story's writer commits its own task. | hook + script |
+| R10 | **Budget.** `max_files` and `max_lines` from the profile, scaled by the shape. Over it stops; a waiver in the profile lifts it, with a name and an expiry. | script |
 | R11 | **Stopping is a result.** `blocked`, with a reason and the next owner, weighs as much as `delivered`. | judge |
+| R12 | **Evidence illustrates, once, at the end.** No environment for showing a change is raised while the work is open; nothing the evidence finds changes the state. | route + `evidence-collector` |
 
 And the three rules every capability of the prumo holds: **the method knows no
-repository** (suite, base, container, commit convention, budget — all from the profile);
-**the method knows no provider** (`prumo.yml`); **what could not be measured is declared**.
+repository** (suite, base, container, commit convention, budget, sizes — all from the
+profile); **the method knows no provider** (`prumo.yml`); **what could not be measured
+is declared**.
 
 ## What it never does
 
 - push, merge, move the item, approve;
 - land on a protected branch (`forge.protected_branches`): the delivery is cut *from* one, never *on* one;
-- write outside the worktree, or outside the files `measure.json` named plus the test file;
-- touch the base branch, rewrite history, `git add -A`;
+- write outside the worktree, or outside the roots its kind may touch;
+- run the whole suite more than once per item, or at all for a small one;
+- raise an environment to *show* the change before the item is delivered;
+- write a script that writes code;
 - invent a premise, a kind or a profile block that is not there.
 
-The hook holds these from outside while the delivery's marker exists — one per delivery,
-in `.claude/.prumo-deliver-ativo.d/` — and only inside THAT delivery's worktree (pushing
-its branch, from anywhere): several agents deliver several items in one repository at
-once, each in its own worktree, and none is judged by another's rules. The rules above
-hold them from inside. Both, because the model can err and an item can carry text
-that tries.
+The hook holds the first three from outside while the delivery's marker exists — one per
+delivery, in `.claude/.prumo-deliver-ativo.d/` — and only inside THAT delivery's worktree
+(pushing its branch, from anywhere). The rules above hold them from inside. Both,
+because the model can err and an item can carry text that tries.
 
-## The shape decides the depth
+## The shape and the size
 
-Before anything is read, the item's **shape** — `debt`, `bug`, `hotfix`, `refactor`,
-`story`, `epic` — decides how deep the plan goes, whether a person approves it before a
-line is written, which kinds may deliver it, how much diff it buys and how hard the
-review reads it. `reference/shapes.md` is the table. The shape is the tracker's type
-mapped in `prumo.yml` (`--type`), or `--shape`; it is never inferred from the text, and
-an item with no shape is a stop.
+The item's **shape** — `debt`, `bug`, `hotfix`, `refactor`, `story`, `epic` — is the
+tracker's type mapped in `prumo.yml` (`--type`), or `--shape`; never inferred from the
+text. It decides whether a person approves a plan before a line is written, which kinds
+may deliver it and how much diff it buys. `reference/shapes.md` is the table.
 
-**The plan is a file.** After the measure stage, `deliver.py plan` writes `measure.json`,
-`plan.md` — what was measured, what will be touched, what will prove it — and `plan.json`
-with the shape, the depth and a digest of the measurement. A shape that asks a gate
-waits there: `/prumo:approve <package>`, closed to the model, writes `approval.json`
-with a person's name and that digest. The guard refuses every write and `conclude`
-blocks for the person until it matches; a measurement that changes afterwards is
-unapproved again.
+The **size** is what the change touches, computed — `small`, `standard`, `large` — from
+the files and lines of the diff, the profile's `delivery.small` (3 files and 80 lines
+when absent) and its `delivery.wide_paths`. It decides the sceptic and the suite:
+
+| Size | When | Sceptic | What `conclude` runs |
+|---|---|---|---|
+| `small` | a shape with no gate, inside `delivery.small`, no wide path | no | the test files the change touched + `related_tests` |
+| `standard` | everything else that is one item | once | the whole suite, once |
+| `large` | a story | no — the review reads the branch | the whole suite, once, over all its tasks |
+
+A profile with no `checks.suite.files_command` cannot run named test files: every
+delivery there runs the whole suite, and the fix is one line in the profile.
 
 ## Inputs
 
@@ -83,153 +103,131 @@ A profile without a `delivery:` block is `not_assessable`, and the stop hands
 
 ## Sequence
 
-Scripts under `${CLAUDE_PLUGIN_ROOT}/scripts/`. Two commands, with the workflow between.
+Scripts under `${CLAUDE_PLUGIN_ROOT}/scripts/`. Each step prints the next; the object the
+workflow takes is always `<package>/workflow-args.json` plus a `stage` — pasted, never
+composed. Save each workflow return, whole, to the file the step names.
+
+**An item with no gate** (`debt`, `bug`, a fix) — three steps:
 
 ```
-deliver.py prepare  --repo R --item C --item-file ITEM.md (--type T | --shape S) [--kind K] [--branch B]
-    F0 preflight    git, the suite's tool, the profile's delivery block
-    F1 resolve      the shape, the kind it allows, the base (a hotfix: `delivery.hotfix_base`)
-    F4 branch       <branch_format> from the base — a worktree (`delivery.worktree`), set up by
-                    `worktree_setup`, or the checkout if clean; a branch that exists is never reset
-    F3 baseline     the suite on the branch while it still IS the base; reds by name
-    marker on
-Workflow({name: 'prumo:deliver', args: {...workflow-args.json, stage: 'measure'}})
-    F2 measure      premises, the files, the mutation           [agent: premise-surveyor]
-deliver.py plan --package P --measure <the measure it returned>
-    F2b plan        measure.json, plan.md, plan.json — the hook reads the files from there
-    a shape with a gate stops here: /prumo:approve P, by a person
-    a central premise that fails: skip the write stage; go to conclude
-Workflow({name: 'prumo:deliver', args: {...workflow-args.json, stage: 'write', measure: {...}}})
-    F5 write        the test (and, by kind, the code) inside the named files [agent: change-writer]
-    F7 refute       tries to knock the proof down                       [agent: proof-skeptic]
-→ write `written` to <package>/written.json and `refutation` to <package>/refutation.json
-deliver.py conclude --package P --measure P/measure.json --written P/written.json
-                    --refutation P/refutation.json
-    F6 prove        scope guard, mutation by hand, the suite, baseline by name   [script]
-    F8 judge        delivered | blocked | unsupported                 (pure function)
-    F9 record       delivery.json, the short report, the commit, the next command
-    marker off
-deliver.py release --package P
-    the worktree goes, the branch stays — the `run` route does it once the verdict is in;
-    a blocked tree stays, for a person to read
+deliver.py prepare --repo R --item C --item-file ITEM.md (--type T | --shape S) [--kind K] [--branch B]
+    resolves the shape and the base, cuts the branch in its own worktree, marks. Runs no suite.
+Workflow({name: 'prumo:deliver', args: {...workflow-args.json, stage: 'deliver'}})
+    premise-surveyor measures → the size is read → change-writer writes and runs its tests
+    → proof-skeptic, unless the item is small          → save the return to <package>/workflow-result.json
+deliver.py conclude --package P --result P/workflow-result.json
+    scope and budget over the diff · the proof over the changed test files · the suite
+    the size asks · lint · judge · one commit · record and report · marker off
 ```
 
-The three agents travel with the plugin and answer by `<prefix><name>`. A checkout that is
-not the installed plugin passes their prompts in `agent_prompts: {name: text}` instead, and
-each runs as a plain subagent — wider tools than the agent file declares, so the guard is
-what holds the writer there.
+**A shape a person approves** (`hotfix`, `refactor`) — the gate sits between two stages:
 
-The three returns are written **as the workflow returned them**, whole: a hand-edited
-measurement names files the surveyor never read, and the guard would let a write
-through on the strength of an edit nobody measured.
+```
+prepare → Workflow stage 'measure' → deliver.py plan --package P --measure <its return>
+→ /prumo:approve P, by a person → Workflow stage 'write' → deliver.py conclude --package P --result <its return>
+```
 
-`prepare` stops when the tree is dirty, the kind is not in the profile, or the suite does
-not finish on the base. `conclude` commits only a delivery that stands; a blocked tree is
-left as it is, for a person to read.
+**A story** — designed, approved, written task by task in one call, checked once:
 
-**Who executes is the script**, through the profile's allowlist (`checks.suite.command`,
-`delivery.mutation.command`, `delivery.worktree_setup`). An agent runs nothing. A wrapper
-can swallow an exit code, so the result is read from the output (`failure_pattern`,
-`red_name_pattern`). A check runs for 900 s unless the profile declares its own
-`timeout_seconds` — the repository knows how long its suite takes, the method does not.
+```
+prepare --shape story → Workflow stage 'design' → deliver.py plan --package P --design <its return>
+→ /prumo:approve P → Workflow stage 'tasks' → deliver.py conclude --package P --result <its return>
+```
 
-**Where it runs is the profile's.** With `delivery.worktree: true` the delivery lives in
-`.worktrees/<branch>` inside the repository and the person's checkout is never touched;
-`{workdir}` in a check's command names that tree as the executor sees it, through
-`delivery.path_map` when the suite runs in a container; what git does not hold arrives by
-`worktree_setup`, one plain command per line, nothing chained.
+**After the item is delivered** — and, on the `run` route, after the review approved:
+
+```
+Workflow stage 'evidence'      only when the profile declares `delivery.evidence`
+deliver.py evidence --package P [--collected <its return>]
+deliver.py release  --package P      the worktree goes, the branch stays
+```
+
+`plan` and `conclude` write what the next stage needs into `workflow-args.json` — the
+measurement, the design, the tasks already written, a blocked attempt's reason — so the
+next invocation is the same object with another stage.
+
+**What the writer runs is the profile's.** `prepare` resolves `checks.suite.files_command`
+and `checks.lint.command` for the worktree and hands them over; nothing else is run by
+an agent, and the whole suite is the script's. A wrapper can swallow an exit code, so
+every result is read from the output (`failure_pattern`, `red_name_pattern`). A check
+runs for 900 s unless the profile declares its own `timeout_seconds`.
+
+**Where it runs is a worktree**, `.worktrees/<branch>` inside the repository. `{workdir}`
+in a check's command names that tree as the executor sees it, through
+`delivery.path_map` when the suite runs in a container; what git does not hold arrives
+by `worktree_setup`, one plain command per line, nothing chained. A profile whose suite
+cannot reach a worktree says `worktree: false`, and each prepare says so.
 
 ## A blocked attempt, written again
 
-A `blocked` delivery leaves the tree as it is. To write it again on the same tree, the
-`write` stage takes `previous`: `{reason, output, hint}` — the judge's reason from
-`delivery.json`, what the suite printed for the new reds (from the run file), and, when
-the measurement already named it, the neighbouring pattern the writer missed. Composed
-by whoever resumes, never by the workflow. Then `conclude` runs again on the same
-package. Measured need: the first story's second task was blocked by a hand-made
-builder stub the writer itself had flagged as never run.
+A `blocked` delivery leaves the tree as it is, and `conclude` leaves in
+`workflow-args.json` what a second write needs: the measurement and `previous` — the
+judge's reason and what the run printed about each new red. Invoke the workflow again
+with `stage: 'write'` (a story: `stage: 'tasks'`, which skips the tasks already
+written), save the return, and `conclude` again on the same package. With a writer that
+runs its own tests this is rare: it is what is left when the whole suite finds a red the
+touched tests could not.
 
 What a second attempt wrote is what the tree holds: `conclude` keeps the writer's list
-and adds every file the measurement named that differs from the base, so a writer that
-lists only this pass's file does not leave a partial record, and the sceptic is told the
-change is every measured file that differs from the base.
+and adds every file the measurement named that differs from the base.
 
 ## The record
 
 `delivery.json`, held to `schemas/delivery.schema.json`. `deliver_judge()` reads it and
-answers `state`, `reason` and `owner`; same record, same answer. The state is decided by
-fixed rule:
+answers `state`, `reason` and `owner`; same record, same answer:
 
 - `unsupported` — the kind is not in the profile's `kinds`;
-- `blocked` — a central premise fails; the plan's gate has no approval; a new red by name; a line outside the scope; the
-  budget exceeded with no waiver in force; a mutation that survived; the sceptic's
-  `does_not_prove`; a suite that did not finish; a test that was not red on the base when
-  the kind demands it;
+- `blocked` — a central premise fails; the plan's gate has no approval; the writer
+  stopped; a story's task was not written; a new red by name; a red branch whose base
+  could not be measured; a suite that did not finish; nothing red on the base under the
+  new test; a mutation that survived, or was too wide; the sceptic's `does_not_prove`;
+  a red lint; a line outside the scope; the budget exceeded with no waiver in force;
 - `delivered` — otherwise.
 
-`skipped` is mandatory: what the writer did not check is written, even when empty.
-
-Three more facts the record carries since 2.1: the profile's **lint** check over the
-tree the writer left (`red` blocks); for each mutant, the tests the item says must
-**stay green** under it (`red` there means the mutant is wider than the guard, and
-blocks); and, for a `behaviour-change`, the **red on the base** — the base's production
-files restored under the new test, the proving tests required red, the writer's files
-put back, the suite run again and required green.
+The record says its `size`, the `scope` of the suite that ran (`focused` or `whole`),
+how the base was read (`not_needed`, `measured`, `reused`), and names every run the
+script made as a file beside the package. `skipped` is mandatory: what the writer did
+not check is written, even when empty. A red on the base read under another name than
+the measurement's is `partial`: the proof stands and the report says which name.
 
 ## A story, an epic
 
-A `story` is cut before it is measured: the `design` stage of the workflow runs the
-`task-planner`, which returns the tasks — each with its files, its falsifiable criteria,
-its proving tests and what it builds on — and `deliver.py plan --design` renders them
-as the plan a person approves. Then each task is a delivery of its own:
+A `story` is cut before it is written: the `design` stage runs the `task-planner`, which
+returns the tasks — each with its files, its falsifiable criteria, its proving tests and
+what it builds on — and `deliver.py plan --design` renders them as the plan a person
+approves. Then **one** workflow call, `stage: 'tasks'`, writes them in order: each task
+has one writer, which reads the tasks before it, writes, sees its tests green and
+**commits its own task** before the next begins. A writer that finds the code other
+than the design assumed returns `blocked`, and the tasks after it wait.
 
-```
-deliver.py prepare --repo R --story <story package> --task T1 --package <story package>/tasks/T1
-```
-
-Its item is the task as the design wrote it, its shape a bug's — reproduce, no gate,
-because the person approved the whole plan — its branch the story's, its base that
-branch's head. The surveyor confirms the design's files and proving tests against the
-code and replaces nothing. From the second task on, `prepare` inlines the tasks already
-delivered on the branch as `story_context` — id, title, criteria, files — and the writer
-and the sceptic both read it: a change that makes an earlier task's criterion stop
-holding is `does_not_prove`. When every task is delivered, `deliver.py story --package
-<story package>` writes the story's own record from its tasks' — delivered when all
-are, inside the shape's budget over every task or under a waiver in force in the
-profile — and the branch goes to the review once. The record carries the proof: the
-suite is the last task's run **at the story's head**, re-read against the story's base
-and copied beside the record as `run-suite-branch.txt`, each task's red-on-base run
-travels as `run-suite-base-with-test-<task>.txt`, and a story whose head no task was
-concluded on says so and stops, instead of writing a blank the review reads as "never
-ran".
-
-A `behaviour-change` names no mutation, task or not: `plan` drops any the measurement
-carried and writes one line per dropped mutant in the plan.
+Nothing is measured, proven or reported per task. One `conclude` checks the whole
+branch — scope, budget, the red on the base, the whole suite, lint — and one review
+reads it.
 
 An `epic` is designed and never cut: no branch, no suite, no marker. Its plan holds the
 stories it decomposes into, each an item for the tracker, and the plan is where it ends.
 
-## A fix
+## A fix, a widened item
 
 ```
 deliver.py prepare --repo R --fix <review package> [--branch B]
-```
-
-The `author_fix` routes a review opened become the item, written from the findings
-behind them; the kind is `behaviour-change`; the branch is the review's own, and its
-head is the base — the red before the green is measured against what the review read.
-The rest of the sequence is the same, and it ends where every delivery ends: in the
-review's invocation.
-
-## A widened item
-
-```
 deliver.py prepare --repo R --item C --item-file ITEM.md --shape S --branch B --continue
 ```
 
-The person widened an item whose branch already holds a delivery. The new ask is
-written on that branch, and its head is the base, as a fix's is. The item file says
-what was added and in whose words; the review that follows reads the whole branch.
+A fix delivers the `author_fix` routes a review opened, written from the findings behind
+them, on the review's own branch. A widened item is a new ask on a branch that already
+holds a delivery. In both the branch's head is the base, the shape has no gate, and the
+sequence is the three steps above.
+
+## The evidence
+
+`deliver.py evidence` writes `evidence.md` beside the delivery's report: the commits,
+the files, the proof, the suite that ran. When the profile declares `delivery.evidence`
+— how a change is shown to a person in that repository, what raises the environment,
+what takes it down — the `evidence` stage runs the `evidence-collector` first: it raises
+the environment **once**, takes one capture per acceptance criterion, takes it down, and
+its captures join the file. What it could not show is written with the reason. None of
+it changes the delivery's state: it illustrates what was done.
 
 ## The report
 

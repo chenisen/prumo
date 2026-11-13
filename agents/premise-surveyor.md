@@ -38,6 +38,7 @@ JSON only:
   ],
   "proving_tests": ["<behaviour-change only: the tests that must be red on the base and green after>"],
   "guarding_tests": ["<refactor only: the existing tests that exercise the code being reshaped>"],
+  "related_tests": ["<the existing test FILES that exercise the code the named files hold>"],
   "checked": ["<what you read>"]
 }
 ```
@@ -74,20 +75,15 @@ JSON only:
   by name, that exercise them today. Grep the test roots for the units' names and
   routes. A refactor with no guarding test is not deliverable: say so, with the files
   that have none, and the delivery stops for a person.
+- `related_tests` is what a small delivery is checked by, beside the tests it writes:
+  the test **files** — paths, not names — that already exercise the code the writer will
+  touch, the files holding every `stays_green` and every guarding test among them. Grep
+  the test roots for the units' names; name what you found, and nothing you did not open.
+  The whole suite is not run for a small change, so a file missing here is a regression
+  nobody looks for.
 - `files` holds only what this kind allows: for `coverage-gap`, the test file alone; for
   `behaviour-change`, the production files the fix needs plus the test file; for
   `refactor`, the files being reshaped and, if the shape needs them, their tests.
-
-## A task of a story
-
-When the request says the item is a task of an approved story, its bullets are the task's
-**criteria** — the state the code must reach — and never premises. A premise is a fact
-about the code **today** that the design assumed: the line it points at exists, the
-behaviour it replaces is where it says, the callers it names are the callers, no test
-covers it yet. `fails` means today's code is not as the design assumed; "the behaviour is
-wrong today" is why the task exists and is never a failing premise. For a
-`behaviour-change` task name no mutation: the writer replaces the lines you would point
-at, and the proof is the proving tests red on the base and green after.
 
 ## Voice
 

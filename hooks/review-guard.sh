@@ -17,7 +17,8 @@
 #     `.claude/.task-review-ativo`, which `review.py` creates and removes.
 #   * **during a delivery** — one marker per delivery in `.claude/.prumo-deliver-ativo.d/`,
 #     which `deliver.py` creates and removes — inside THAT delivery's worktree: a write
-#     outside the files its measurement named (or before its plan was approved), `git
+#     outside the files its measurement named — or, while no measurement is on disk,
+#     outside the roots its kind may touch — or before its plan was approved, `git
 #     add -A`, rewriting history, checkout; pushing its worktree or its branch from
 #     anywhere; and moving the item. Outside every delivery's worktree nothing of this
 #     applies: another agent's task, the workspace, a package. A commit WITH a pathspec

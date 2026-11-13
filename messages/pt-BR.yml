@@ -90,11 +90,14 @@ owner:
   source_assistant: a própria IA
 deliver:
   blocked:
+    writer_blocked: 'o escritor parou — {reason}'
+    tasks_pending: 'tarefas não entregues: {tasks}'
+    base_not_measured: 'a branch tem vermelhos e a base não pôde ser medida — {reason}'
     baseline_not_assessable: 'sem `red_name_pattern` no perfil — a baseline não compara por nome'
     budget_exceeded: '{files} arquivos e {lines} linhas; o perfil permite {max_files} e {max_lines} — divida o item ou dispense'
     lint_red: 'o lint do perfil está vermelho — {reason}'
     mutation_too_wide: 'a mutação em {file}:{line} também deixou `{test}` vermelho — é mais larga que a guarda'
-    no_red_on_base: 'nenhum teste ficou vermelho na base — mudança de comportamento sem vermelho antes do verde não está provada'
+    no_red_on_base: 'mudança de comportamento sem teste próprio — nada pôde ficar vermelho antes do verde'
     mutation_survived: 'a mutação em {file}:{line} deixou a suíte verde — o teste não prova a guarda'
     new_red: 'vermelho novo por nome: {names}'
     no_guarding_tests: 'nenhum teste guarda o comportamento que este refactor preserva — escreva a guarda antes, como coverage-gap'
@@ -106,8 +109,11 @@ deliver:
     suite_incomplete: 'a suíte executou {executed} de {predicted} — não é verde'
     progress_not_declared: 'a suíte rodou, mas ninguém a contou. O perfil não declara `checks.suite.progress_pattern`.'
     suite_not_run: 'a suíte não rodou: {reason}'
-    test_not_red_on_base: '`{test}` não ficou vermelho na base — sem prova'
+    test_not_red_on_base: 'nada ficou vermelho na base sob `{test}` — o teste passa sem a mudança'
   cli:
+    no_worktree: 'o perfil `{repo}` dispensa a worktree — esta entrega é cortada no próprio checkout'
+    evidence_needs_delivered: '{path} não tem registro entregue — evidência ilustra uma entrega já feita'
+    evidence_is_the_tests: 'o perfil não declara `delivery.evidence` — os testes acima são a evidência'
     approval_needs_name: 'uma aprovação precisa de nome — passe --by, ou defina TASK_REVIEW_RESPONSAVEL'
     approved: 'plano aprovado por {by}: {path}'
     plan_at: 'plano: {path} ({shape}, {depth}{gate})'
@@ -117,13 +123,6 @@ deliver:
     kind_not_for_shape: 'kind `{kind}` não entrega um {shape} — permitidas: {kinds}'
     hotfix_base_missing: 'o perfil não declara `delivery.hotfix_base` — um hotfix não tem de onde ser cortado'
     decomposed: 'um {shape} se decompõe, nunca se entrega — o plano tem as histórias, para uma pessoa abrir'
-    story_task_missing: 'a tarefa `{task}` não está no design em {path}'
-    story_tasks_pending: '{done} de {total} tarefas entregues — próxima: {task}'
-    story_budget: 'as tarefas da história gastaram {lines} linhas em {files} arquivos; a forma permite {max_lines} e {max_files}'
-    story_budget_waived: 'as tarefas da história gastaram {lines} linhas em {files} arquivos. A forma permite {max_lines} e {max_files}. Dispensa de {approver} até {expires}.'
-    story_no_task_at_head: 'nenhuma tarefa entregue da história está no head da branch {head}. A suíte não foi medida nele. Conclua de novo a última tarefa.'
-    story_suite_at_head: 'suíte no head, da tarefa {task}: {executed}/{predicted} executados · {reds} vermelhos na base · {new} vermelho(s) novo(s)'
-    baseline: 'baseline: {reds} vermelhos por nome · {executed}/{predicted} executados'
     branch_at: 'branch `{branch}` em {path}, cortada de {base}'
     delivery_block_draft: 'rascunho de `delivery:` para `{repo}` — cole no perfil e confirme:'
     fix_item: 'Corrigir as rotas que a revisão abriu em {item}'
@@ -135,7 +134,7 @@ deliver:
     mutation_file_missing: '{file} não está na árvore'
     mutation_text_missing: '{file}:{line} não contém `{text}`'
     mutation_dropped_behaviour_change: 'descartada: a mutação em {file}:{line} para {test}. Uma mudança de comportamento substitui as linhas que a mutação aponta. A prova é vermelho na base, verde depois.'
-    then_conclude: 'Depois: deliver.py conclude --package {path} --measure <arquivo> --written <arquivo>'
+    then_conclude: 'Depois: deliver.py conclude --package {path} --result <o arquivo onde o retorno do workflow foi salvo>'
     tree_dirty: '{path} tem mudanças pendentes — trabalho de alguém em andamento; commite ou guarde antes'
     worktree_exists: '{path} já existe — uma branch com esse nome está em andamento'
     branch_exists: '`{branch}` já existe em {path} — worktree nunca reseta branch; passe --branch, ou apague-a antes'
@@ -154,6 +153,10 @@ deliver:
     person: pessoa
     profile: dono do perfil
   report:
+    evidence: EVIDÊNCIA
+    commits: COMMITS
+    shown: MOSTRADO
+    size: TAMANHO
     plan: PLANO
     shape: FORMA
     gate_open: aprovado por {by}
@@ -170,7 +173,6 @@ deliver:
     measured: MEDIDO
   record:
     measured_note: "o que o escritor declarou antes de o script rodar. Os runs do script estão em `measured`, e decidem"
-    story_measured_note: "a suíte da história é o run da tarefa {task} no head da branch, relido contra a base da história. O run vermelho-na-base de cada tarefa vai junto."
   state:
     blocked: BLOQUEADO
     delivered: ENTREGUE
@@ -458,6 +460,7 @@ review:
   help_delivery: 'o pacote da entrega que produziu esta branch: o registro dela é evidência para a suíte e os critérios'
   help_criteria: 'a leitura dos revisores de cada critério, com o registro (lista JSON de {{id, state, record}})'
   suite_from_delivery: 'medida pela entrega nesta mesma cabeça: {executed} executados, {reds} vermelhos na base, nenhum novo por nome'
+  suite_from_delivery_focused: 'medida pela entrega nesta mesma cabeça, sobre os arquivos de teste que a mudança tocou: {executed} executados, nenhum novo por nome. Mudança pequena — a suíte inteira não rodou'
   suite_from_delivery_red: 'medida pela entrega nesta mesma cabeça: vermelho novo por nome — {names}'
   help_coverage: o que cada revisor olhou e quantos não responderam (JSON). Opcional, mas sem ele uma fatia por ler passa despercebida
   act_approve: 3. Approve d{proposal_with_article}

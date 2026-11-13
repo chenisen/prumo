@@ -15,7 +15,7 @@ suite runs, how a red is named — all of it comes from the profile.
 | **Trigger** | the item names a guard (a condition, a validation, a refusal) and says no test proves it |
 | **Premises the surveyor measures** | the guard exists at `file:line`; no test in `test_roots` exercises it; the guard is the only point of control the item claims it is |
 | **What the writer may touch** | the test file only — a new one, or the existing one for that unit. Production code is out of scope for this kind |
-| **Proof** | **mutation by hand**: the script turns the guarded code wrong at the named line (the operator, the boundary, the returned value), runs the suite, requires the new test **red**, and reverts the mutation. Then the suite on the branch, green by name against the baseline |
+| **Proof** | **mutation by hand**: the writer turns the guard wrong and sees its test red as it works; then the script, once, turns the guarded code wrong at the named line (the operator, the boundary, the returned value), runs the test files the change touched — the whole suite only where the profile cannot run files — requires the new test **red**, and reverts the mutation. Then what the size asks on the branch, green by name |
 | **Done when** | the mutation went red, the revert left the tree clean, no new red by name, the diff is inside `test_roots` and inside the budget |
 | **Blocked when** | the guard is not where the item says; a test already covers it (the item's premise fails); the mutation survived — the test does not prove the guard |
 
@@ -36,9 +36,9 @@ the run stops: a coverage delivery without its mutation is a test nobody proved.
 | **Trigger** | the item names a behaviour the code lacks or gets wrong, with the input and the expected answer |
 | **Premises the surveyor measures** | where the behaviour lives at `file:line`; what the code answers today; which test file proves it; `proving_tests` — the names the writer must use |
 | **What the writer may touch** | the production files the measurement named, and the test file |
-| **Proof** | **red before green**: the script restores the base's version of the production files, runs the suite with the new test in place, and requires every proving test **red**; then restores the writer's files and runs the suite again, requiring them green by name against the baseline |
+| **Proof** | **red before green**: the writer sees the test red, then green, as it works; then the script, once, restores the base's version of the production files and runs the changed test files — `red` when every proving test was read red, `partial` when something went red and a name was not read (the report says which), `green` when nothing did; then the writer's files are put back and what the size asks runs on the branch, green by name |
 | **Done when** | red on the base, green on the branch, no new red by name, the diff inside the named files and the budget, the profile's lint green |
-| **Blocked when** | the proving test is green on the base — it does not prove the change; a line outside the named files; a new red elsewhere |
+| **Blocked when** | nothing goes red on the base under the new test — it passes without the change; no test was written at all; a line outside the scope; a new red elsewhere |
 
 An `author_fix` route a review opened is this kind: `deliver.py prepare --fix <review
 package>` writes the item from the routes' findings, stays on the review's branch, and
@@ -63,6 +63,8 @@ tests stand guard, and decides whether that is enough.
 ## Every kind
 
 The profile's lint check, when it declares one, runs over the tree the writer left and
-blocks on red. A kind not listed here — `dead-code`, `static-analysis-debt`,
+blocks on red. Every proof above runs **once per item** — for a story, once over the
+whole branch, never per task — and none of it is the item's evidence: evidence is what
+shows a finished delivery to a person, collected last, and it decides nothing. A kind not listed here — `dead-code`, `static-analysis-debt`,
 `duplicated-rule`, `stale-dependency` — is `unsupported` until it has a recipe and its
 tests.

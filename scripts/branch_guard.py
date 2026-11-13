@@ -273,10 +273,25 @@ def judge_write(path: str, deliveries: list[dict]) -> str | None:
     except Exception:
         pass
     if not allowed:
-        return t("guard.delivery_write_unmeasured", file=rel)
+        # No measurement on disk yet. A delivery with no gate is measured and written in
+        # ONE workflow call, and a story's tasks are written from the approved design:
+        # the writer is held to the roots its kind may touch, and `conclude` holds the
+        # diff to the scope. A marker that names no roots keeps the old rule.
+        roots = [r.rstrip("/") for r in d.get("roots") or []]
+        if not roots:
+            return t("guard.delivery_write_unmeasured", file=rel)
+        if not any(_under_root(rel, r) for r in roots):
+            return t("guard.delivery_write_unnamed", file=rel)
+        return None
     if rel not in allowed:
         return t("guard.delivery_write_unnamed", file=rel)
     return None
+
+
+def _under_root(rel: str, root: str) -> bool:
+    """`rel` sits under `root` — a directory, a single file, or a glob of either."""
+    from common import casa_algum
+    return rel == root or rel.startswith(root + "/") or casa_algum(rel, [root, root + "/**"])
 
 
 def judge_delivery_git(tokens: list[str], cwd: pathlib.Path, deliveries: list[dict]) -> str | None:

@@ -299,6 +299,17 @@
             "null"
           ],
           "minimum": 0
+        },
+        "scope": {
+          "enum": [
+            "focused",
+            "whole"
+          ],
+          "description": "What ran on the branch: the test files the change touched (a small delivery), or the whole suite."
+        },
+        "base": {
+          "type": "string",
+          "description": "`not_needed` — the branch run was green, so no base was measured; `measured`; `reused` — an earlier package measured the same tree with the same command; `not_run: <why>`."
         }
       }
     },
@@ -534,6 +545,34 @@
           }
         }
       }
+    },
+    "size": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "size",
+        "reason"
+      ],
+      "description": "How much the change that landed touches, and why it reads so. Decides what conclude runs: the test files the change touched, or the whole suite.",
+      "properties": {
+        "size": {
+          "enum": [
+            "small",
+            "standard",
+            "large"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "writer_blocked": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The writer's own reason for not delivering — a premise the code denies, a test it could not turn green. Null when it wrote."
     }
   },
   "$defs": {
@@ -574,9 +613,17 @@
             "result": {
               "enum": [
                 "red",
+                "partial",
                 "green",
                 "not_run"
               ]
+            },
+            "missing": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "With `partial`: the proving tests the measurement named that were not read among the reds on the base."
             }
           }
         }
