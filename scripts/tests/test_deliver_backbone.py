@@ -426,6 +426,31 @@ class Spine(Fixture):
                                  capture_output=True, text=True).stdout.strip()
         self.assertEqual(current, branch)
 
+    def test_a_widened_item_continues_its_delivered_branch_from_its_head(self):
+        """The person widened an item after its branch was delivered. `--continue` writes
+        the new ask on that branch, with its head as the base — never a branch recut from
+        the base, which would drop what was already delivered."""
+        package = self.prepare()
+        code, rec = self.conclude(package, PROVING_TEST)
+        branch = rec["branch"]["name"]
+        head = subprocess.run(("git", "rev-parse", "HEAD"), cwd=self.repo,
+                              capture_output=True, text=True).stdout.strip()
+        args = argparse.Namespace(repo="repo-x", item="ITEM-1", item_file=str(self.root / "item.md"),
+                                  kind="behaviour-change", branch=branch, package=str(self.root / "pkg-more"),
+                                  fix=None, shape="bug", type=None, continue_branch=True)
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(deliver.prepare(args), 0)
+        man = json.loads((self.root / "pkg-more" / "deliver-manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(man["base"], {"name": branch, "sha": head})
+        self.assertEqual(man["branch"], {"name": branch, "sha": head})
+
+    def test_continue_without_a_branch_is_refused(self):
+        args = argparse.Namespace(repo="repo-x", item="ITEM-1", item_file=str(self.root / "item.md"),
+                                  kind=None, branch=None, package=str(self.root / "pkg-x"),
+                                  fix=None, shape="bug", type=None, continue_branch=True)
+        with self.assertRaises(deliver.UsageError):
+            deliver.prepare(args)
+
     def test_a_hotfix_waits_for_a_person_and_runs_nothing_until_then(self):
         """The shape asks a gate. Without the approval file the suite and the mutation
         do not run and the record says who is owed; with it, the delivery goes through,

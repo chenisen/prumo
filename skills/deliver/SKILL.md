@@ -221,6 +221,16 @@ head is the base — the red before the green is measured against what the revie
 The rest of the sequence is the same, and it ends where every delivery ends: in the
 review's invocation.
 
+## A widened item
+
+```
+deliver.py prepare --repo R --item C --item-file ITEM.md --shape S --branch B --continue
+```
+
+The person widened an item whose branch already holds a delivery. The new ask is
+written on that branch, and its head is the base, as a fix's is. The item file says
+what was added and in whose words; the review that follows reads the whole branch.
+
 ## The report
 
 Short. One fact per line, each with an address. `✔` holds, `✘` fails, `?` not measured.

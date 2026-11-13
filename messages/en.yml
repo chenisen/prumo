@@ -125,6 +125,7 @@ deliver:
     fix_item: 'Fix the routes the review opened on {item}'
     fix_no_routes: 'the review at {path} opened no `author_fix` route — nothing to fix'
     fix_needs_branch: 'the review''s origin is `{origin}`, not a branch — pass --branch'
+    continue_needs_branch: '--continue writes on a branch that already exists — pass --branch'
     mutation_file_missing: '{file} is not in the tree'
     mutation_text_missing: '{file}:{line} does not contain `{text}`'
     mutation_dropped_behaviour_change: 'dropped: the mutant at {file}:{line} for {test}. A behaviour change replaces the lines a mutant points at. Its proof is red on the base, green after.'

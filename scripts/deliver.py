@@ -509,6 +509,12 @@ def prepare(args) -> int:
     package.mkdir(parents=True, exist_ok=True)
     fix = pathlib.Path(args.fix) if getattr(args, "fix", None) else None
     story = pathlib.Path(args.story) if getattr(args, "story", None) else None
+    # A person widened an item already delivered on its branch: the new ask is written on
+    # that branch, and its head is the base, as a fix's is — measured on the first front-end
+    # delivery, whose owner added two rules of the same screen after the review approved it.
+    continuing = bool(getattr(args, "continue_branch", False))
+    if continuing and not args.branch:
+        raise UsageError(t("deliver.cli.continue_needs_branch"))
     task = None
     story_context = None
     if story:
@@ -626,7 +632,7 @@ def prepare(args) -> int:
         if not base_sha:
             raise UsageError(t("resolver.branch_unresolved", branch=name))
         base_name = name
-    if fix:
+    if fix or continuing:
         base_sha = (git(repo_dir, "rev-parse", "--verify", "-q", name, check=False)
                     or git(repo_dir, "rev-parse", "--verify", "-q", f"origin/{name}", check=False))
         if not base_sha:
@@ -634,7 +640,7 @@ def prepare(args) -> int:
         base_name = name
     if name in cfg().forge.protected_branches:
         raise UsageError(t("deliver.cli.branch_protected", branch=name))
-    workdir = cut_branch(repo_dir, block, name, base_sha, fresh=not (fix or story))
+    workdir = cut_branch(repo_dir, block, name, base_sha, fresh=not (fix or story or continuing))
 
     # F3 — the baseline, by name, on the branch while it still IS the base.
     from evidence import compare_reds
@@ -1324,6 +1330,8 @@ def main() -> int:
     a.add_argument("--branch")
     a.add_argument("--package")
     a.add_argument("--fix", help="a review package whose author_fix routes become the item")
+    a.add_argument("--continue", dest="continue_branch", action="store_true",
+                   help="write the item on --branch, which already holds a delivery; its head is the base")
     a.add_argument("--shape", choices=sorted(SHAPES), help="the item's shape; or --type")
     a.add_argument("--story", help="a story's package: the item is one of its tasks")
     a.add_argument("--task", help="the task id in that story's design")
