@@ -7,7 +7,9 @@
 #
 # SCOPE, and this is the delicate point of this guard:
 #
-#   * **merging a proposal is blocked ALWAYS.** No skill of this workspace should merge.
+#   * **merging a proposal is blocked**, unless the installation delegated it
+#     (`forge.delegated_merge: true`) — and then still blocked while a review or a
+#     delivery runs. No skill of this workspace merges on its own.
 #   * **landing on a protected branch is blocked ALWAYS** — push, commit, rewrite — in any
 #     repository under `paths.repositories`; `scripts/branch_guard.py` judges it, with the
 #     list from `forge.protected_branches` (`homolog`, `main`, `master`, `prod`, `develop`
@@ -54,7 +56,7 @@ path=$(read_field path)
 fresh() {
   [ -f "$1" ] || return 1
   local age
-  age=$(( $(date +%s) - $(stat -c %Y "$1" 2>/dev/null || echo 0) ))
+  age=$(( $(date +%s) - $(stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0) ))  # GNU, then BSD
   [ "$age" -lt "$VALIDITY_SECONDS" ]
 }
 
@@ -66,10 +68,16 @@ block() {
 
 # ---------- always, review running or not ----------
 if [ -n "$cmd" ]; then
-  printf '%s' "$cmd" | grep -Eqi '(^|[[:space:]])(glab|gh)[[:space:]]+(mr|pr)[[:space:]]+merge' \
-    && block "merging a proposal from the CLI"
-  printf '%s' "$cmd" | grep -Eqi 'merge_requests?/[0-9]+/merge|/pulls?/[0-9]+/merge' \
-    && block "merging a proposal through the API"
+  if printf '%s' "$cmd" | grep -Eqi '(^|[[:space:]])(glab|gh)[[:space:]]+(mr|pr)[[:space:]]+merge|merge_requests?/[0-9]+/merge|/pulls?/[0-9]+/merge'; then
+    # Never while a review or a delivery runs, delegated or not.
+    { fresh "$MARKER" || fresh "$DELIVER_MARKER"; } && block "merging a proposal while a review or a delivery runs"
+    # Otherwise only when the installation delegated it. The script answers, from the
+    # project's directory so that a `prumo.yml` found by walking up is found; anything
+    # but a clean 0 — no configuration, a crash — blocks.
+    SCRIPTS="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}/scripts"
+    why=$(cd "${CLAUDE_PROJECT_DIR:-$PWD}" 2>/dev/null && python3 "$SCRIPTS/branch_guard.py" --pwd "$PWD" --command "$cmd" --merge 2>/dev/null)
+    [ $? -eq 0 ] || block "${why:-merging a proposal}"
+  fi
   # Nothing lands directly on a protected branch — push, commit or rewrite — in any
   # repository the prumo works on. The list and the scope come from prumo.yml; the
   # judgement is a script, so it is tested like one.

@@ -39,7 +39,7 @@ class TestNothingIsAssumed(unittest.TestCase):
         holds the file."""
         import os, providers
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as elsewhere:
-            root = pathlib.Path(tmp)
+            root = pathlib.Path(tmp).resolve()  # macOS: /var is /private/var
             (root / "prumo.yml").write_text("x: 1")
             (root / ".prumo" / "packages" / "p").mkdir(parents=True)
             saved, cwd = list(providers.HINTS), os.getcwd()

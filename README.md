@@ -113,7 +113,7 @@ prumo/
 │   ├── task-review.js           the reviewer fan-out, the verifier, the manual plan
 │   └── deliver.js               measure; then write and refute — two stages, one file
 ├── hooks/
-│   ├── review-guard.sh          blocks merge and landing on a protected branch always; push/commit while a review runs;
+│   ├── review-guard.sh          blocks merge (unless delegated) and landing on a protected branch always; push/commit while a review runs;
 │                                push, `add -A`, the base, and writes outside the named files while a delivery runs
 │   └── hooks.json               registers the hook — you edit no settings.json
 │
@@ -540,7 +540,9 @@ from the packages by `run.py next` and pasted, never composed.
 
 Across every capability:
 
-- **Merge.** The hook blocks it, always.
+- **Merge.** The hook blocks it — unless the person who owns the installation delegated
+  it with `forge.delegated_merge: true` in `prumo.yml`, and even then never while a review
+  or a delivery runs. The method itself still approves at most.
 - **Move an item between columns.**
 - **Push.** A branch leaves the machine by a person's hand.
 - **Publish without authorisation.** The item comment, the proposal comment and the

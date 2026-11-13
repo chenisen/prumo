@@ -135,7 +135,7 @@ class Fixture(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        root = pathlib.Path(self.tmp.name)
+        root = pathlib.Path(self.tmp.name).resolve()  # macOS: /var is /private/var
         self.repo = root / "repositories" / "repo-x"
         (self.repo / "src").mkdir(parents=True)
         (self.repo / "tests").mkdir()

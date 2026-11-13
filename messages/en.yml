@@ -321,6 +321,7 @@ preflight:
 guard:
   push_protected: 'pushing to `{branch}` in {repo} — nothing of the prumo lands directly on a protected branch; hand over a proposal'
   write_protected: '`git {action}` on `{branch}` in {repo} — nothing of the prumo writes directly on a protected branch'
+  merge_not_delegated: 'merging a proposal is a person''s act — unless the owner of this installation delegated it with `forge.delegated_merge: true` in prumo.yml'
 findings:
   colliding_ids: 'findings.json carries {n} id(s) given to more than one finding: {ids}. An id is what the verification, the judge and the report key by, so two findings sharing one means findings were LOST — overwritten by a copy of each other — and the result is shaped exactly like a correct one.'
   colliding_remedy: 'The id belongs to the METHOD, not to the reviewer: each agent numbers from `F1` inside its own context and cannot know what the others chose. The workflow stamps a unique id per reviewer; a collision here means it did not run, or ran an older version. Re-run the workflow rather than renumbering by hand.'

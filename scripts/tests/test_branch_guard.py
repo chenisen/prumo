@@ -55,8 +55,9 @@ class ProtectedBranches(unittest.TestCase):
         common.cfg.cache_clear()
         self.tmp.cleanup()
 
-    def config(self, protected):
+    def config(self, protected, delegated=None):
         extra = f"  protected_branches: {json.dumps(protected)}\n" if protected is not None else ""
+        extra += f"  delegated_merge: {json.dumps(delegated)}\n" if delegated is not None else ""
         (self.root / "prumo.yml").write_text(textwrap.dedent('''\
             prumo: 1
             language: en
@@ -156,6 +157,53 @@ class ProtectedBranches(unittest.TestCase):
         self.assertEqual(run_hook(self.root, "Bash", command=f"git -C {self.repo} push origin homolog"), 2)
         self.assertEqual(run_hook(self.root, "Bash", command=f"git -C {self.repo} push origin feature"), 0)
         self.assertEqual(run_hook(self.root, "Bash", command=f"git -C {self.repo} status"), 0)
+
+
+    # ---- merging: a person's act, unless the installation delegated it
+    MERGES = ("gh pr merge 25 --merge", "glab mr merge 3",
+              "curl -X PUT https://forge.example.invalid/repos/o/r/pulls/25/merge")
+
+    def merges(self):
+        return [run_hook(self.root, "Bash", command=c) for c in self.MERGES]
+
+    def test_merge_is_blocked_when_the_installation_did_not_delegate_it(self):
+        self.assertFalse(common.cfg().forge.delegated_merge)
+        self.assertEqual(self.merges(), [2, 2, 2])
+        r = subprocess.run([sys.executable, branch_guard.__file__, "--pwd", str(self.root),
+                            "--command", "gh pr merge 25", "--merge"], capture_output=True, text=True)
+        self.assertEqual((r.returncode, r.stdout.strip()), (2, t("guard.merge_not_delegated")))
+
+    def test_a_delegated_merge_passes_with_the_configuration_the_environment_names(self):
+        self.config(None, delegated=True)
+        self.assertTrue(common.cfg().forge.delegated_merge)
+        self.assertEqual(self.merges(), [0, 0, 0])
+
+    def test_a_delegated_merge_passes_with_the_configuration_found_by_walking_up(self):
+        """No PRUMO_CONFIG: the hook asks from the project's directory, where the
+        installation's prumo.yml lives."""
+        del os.environ["PRUMO_CONFIG"]
+        self.config(None, delegated=True)
+        self.assertEqual(self.merges(), [0, 0, 0])
+        self.config(None)
+        self.assertEqual(self.merges(), [2, 2, 2])
+
+    def test_a_delegated_merge_is_still_blocked_while_a_review_or_a_delivery_runs(self):
+        self.config(None, delegated=True)
+        (self.root / ".claude").mkdir(exist_ok=True)
+        for name in (".task-review-ativo", ".prumo-deliver-ativo"):
+            with self.subTest(marker=name):
+                marker = self.root / ".claude" / name
+                marker.write_text("{}", encoding="utf-8")
+                self.assertEqual(run_hook(self.root, "Bash", command="gh pr merge 25"), 2)
+                marker.unlink()
+        self.assertEqual(run_hook(self.root, "Bash", command="gh pr merge 25"), 0)
+
+    def test_delegation_is_a_boolean_and_a_configuration_that_fails_does_not_delegate(self):
+        from providers import InvalidConfiguration
+        self.config(None, delegated="yes")
+        with self.assertRaises(InvalidConfiguration):
+            common.cfg()
+        self.assertEqual(self.merges(), [2, 2, 2])
 
 
 if __name__ == "__main__":

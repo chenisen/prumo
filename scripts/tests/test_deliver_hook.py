@@ -28,6 +28,9 @@ class DeliveryGuard(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.project = pathlib.Path(self.tmp.name)
+        # hermetic: an installation that delegated merging must not leak in from the shell
+        self.env = dict(os.environ)
+        os.environ["PRUMO_CONFIG"] = str(self.project / "no-prumo.yml")
         (self.project / ".claude").mkdir()
         self.worktree = self.project / "repo" / ".worktrees" / "item-1"
         self.worktree.mkdir(parents=True)
@@ -38,6 +41,8 @@ class DeliveryGuard(unittest.TestCase):
         }), encoding="utf-8")
 
     def tearDown(self):
+        os.environ.clear()
+        os.environ.update(self.env)
         self.tmp.cleanup()
 
     def bash(self, command):

@@ -13,8 +13,14 @@ checkout, a scratch clone — is not the guard's business. Without a configurati
 no root to scope by, so every repository is guarded with the default list: a guard that
 fails open for want of a file is no guard.
 
+Merging a proposal is a person's act too, unless the installation delegated it —
+`forge.delegated_merge: true`. `--merge` answers that one: silence and 0 when it was
+delegated, the reason and 2 otherwise. A configuration that cannot be read is NOT a
+delegation: that answer fails closed.
+
 Usage:
     branch_guard.py --pwd DIR --command "git push origin homolog"
+    branch_guard.py --pwd DIR --command "<merge command>" --merge
 """
 from __future__ import annotations
 
@@ -192,6 +198,15 @@ def inside_repositories(command: str, pwd: str) -> bool:
     return cwd == str(root) or cwd.startswith(str(root).rstrip("/") + "/")
 
 
+def merge_delegated() -> bool:
+    """Whether this installation handed merging to the agent. Unreadable → no."""
+    try:
+        from common import cfg
+        return cfg().forge.delegated_merge is True
+    except Exception:
+        return False
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -199,7 +214,14 @@ def main() -> int:
     p.add_argument("--command", required=True)
     p.add_argument("--inside-repositories", action="store_true",
                    help="print yes/no: does the command's git run under paths.repositories?")
+    p.add_argument("--merge", action="store_true",
+                   help="the command merges a proposal: exit 0 only when the installation delegated it")
     a = p.parse_args()
+    if a.merge:
+        if merge_delegated():
+            return 0
+        print(t("guard.merge_not_delegated"))
+        return 2
     if a.inside_repositories:
         print("yes" if inside_repositories(a.command, a.pwd) else "no")
         return 0
