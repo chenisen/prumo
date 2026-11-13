@@ -288,6 +288,12 @@ $defs:
           A regular expression with TWO groups, executed and predicted, over the OUTPUT.
           A suite whose executed is short of its predicted did not finish, and did not
           prove anything — whatever its exit code says.
+      files_command:
+        type: [string, "null"]
+        description: >
+          The suite over named test files only, with `{tests}` where the paths go (each
+          quoted). A behaviour change's red on the base runs only the test files the
+          delivery changed; absent, the whole suite runs again.
       timeout_seconds:
         type: [integer, "null"]
         minimum: 1

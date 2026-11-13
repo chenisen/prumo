@@ -101,6 +101,7 @@ const WRITTEN_SCHEMA = {
     files: { type: 'array', items: { type: 'string' } },
     skipped: { type: 'array', items: { type: 'string' } },
     reused: { type: 'array', items: { type: 'string' } },
+    commit_message: { type: 'string' },
   },
 }
 
@@ -276,6 +277,12 @@ const written = await run('change-writer', [
   'one level of nesting in what you add; nothing written twice; no comment explaining code. ' +
   'Keep the file\'s conventions — how it builds collaborators, how it names — and change one ' +
   'only where a test you write depends on it.',
+  // The first front-end delivery (2026-11-13) committed the item's Portuguese title with its
+  // id twice, against a log written in lowercase English: the script cannot know the
+  // repository's voice, the writer read it.
+  `\`commit_message\` in your return: what the change does, in the voice of this repository's ` +
+  `recent commit subjects and its conventions — without the item's id, which the profile's ` +
+  `format (${JSON.stringify(delivery.commit_format ?? '{item} - {message}')}) adds.`,
   previous
     ? '`files` in your return lists EVERY file changed since the task base — the earlier ' +
       'attempt\'s included — not only the ones you touched in this pass.'

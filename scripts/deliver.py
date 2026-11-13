@@ -235,17 +235,23 @@ def _py(script: str, *args: str, check: bool = True) -> None:
         raise UsageError(t("review.step_failed", path=script, n=r.returncode))
 
 
-def run_suite(profile: dict, cwd: pathlib.Path, package: pathlib.Path, label: str) -> dict:
+def run_suite(profile: dict, cwd: pathlib.Path, package: pathlib.Path, label: str,
+              tests: list[str] | None = None) -> dict:
     """The suite, through the profile's allowlist, output kept beside the package. The
     template is what the allowlist judges; `{workdir}` is filled in after, with `cwd`
-    as the executor sees it."""
-    from evidence import authorise, resolve, run_command, time_limit
+    as the executor sees it. With `tests` and a `files_command` in the profile, only
+    those test files run."""
+    from evidence import authorise, resolve, run_command, time_limit, with_tests
     check = (profile.get("checks") or {}).get("suite") or {}
-    ok, reason = authorise(check.get("command") or "", profile)
+    by_files = bool(tests and check.get("files_command"))
+    template = check["files_command"] if by_files else check.get("command")
+    ok, reason = authorise(template or "", profile)
     if not ok:
         return {"ran": False, "reason": reason, "output": ""}
-    result = run_command(resolve(check["command"], profile, cwd), cwd, limit=None,
-                         timeout=time_limit(check))
+    command = resolve(template, profile, cwd)
+    if by_files:
+        command = with_tests(command, tests)
+    result = run_command(command, cwd, limit=None, timeout=time_limit(check))
     (package / f"run-suite-{label}.txt").write_text(
         result.get("output", result.get("reason", "")), encoding="utf-8")
     return result
@@ -364,8 +370,14 @@ def branch_name(block: dict, item: str, item_text: str, given: str | None) -> st
         m = re.match(r"^\s*branch\s*:\s*(\S+)\s*$", line, re.I)
         if m:
             return m.group(1)
-    title = item_text.strip().splitlines()[0].lstrip("# ").strip() if item_text.strip() else ""
-    return block["branch_format"].format(item=item, slug=slug(title, 40))
+    return block["branch_format"].format(item=item, slug=slug(item_title(item_text, item), 40))
+
+
+def item_title(item_text: str, item: str) -> str:
+    """The item's first line, without the heading mark and without the item's own id in
+    front of it: `# ITEM-7 — Title` under `{item}-{slug}` named a branch `ITEM-7-item-7-…`."""
+    first = item_text.strip().splitlines()[0].lstrip("# ").strip() if item_text.strip() else ""
+    return re.sub(rf"^{re.escape(str(item))}\s*[-—–:·]?\s*", "", first) if item else first
 
 
 def fix_item(review: pathlib.Path) -> tuple[str, str, str]:
@@ -486,6 +498,48 @@ def cut_branch(repo_dir: pathlib.Path, block: dict, name: str, base_sha: str,
     else:
         git(repo_dir, "checkout", "-q", name)
     return repo_dir
+
+
+def drop_fresh_branch(repo_dir: pathlib.Path, workdir: pathlib.Path, name: str, block: dict) -> None:
+    """Undo a cut that measured nothing: the worktree and the branch it created, which
+    still sit on the base. A branch that moved is somebody's work and stays."""
+    if git(repo_dir, "rev-parse", "--verify", "-q", name, check=False) != git(workdir, "rev-parse", "HEAD", check=False):
+        return
+    if block.get("worktree") and workdir != repo_dir:
+        git(repo_dir, "worktree", "remove", "--force", str(workdir), check=False)
+        git(repo_dir, "branch", "-D", name, check=False)
+
+
+def measured_run(repo: str, tree: str, command: str | None, package: pathlib.Path) -> str | None:
+    """A suite run already taken over this exact tree by this exact command, copied into
+    `package` as its base run. The tree is git's, so a commit whose message alone changed
+    — or a branch continued from a delivered head — is the same tree. Returns the run's
+    path, or None."""
+    if not tree or not command:
+        return None
+    repo_dir = dir_repositories() / repo
+    for other in sorted(dir_packages().glob(f"{repo}-*"), key=lambda p: p.stat().st_mtime, reverse=True):
+        if other == package or not (other / "profile.yml").exists():
+            continue
+        try:
+            import yaml
+            prof = yaml.safe_load((other / "profile.yml").read_text(encoding="utf-8")) or {}
+        except Exception:                                     # noqa: BLE001
+            continue
+        if ((prof.get("checks") or {}).get("suite") or {}).get("command") != command:
+            continue
+        candidates = []
+        man = other / "deliver-manifest.json"
+        if man.exists():
+            candidates.append((read_json(man).get("base", {}).get("sha"), other / "run-suite-base.txt"))
+        rec = other / "delivery.json"
+        if rec.exists() and read_json(rec).get("state") == DELIVERED:
+            candidates.append((read_json(rec).get("branch", {}).get("sha"), other / "run-suite-branch.txt"))
+        for sha, run in candidates:
+            if sha and run.exists() and git(repo_dir, "rev-parse", f"{sha}^{{tree}}", check=False) == tree:
+                shutil.copy2(run, package / "run-suite-base.txt")
+                return str(run)
+    return None
 
 
 def release_worktree(package: pathlib.Path) -> None:
@@ -640,19 +694,33 @@ def prepare(args) -> int:
         base_name = name
     if name in cfg().forge.protected_branches:
         raise UsageError(t("deliver.cli.branch_protected", branch=name))
-    workdir = cut_branch(repo_dir, block, name, base_sha, fresh=not (fix or story or continuing))
+    fresh = not (fix or story or continuing)
+    workdir = cut_branch(repo_dir, block, name, base_sha, fresh=fresh)
 
-    # F3 — the baseline, by name, on the branch while it still IS the base.
+    # F3 — the baseline, by name, on the branch while it still IS the base. A tree already
+    # measured by the same suite command is not measured again: its run is copied.
     from evidence import compare_reds
     check = (profile.get("checks") or {}).get("suite") or {}
-    result = run_suite(profile, workdir, package, "base")
+    reused = measured_run(args.repo, git(workdir, "rev-parse", "HEAD^{tree}"), check.get("command"), package)
+    if reused:
+        result = {"ran": True, "output": (package / "run-suite-base.txt").read_text(encoding="utf-8")}
+        print(t("deliver.cli.baseline_reused", run=reused))
+    else:
+        result = run_suite(profile, workdir, package, "base")
     base_reads = compare_reds(result.get("output", ""), result.get("output", ""), check)
+    stop = None
     if not result.get("ran"):
-        raise UsageError(t("deliver.blocked.suite_not_run", reason=result.get("reason")))
-    if base_reads["predicted"] is not None and base_reads["executed"] is not None \
+        stop = t("deliver.blocked.suite_not_run", reason=result.get("reason"))
+    elif base_reads["predicted"] is not None and base_reads["executed"] is not None \
             and base_reads["executed"] < base_reads["predicted"]:
-        raise UsageError(t("deliver.blocked.suite_incomplete",
-                           executed=base_reads["executed"], predicted=base_reads["predicted"]))
+        stop = t("deliver.blocked.suite_incomplete",
+                 executed=base_reads["executed"], predicted=base_reads["predicted"])
+    if stop:
+        # A branch this prepare cut holds nothing yet: it goes with its worktree, or the
+        # next prepare finds them and refuses (twice on the first front-end delivery).
+        if fresh:
+            drop_fresh_branch(repo_dir, workdir, name, block)
+        raise UsageError(stop)
 
     manifest = {
         "repo": args.repo, "item": {"id": args.item, "kind": kind, "source": "tracker"},
@@ -1130,8 +1198,11 @@ def conclude(args) -> int:
         proving = list(measure.get("proving_tests") or [])
         production = production_files(files, block)
         if kind == "behaviour-change" and proving and production:
+            # Only the test files this delivery changed need to run on the base: the red
+            # it owes is theirs. Twenty minutes of a whole front-end suite bought one name.
+            changed_tests = [f for f in files if f not in production]
             with with_base_versions(workdir, man["base"]["sha"], production):
-                r = run_suite(profile, workdir, package, "base-with-test")
+                r = run_suite(profile, workdir, package, "base-with-test", tests=changed_tests or None)
             on_base = red_names(r.get("output", ""), check.get("red_name_pattern")) or []
             # A test file that cannot even load against the base — it imports what the
             # change adds — is reported by the runner under the file's name, not the
@@ -1198,11 +1269,13 @@ def conclude(args) -> int:
     # delivery that stands. A blocked tree stays as it is, for a person to read.
     if record["state"] == DELIVERED and files:
         git(workdir, "add", "--", *files)
-        # The message is the item's title, verbatim: a slug drops the accents and cuts
-        # the sentence, and the person reading the log should find the item by its name.
-        title = (package / "item.md").read_text(encoding="utf-8").strip().splitlines()[0].lstrip("# ").strip()
+        # The message is the writer's, written in the repository's own convention (it read
+        # the conventions); without one, the item's title verbatim — a slug drops the
+        # accents and cuts the sentence. Either way the item's id is not said twice.
+        message = (written.get("commit_message") or "").strip() or item_title(
+            (package / "item.md").read_text(encoding="utf-8"), man["item"]["id"])
         git(workdir, "commit", "-q", "-m",
-            block["commit_format"].format(item=man["item"]["id"], message=title))
+            block["commit_format"].format(item=man["item"]["id"], message=message))
         record["branch"]["sha"] = git(workdir, "rev-parse", "HEAD")
 
     write_json(package / "delivery.json", record)

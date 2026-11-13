@@ -43,6 +43,9 @@ def authorise(command: str, profile: dict) -> tuple[bool, str]:
     if COMPOSITION.search(command):
         return False, t("evidence.shell_composition")
     allowed = {(c or {}).get("command") for c in (profile.get("checks") or {}).values()}
+    # The suite over named test files only — the red a behaviour change owes on the base
+    # is read from the proving tests, not from the whole suite run once more.
+    allowed.add(((profile.get("checks") or {}).get("suite") or {}).get("files_command"))
     # A delivery's mutation command is part of the same allowlist: declared in the
     # profile, run by the script, never composed.
     allowed.add(((profile.get("delivery") or {}).get("mutation") or {}).get("command"))
@@ -56,6 +59,13 @@ def authorise(command: str, profile: dict) -> tuple[bool, str]:
 # judges the TEMPLATE — the substitution happens after, so a path can never smuggle a
 # command in, and the same template serves the checkout and a worktree.
 WORKDIR = "{workdir}"
+# The placeholder a suite's `files_command` uses for the test files it runs. Filled after
+# the allowlist judged the template, each path quoted, so a path is never a command.
+TESTS = "{tests}"
+
+
+def with_tests(command: str, tests: list[str]) -> str:
+    return command.replace(TESTS, " ".join(shlex.quote(t) for t in tests))
 
 
 def mapped_workdir(profile: dict, workdir: pathlib.Path) -> str:

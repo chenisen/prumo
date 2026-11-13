@@ -850,5 +850,100 @@ class InAWorktree(Fixture):
         self.assertEqual(self.branch_of(self.repo), "main")
 
 
+class TheItemSaysItsIdOnce(unittest.TestCase):
+    """An item titled `# ITEM-7 — Title` named its branch `ITEM-7-item-7-…` and its commit
+    `ITEM-7 - ITEM-7 — Title`: the id the format adds is not read from the title again."""
+
+    BLOCK = {"branch_format": "{item}-{slug}"}
+
+    def test_the_title_loses_its_leading_id(self):
+        self.assertEqual(deliver.item_title("# ITEM-7 — Hide the split\n", "ITEM-7"), "Hide the split")
+        self.assertEqual(deliver.item_title("# ITEM-7: Hide the split\n", "ITEM-7"), "Hide the split")
+        self.assertEqual(deliver.item_title("# Hide ITEM-7 split\n", "ITEM-7"), "Hide ITEM-7 split")
+
+    def test_the_branch_names_the_id_once(self):
+        self.assertEqual(deliver.branch_name(self.BLOCK, "ITEM-7", "# ITEM-7 — Hide the split\n", None),
+                         "ITEM-7-hide-the-split")
+
+
+RUN_FILES = textwrap.dedent('''\
+    import sys, unittest, importlib.util
+    suite = unittest.TestSuite()
+    for path in sys.argv[1:]:
+        spec = importlib.util.spec_from_file_location(path.replace("/", "_")[:-3], path)
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(module))
+    result = unittest.TextTestRunner(stream=open("/dev/null", "w")).run(suite)
+    for case, _ in result.failures + result.errors:
+        print("FAIL: " + case.id().split(".")[-1])
+    print("Ran %d of %d" % (result.testsRun, suite.countTestCases()))
+    ''')
+
+
+class FasterProof(Fixture):
+    """What the first front-end delivery paid in suites it did not need: a whole suite to
+    read the one red owed on the base, and a whole baseline over a tree already measured."""
+
+    def test_the_red_on_the_base_runs_only_the_changed_test_files(self):
+        import yaml
+        data = json.loads(json.dumps(PROFILE))
+        data["checks"]["suite"]["files_command"] = "python3 run_files.py {tests}"
+        (self.root / "profiles" / "repo-x.yml").write_text(yaml.safe_dump(data), encoding="utf-8")
+        (self.repo / "run_files.py").write_text(RUN_FILES, encoding="utf-8")
+        (self.repo / "src" / "a.py").write_text(BUGGY, encoding="utf-8")
+        git(self.repo, "add", "-A"); git(self.repo, "commit", "-q", "-m", "buggy base")
+        package = self.prepare(kind="behaviour-change")
+        measure = {"premises": [], "files": ["src/a.py", "tests/test_guard.py"], "mutations": [],
+                   "proving_tests": ["test_guard_refuses"]}
+        code, rec = self.conclude(package, PROVING_TEST, measure_data=measure, source=SOURCE)
+        self.assertEqual((rec["state"], rec["proof"]["red_on_base"]["result"]), ("delivered", "red"), rec)
+        on_base = (package / "run-suite-base-with-test.txt").read_text(encoding="utf-8")
+        self.assertIn("Ran 1 of 1", on_base)
+        self.assertIn("Ran 2 of 2", (package / "run-suite-branch.txt").read_text(encoding="utf-8"))
+
+    def test_the_writer_s_commit_message_is_the_subject(self):
+        package = self.prepare()
+        tree = pathlib.Path(json.loads((package / "deliver-manifest.json").read_text(encoding="utf-8"))["workdir"])
+        (tree / "tests" / "test_guard.py").write_text(PROVING_TEST, encoding="utf-8")
+        (package / "m.json").write_text(json.dumps(MEASURE), encoding="utf-8")
+        (package / "w.json").write_text(json.dumps({"files": MEASURE["files"], "skipped": [],
+                                                    "commit_message": "proving the refusal at ten"}), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            deliver.conclude(argparse.Namespace(package=str(package), measure=str(package / "m.json"),
+                                                written=str(package / "w.json"), refutation=None))
+        subject = subprocess.run(("git", "log", "-1", "--format=%s"), cwd=tree,
+                                 capture_output=True, text=True).stdout.strip()
+        self.assertEqual(subject, "ITEM-1 - proving the refusal at ten")
+
+class ABaselineThatFailsLeavesNothingBehind(InAWorktree):
+    def test_a_tree_already_measured_by_the_same_suite_is_not_measured_again(self):
+        (self.root / "packages").mkdir(exist_ok=True)
+        first = self.prepare(package="packages/repo-x-first")
+        branch = json.loads((first / "deliver-manifest.json").read_text(encoding="utf-8"))["branch"]["name"]
+        workdir = pathlib.Path(json.loads((first / "deliver-manifest.json").read_text(encoding="utf-8"))["workdir"])
+        (workdir / "runner" / "run_tests.py").write_text("raise SystemExit('ran again')\n", encoding="utf-8")
+        args = argparse.Namespace(repo="repo-x", item="ITEM-1", item_file=str(self.root / "item.md"),
+                                  kind=None, branch=branch, package=str(self.root / "packages" / "repo-x-again"),
+                                  fix=None, shape="debt", type=None, continue_branch=True)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(deliver.prepare(args), 0)
+        self.assertIn(str(first / "run-suite-base.txt"), out.getvalue())
+        man = json.loads((self.root / "packages" / "repo-x-again" / "deliver-manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(man["baseline"]["executed"], 1)
+
+    def test_the_fresh_branch_and_its_worktree_go(self):
+        (self.repo / "runner" / "run_tests.py").write_text("print('Ran 1 of 2')\n", encoding="utf-8")
+        args = argparse.Namespace(repo="repo-x", item="ITEM-1", item_file=str(self.root / "item.md"),
+                                  kind=None, branch=None, package=str(self.root / "pkg"),
+                                  fix=None, shape="debt", type=None)
+        with self.assertRaises(deliver.UsageError), contextlib.redirect_stdout(io.StringIO()):
+            deliver.prepare(args)
+        self.assertEqual(list((self.repo / ".worktrees").iterdir()), [])
+        branches = subprocess.run(("git", "branch", "--list", "ITEM-1-*"), cwd=self.repo,
+                                  capture_output=True, text=True).stdout.strip()
+        self.assertEqual(branches, "")
+
+
 if __name__ == "__main__":
     unittest.main()

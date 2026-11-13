@@ -130,6 +130,7 @@ deliver:
     fix_no_routes: 'a revisão em {path} não abriu rota `author_fix` — nada a corrigir'
     fix_needs_branch: 'a origem da revisão é `{origin}`, não uma branch — passe --branch'
     continue_needs_branch: '--continue escreve numa branch que já existe — passe --branch'
+    baseline_reused: 'linha de base reaproveitada: mesma árvore, mesmo comando da suíte — {run}'
     mutation_file_missing: '{file} não está na árvore'
     mutation_text_missing: '{file}:{line} não contém `{text}`'
     mutation_dropped_behaviour_change: 'descartada: a mutação em {file}:{line} para {test}. Uma mudança de comportamento substitui as linhas que a mutação aponta. A prova é vermelho na base, verde depois.'

@@ -84,9 +84,13 @@ JSON only:
 {
   "files": ["<every file you wrote, relative to the working directory>"],
   "skipped": ["<what you did not check, did not cover, or deliberately left out>"],
-  "reused": ["<what you found and used instead of writing — helper, fixture, assertion>"]
+  "reused": ["<what you found and used instead of writing — helper, fixture, assertion>"],
+  "commit_message": "<what the change does, in the repository's own commit voice, without the item id>"
 }
 ```
+
+`commit_message` follows the repository's recent commit subjects and its conventions —
+language, case, tense. The profile's format adds the item's id; do not repeat it.
 
 `skipped` is mandatory, even when empty. It travels into the record: what you did not
 check is declared, never implied.
