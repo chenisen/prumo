@@ -510,7 +510,7 @@ def stage_return(path: str, key: str) -> dict:
         data = data["result"]
     if isinstance(data, dict) and "stage" in data:
         if not isinstance(data.get(key), dict):
-            raise UsageError(t("deliver.cli.stage_return_missing", key=key, path=path))
+            raise UsageError(t("deliver.cli.stage_return_missing", field=key, path=path))
         return data[key]
     return data
 
