@@ -500,6 +500,21 @@ def cut_branch(repo_dir: pathlib.Path, block: dict, name: str, base_sha: str,
     return repo_dir
 
 
+def stage_return(path: str, key: str) -> dict:
+    """One return of the deliver workflow, read from whatever file a person has at hand:
+    the bare object, the workflow's `{stage, measure, written, refutation}`, or that inside
+    the harness's task output (`summary`, `logs`, `result`). The first front-end delivery
+    passed the harness file to `plan`, which read no key and rendered an empty plan."""
+    data = read_json(pathlib.Path(path))
+    if isinstance(data, dict) and isinstance(data.get("result"), dict) and "summary" in data:
+        data = data["result"]
+    if isinstance(data, dict) and "stage" in data:
+        if not isinstance(data.get(key), dict):
+            raise UsageError(t("deliver.cli.stage_return_missing", key=key, path=path))
+        return data[key]
+    return data
+
+
 def drop_fresh_branch(repo_dir: pathlib.Path, workdir: pathlib.Path, name: str, block: dict) -> None:
     """Undo a cut that measured nothing: the worktree and the branch it created, which
     still sit on the base. A branch that moved is somebody's work and stays."""
@@ -844,12 +859,12 @@ def plan(args) -> int:
     rules = SHAPES[man["shape"]]
     import jsonschema
     if getattr(args, "design", None):
-        design = read_json(pathlib.Path(args.design))
+        design = stage_return(args.design, "design")
         jsonschema.validate(design, read_json(ROOT.parent / "schemas" / "design.schema.json"))
         write_json(package / "design.json", design)
         subject, text = design, render_design(man, design)
     else:
-        measure, dropped = without_mutations(man["item"]["kind"], read_json(pathlib.Path(args.measure)))
+        measure, dropped = without_mutations(man["item"]["kind"], stage_return(args.measure, "measure"))
         write_json(package / "measure.json", measure)
         subject, text = measure, render_plan(man, measure, dropped)
     record = {"shape": man["shape"], "depth": man["plan_depth"], "gate": rules["gate"],
@@ -1095,9 +1110,9 @@ def conclude(args) -> int:
     profile = load_profile(man["repo"])
     block = delivery_block(profile, man["repo"])
     workdir = pathlib.Path(man["workdir"])
-    measure, _ = without_mutations(man["item"]["kind"], read_json(pathlib.Path(args.measure)))
-    written = read_json(pathlib.Path(args.written)) if args.written else {"files": [], "skipped": []}
-    refutation = read_json(pathlib.Path(args.refutation)) if args.refutation else None
+    measure, _ = without_mutations(man["item"]["kind"], stage_return(args.measure, "measure"))
+    written = stage_return(args.written, "written") if args.written else {"files": [], "skipped": []}
+    refutation = stage_return(args.refutation, "refutation") if args.refutation else None
     write_json(package / "measure.json", measure)
 
     premises = measure.get("premises") or []

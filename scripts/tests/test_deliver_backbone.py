@@ -945,5 +945,27 @@ class ABaselineThatFailsLeavesNothingBehind(InAWorktree):
         self.assertEqual(branches, "")
 
 
+class AStageReturnReadsFromAnyFileAtHand(unittest.TestCase):
+    """`plan` was handed the harness's task output and rendered an empty plan in silence."""
+
+    MEASURE = {"premises": [], "files": ["src/a.py"], "mutations": [], "checked": []}
+
+    def write(self, data):
+        f = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+        json.dump(data, f); f.close()
+        self.addCleanup(os.unlink, f.name)
+        return f.name
+
+    def test_bare_workflow_and_harness_envelope_give_the_same_return(self):
+        workflow = {"stage": "measure", "measure": self.MEASURE, "written": None, "refutation": None}
+        for data in (self.MEASURE, workflow, {"summary": "s", "logs": [], "result": workflow}):
+            self.assertEqual(deliver.stage_return(self.write(data), "measure"), self.MEASURE)
+
+    def test_a_stage_without_the_key_asked_is_refused(self):
+        workflow = {"stage": "measure", "measure": self.MEASURE, "written": None, "refutation": None}
+        with self.assertRaises(deliver.UsageError):
+            deliver.stage_return(self.write(workflow), "written")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -130,6 +130,7 @@ deliver:
     fix_no_routes: 'a revisão em {path} não abriu rota `author_fix` — nada a corrigir'
     fix_needs_branch: 'a origem da revisão é `{origin}`, não uma branch — passe --branch'
     continue_needs_branch: '--continue escreve numa branch que já existe — passe --branch'
+    stage_return_missing: '{path} é um retorno do workflow deliver sem `{key}` — é o arquivo da etapa certa?'
     baseline_reused: 'linha de base reaproveitada: mesma árvore, mesmo comando da suíte — {run}'
     mutation_file_missing: '{file} não está na árvore'
     mutation_text_missing: '{file}:{line} não contém `{text}`'

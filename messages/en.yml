@@ -126,6 +126,7 @@ deliver:
     fix_no_routes: 'the review at {path} opened no `author_fix` route — nothing to fix'
     fix_needs_branch: 'the review''s origin is `{origin}`, not a branch — pass --branch'
     continue_needs_branch: '--continue writes on a branch that already exists — pass --branch'
+    stage_return_missing: '{path} is a deliver workflow return without `{key}` — is it the right stage''s file?'
     baseline_reused: 'baseline reused: same tree, same suite command — {run}'
     mutation_file_missing: '{file} is not in the tree'
     mutation_text_missing: '{file}:{line} does not contain `{text}`'
