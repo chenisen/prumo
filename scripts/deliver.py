@@ -384,6 +384,20 @@ def setup_worktree(repo_dir: pathlib.Path, workdir: pathlib.Path, block: dict) -
                                output=output))
 
 
+def same_test(expected: str, name: str) -> bool:
+    """A test named by the measure is the red the runner printed when one contains the
+    other's words, or when both read `<file> > <title>` with the same title and one
+    file path ending the other — the measure counts from the repository root, the
+    runner from where it ran (`packages/kit/test/a.test.ts` and `test/a.test.ts`)."""
+    if expected in name:
+        return True
+    sep = " > "
+    if sep not in expected or sep not in name:
+        return False
+    (f1, t1), (f2, t2) = expected.split(sep, 1), name.split(sep, 1)
+    return t1 == t2 and (f1 == f2 or f1.endswith("/" + f2) or f2.endswith("/" + f1))
+
+
 def file_stands_for(name: str, test_files: list[str]) -> bool:
     """A red read under a test file's name — the file could not load — stands for every
     test in it. Runners name that file by module (`pkg.test_a`, `test_a`) or by a path
@@ -847,7 +861,7 @@ def story_status(args) -> int:
     if branch_out and proving:
         on_branch = red_names(branch_out, check.get("red_name_pattern")) or []
         green_on_branch = {"test": ", ".join(proving),
-                           "result": "red" if any(p in name for p in proving for name in on_branch) else "green"}
+                           "result": "red" if any(same_test(p, name) for p in proving for name in on_branch) else "green"}
 
     state, reason, owner = DELIVERED, t("deliver.state.delivered"), None
     if pending:
@@ -1062,11 +1076,11 @@ def conclude(args) -> int:
                          "stays_green_result": None, "run": run_file,
                          "reds": sorted(set(reds) - set(man["baseline"]["base_reds"] or [])) if ran else []}
                 if why is None:
-                    entry["result"] = ("red" if any(m["test"] in name for name in reds)
+                    entry["result"] = ("red" if any(same_test(m["test"], name) for name in reds)
                                        else "green") if ran else "not_run"
                     if ran and entry["stays_green"]:
                         entry["stays_green_result"] = ("red" if any(
-                            g in name for g in entry["stays_green"] for name in reds) else "green")
+                            same_test(g, name) for g in entry["stays_green"] for name in reds) else "green")
                 else:
                     entry["why"] = why
                 mutations.append(entry)
@@ -1083,7 +1097,7 @@ def conclude(args) -> int:
             test_files = [f for f in files
                           if casa_algum(f, [r_.rstrip("/") + "/**" for r_ in block["test_roots"]])]
             red_on_base = {"test": ", ".join(proving),
-                           "result": ("red" if all(any(p in name or file_stands_for(name, test_files)
+                           "result": ("red" if all(any(same_test(p, name) or file_stands_for(name, test_files)
                                                            for name in on_base) for p in proving)
                                       else "green") if r.get("ran") else "not_run"}
         suite = run_suite(profile, workdir, package, "branch")
@@ -1091,11 +1105,11 @@ def conclude(args) -> int:
         on_branch = red_names(suite_out, check.get("red_name_pattern")) or [] if suite.get("ran") else []
         if proving and suite.get("ran"):
             green_on_branch = {"test": ", ".join(proving),
-                               "result": "red" if any(p in name for p in proving for name in on_branch) else "green"}
+                               "result": "red" if any(same_test(p, name) for p in proving for name in on_branch) else "green"}
         guards = list(measure.get("guarding_tests") or [])
         if kind == "refactor":
             guarding = {"tests": guards,
-                        "result": ("red" if any(g in name for g in guards for name in on_branch)
+                        "result": ("red" if any(same_test(g, name) for g in guards for name in on_branch)
                                    else "green") if suite.get("ran") else "not_run"}
         lint = run_lint(profile, workdir, package)
 
