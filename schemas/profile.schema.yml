@@ -185,6 +185,13 @@ properties:
         description: >
           where documentation lives (a directory or a single file); a behaviour change or a
           refactor may update it when the measurement names the file — a coverage gap never
+      generated:
+        type: array
+        items: {type: string}
+        description: >
+          globs of files a tool writes, never a person (a dependency lock, say); named in
+          the measurement they are in scope wherever they sit, and their lines stay out of
+          the budget — the budget measures what a reviewer reads
       mutation:
         type: object
         additionalProperties: false
