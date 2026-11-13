@@ -337,7 +337,7 @@ def slug(text: str, limit: int = 60) -> str:
 def report_dir_name(item: str | None, origin: str) -> str:
     """`<item>-<origin>`, unless the origin already starts with the item — a branch the
     prumo delivered is named `<item>-<slug>` by the profile, and the report once landed
-    under `50557-50557-…`. A directory name, not a message: the same in every language,
+    under `<item>-<item>-…`. A directory name, not a message: the same in every language,
     or the same review filed twice lands in two folders depending on who ran it. It
     lives here because `render.py` prints the destination and `review.py` files the
     report there: two spellings once printed one path and wrote another."""
