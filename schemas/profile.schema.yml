@@ -288,6 +288,12 @@ $defs:
           A regular expression with TWO groups, executed and predicted, over the OUTPUT.
           A suite whose executed is short of its predicted did not finish, and did not
           prove anything — whatever its exit code says.
+      timeout_seconds:
+        type: [integer, "null"]
+        minimum: 1
+        description: >
+          How long the check may run before it counts as not run. Absent keeps the
+          method's 900 s; a suite that takes longer on the base itself declares its own.
       waiver: {$ref: "#/$defs/waiver"}
 
   anchor:
