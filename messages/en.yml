@@ -13,7 +13,7 @@ agnosticism:
   more_failures: '"… and {n} more (use --verbose)"'
   no_profiles: no profile in review-profiles/ — derive them first
   profile_error: '"{file}: {error}"'
-  rule_1: the method names no repository, stack, tool, storage or item id
+  rule_1: the method names no repository, stack, tool, or storage
   rule_2: every profile validates against the contract
   rule_3: the suite passes
   rule_4: there is a profile in more than one stack family

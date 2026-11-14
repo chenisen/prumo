@@ -17,7 +17,7 @@ agnosticism:
   more_failures: '"… e mais {n} (use --verbose)"'
   no_profiles: nenhum perfil em review-profiles/ — derive-os antes
   profile_error: '"{file}: {error}"'
-  rule_1: o método não nomeia repositório, stack, ferramenta, armazenamento ou id de item
+  rule_1: o método não nomeia repositório, stack, ferramenta ou armazenamento
   rule_2: todo perfil valida contra o contrato
   rule_3: a suíte passa
   rule_4: há perfil em mais de uma família de stack

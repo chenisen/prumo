@@ -52,6 +52,10 @@ UNIVERSAL_FORBIDDEN = [
 # — the same bug it exists to catch, committed by it. A public prumo cannot carry the
 # names of the internal systems of whoever wrote it first.
 #
+# An item's id is NOT among them. Items arrive from whichever tracker an installation
+# uses, each numbering as it likes, and no pattern tells an id from an ordinary number:
+# the range once declared here read a token count as a leaked item.
+#
 #   agnosticism:
 #     forbidden:
 #       - label: "named vendor"
@@ -83,8 +87,7 @@ def tolerated_repo_names() -> set[str]:
 # Justified exceptions. Each entry is a deliberate decision and carries its why: an
 # exemption with no written reason is coupling waiting to come back.
 # "repo" exempts a repository name; the other labels come from forbidden().
-ALL_LABELS = [c for c, _ in UNIVERSAL_FORBIDDEN] + ["repo", "item id",
-              "project collection/table", "named vendor"]
+ALL_LABELS = [c for c, _ in UNIVERSAL_FORBIDDEN] + ["repo", "project collection/table", "named vendor"]
 EXEMPT = {
     # RECOGNITION tables: to classify a repo you have to know what to look for.
     # Adding a stack or a proof registry is editing the table, not the method.
@@ -92,8 +95,7 @@ EXEMPT = {
     "test_derive_profile.py": ["stack tool", "assumed language", "named vendor"],
     # REPLAY of real reviews: the case only proves something if it names what actually
     # happened.
-    "test_replay_revisoes.py": ["item id", "named vendor", "repo"],
-    "test_render.py": ["item id"],
+    "test_replay_reviews.py": ["named vendor", "repo"],
     # fixtures that exercise triage's universal floor
     "test_triage.py": ["stack tool"],
     # this file itself lists the patterns it looks for

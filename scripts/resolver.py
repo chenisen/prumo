@@ -21,7 +21,20 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from common import MissingConfiguration, InvalidConfiguration, dir_repositories, forge, tracker, UsageError, load_profile, write_json
 from i18n import t
 
-RE_ITEM = re.compile(r"(?:card[s]?[ /#-]*|/cards/|\b)(\d{4,6})\b", re.I)
+
+def item_of_subject(subject: str, commit_format: str | None) -> str | None:
+    """The item a commit subject names, read by the repository's OWN commit convention —
+    `delivery.commit_format` in its profile — and by nothing else. The method knows no
+    shape for an item's id: every tracker numbers its items as it likes (`1234`,
+    `ABC-12`, `#7`), and the pattern that used to live here — four to six digits, after
+    the word one tracker uses — was one platform's. A repository that declares no
+    convention has no item to be read from a subject: the person names it."""
+    if not commit_format or "{item}" not in commit_format:
+        return None
+    pattern = re.escape(commit_format).replace(r"\{message\}", r".+")
+    pattern = pattern.replace(r"\{item\}", r"(?P<item>\S+)", 1).replace(r"\{item\}", r"(?P=item)")
+    m = re.fullmatch(pattern, subject.strip())
+    return m.group("item") if m else None
 
 
 def git(repo_dir: pathlib.Path, *args: str, allow_failure: bool = True) -> str:
@@ -99,14 +112,11 @@ def resolve(repo: str, mr: int | None, branch: str | None, item: str | None) -> 
     merge_base = git(repo_dir, "merge-base", base_sha, head) or base_sha
     behind = git(repo_dir, "rev-list", "--count", f"{merge_base}..{base_sha}")
 
-    # The item: from the argument, or from the commits' subjects. Never invented.
+    # The item: from the argument, or from the commits' subjects read by the repository's
+    # own commit convention. Never invented, and never guessed from the look of a number.
     subjects = git(repo_dir, "log", "--format=%s", f"{merge_base}..{head}").splitlines()
-    derived = None
-    for s in subjects:
-        m = RE_ITEM.search(s)
-        if m:
-            derived = m.group(1)
-            break
+    commit_format = (profile.get("delivery") or {}).get("commit_format")
+    derived = next((found for found in (item_of_subject(s, commit_format) for s in subjects) if found), None)
 
     return {
         "repo": repo,

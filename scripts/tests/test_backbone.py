@@ -133,6 +133,41 @@ class TestMetricsByCapability(unittest.TestCase):
         self.assertEqual(out["r [deliver]"]["tokens_per_line_median"], 100.0)
 
 
+class TestAnItemIsReadByTheRepositorysOwnConvention(unittest.TestCase):
+    """The method knows no shape for an item's id. The resolver used to look for four to
+    six digits after the word one tracker uses; an item from another platform was never
+    found, and a number that was no item was. The only reading left is the repository's
+    declared commit convention."""
+
+    def test_any_tracker_s_id_is_read_through_the_declared_format(self):
+        from resolver import item_of_subject
+        for subject, fmt, item in (
+                ("1234 - add the refusal", "{item} - {message}", "1234"),
+                ("ABC-12 - add the refusal", "{item} - {message}", "ABC-12"),
+                ("#7 - add the refusal", "{item} - {message}", "#7"),
+                ("[ENG-42] add the refusal", "[{item}] {message}", "ENG-42"),
+                ("feat(K9): add the refusal (K9)", "feat({item}): {message} ({item})", "K9")):
+            self.assertEqual(item_of_subject(subject, fmt), item, subject)
+
+    def test_a_subject_outside_the_convention_names_no_item(self):
+        from resolver import item_of_subject
+        for subject in ("Merge branch 'main' into feature", "fix: a thing - and another",
+                        "bump the limit to 12345", "card 12345 done", ""):
+            self.assertIsNone(item_of_subject(subject, "{item} - {message}"), subject)
+
+    def test_with_no_declared_convention_no_number_is_taken_for_an_item(self):
+        from resolver import item_of_subject
+        for fmt in (None, "", "{message}"):
+            self.assertIsNone(item_of_subject("card 12345 - add the refusal", fmt), fmt)
+
+    def test_the_method_carries_no_pattern_for_an_item_id(self):
+        root = pathlib.Path(__file__).resolve().parents[2]
+        self.assertNotIn("RE_ITEM", (root / "scripts" / "resolver.py").read_text(encoding="utf-8"))
+        self.assertNotIn("item id", (root / "prumo.yml.example").read_text(encoding="utf-8"))
+        import agnosticism_check
+        self.assertNotIn("item id", agnosticism_check.ALL_LABELS)
+
+
 class TestMetricsForTheMural(unittest.TestCase):
     """What a client draws: deliveries per week and a clean first pass, read from the
     ledger, and the JSON form it reads them through."""

@@ -176,8 +176,10 @@ forge:
 #
 # `scripts/agnosticism_check.py` fails the method when it names a technology. The
 # universal patterns — stack tool, language, database — belong to the prumo itself.
-# The names of YOUR systems, tables and item-id shapes are yours, and go here: the prumo
-# must not carry the internal system names of whoever installed it first.
+# The names of YOUR systems and tables are yours, and go here: the prumo must not carry
+# the internal system names of whoever installed it first. An item's id has no pattern
+# here or anywhere in the method — items come from whichever tracker you use, each
+# numbering as it likes.
 #
 # agnosticism:
 #   forbidden:
@@ -185,8 +187,6 @@ forge:
 #       pattern: "(?i)\\b(acme|some-erp|legacy-system)\\b"
 #     - label: "project collection/table"
 #       pattern: "\\b(my_table|my_collection)\\b"
-#     - label: "item id"
-#       pattern: "(?<![\\w.])(4[5-9]\\d{3}|50\\d{3})(?![\\w.])"
 #
 # Rule 1 also reads every git checkout under `paths.repositories` as a name the method
 # must not carry. A repository called by an ordinary word — `documentation` — would then
