@@ -720,6 +720,37 @@ class Spine(Fixture):
         code, rec = self.conclude(package, PROVING_TEST)
         self.assertEqual(rec["state"], "blocked")
         self.assertEqual(rec["diff"]["outside_scope"], ["src/a.py"])
+        self.assertNothingRan(package, rec)
+
+    def assertNothingRan(self, package, rec):
+        self.assertEqual(list(package.glob("run-*.txt")), [], "a stop the diff decides is paid by no run")
+        self.assertEqual(rec["proof"]["mutations"], [])
+        self.assertEqual((rec["lint"]["state"], rec["measured"]["suite"]), ("not_run", None))
+
+    def test_a_stop_the_diff_decides_runs_no_mutant_no_suite_and_no_lint(self):
+        """The first real delivery on 3.0 was 146 lines against a budget of 120: its writer
+        had said so, and `conclude` still ran three mutants and two whole suites before
+        answering `blocked`. What the diff alone decides is read first."""
+        package = self.prepare()
+        long_test = PROVING_TEST + "# a line of proof\n" * 400
+        code, rec = self.conclude(package, long_test)
+        self.assertEqual((code, rec["state"], rec["owner"]), (1, "blocked", "person"), rec)
+        self.assertNothingRan(package, rec)
+        # the stop lifted, the same package is concluded again and everything runs — once
+        self.profile_with(delivery__budget=None)
+        code, rec = self.conclude(package, long_test)
+        self.assertEqual((code, rec["state"]), (0, "delivered"), rec)
+        self.assertEqual(rec["proof"]["mutations"][0]["result"], "red")
+        self.assertTrue((package / "run-suite-branch.txt").exists())
+
+    def test_the_diff_s_stop_is_named_ahead_of_any_stop_a_run_could_give(self):
+        diff = {"files": ["a"], "added": 1, "removed": 0, "outside_scope": ["src/z.py"], "within_budget": False}
+        self.assertEqual(deliver.diff_stop(diff, None), "outside_scope")
+        self.assertEqual(deliver.diff_stop(dict(diff, outside_scope=[]), None), "budget")
+        waiver = {"approver": "someone", "reason": "a person said so", "expires": "2999-12-31"}
+        self.assertIsNone(deliver.diff_stop(dict(diff, outside_scope=[]), waiver))
+        self.assertEqual(deliver.diff_stop(dict(diff, outside_scope=[]), dict(waiver, expires="2000-01-01")), "budget")
+        self.assertIsNone(deliver.diff_stop(dict(diff, outside_scope=[], within_budget=True), None))
 
 
     def test_a_named_document_under_doc_roots_is_inside_the_scope(self):

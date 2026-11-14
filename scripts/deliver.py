@@ -110,6 +110,20 @@ def deliver_judge(record: dict, profile: dict, reference: str | None = None) -> 
     if waiting:
         return stop(BLOCKED, t("deliver.blocked.tasks_pending", tasks=", ".join(waiting)), "author")
 
+    # The diff's own stops come before every stop a run could give: nothing ran after them.
+    diff = record["diff"]
+    stopped_by_diff = diff_stop(diff, record.get("waiver"), reference)
+    if stopped_by_diff == "outside_scope":
+        return stop(BLOCKED, t("deliver.blocked.outside_scope",
+                               paths=", ".join(diff["outside_scope"])), "author")
+    if stopped_by_diff == "budget":
+        budget = plan.get("budget") or block.get("budget") or {}
+        return stop(BLOCKED, t("deliver.blocked.budget_exceeded",
+                               files=len(diff.get("files") or []),
+                               lines=diff.get("added", 0) + diff.get("removed", 0),
+                               max_files=budget.get("max_files", "?"),
+                               max_lines=budget.get("max_lines", "?")), "person")
+
     # A refactor with nothing standing guard has no proof to preserve, and the suite
     # never ran for it: the stop is the person's, before "the suite did not run".
     proof = record["proof"]
@@ -174,19 +188,20 @@ def deliver_judge(record: dict, profile: dict, reference: str | None = None) -> 
     lint = record.get("lint") or {}
     if lint.get("state") == "red":
         return stop(BLOCKED, t("deliver.blocked.lint_red", reason=lint.get("reason", "")), "author")
-
-    diff = record["diff"]
-    if diff.get("outside_scope"):
-        return stop(BLOCKED, t("deliver.blocked.outside_scope",
-                               paths=", ".join(diff["outside_scope"])), "author")
-    if not diff.get("within_budget") and not waiver_in_force(record.get("waiver"), reference):
-        budget = plan.get("budget") or block.get("budget") or {}
-        return stop(BLOCKED, t("deliver.blocked.budget_exceeded",
-                               files=len(diff.get("files") or []),
-                               lines=diff.get("added", 0) + diff.get("removed", 0),
-                               max_files=budget.get("max_files", "?"),
-                               max_lines=budget.get("max_lines", "?")), "person")
     return out
+
+
+def diff_stop(diff: dict, waiver: dict | None, reference: str | None = None) -> str | None:
+    """What the diff alone decides, before anything is run: `outside_scope`, `budget`, or
+    None. A line outside the scope, or a budget exceeded with no waiver in force, blocks
+    whatever the tests say — so the judge reads it first and `conclude` runs nothing after
+    it. The first real delivery on 3.0 paid three mutants and two whole suites, six and a
+    half minutes, for a stop its diff had already decided."""
+    if diff.get("outside_scope"):
+        return "outside_scope"
+    if not diff.get("within_budget") and not waiver_in_force(waiver, reference):
+        return "budget"
+    return None
 
 
 # --- the marker ------------------------------------------------------------------------
@@ -1161,7 +1176,8 @@ def conclude(args) -> int:
     lint = {"state": "not_run", "reason": t("review.suite_not_run"), "run": None}
     gate_shut = plan_record["gate"] and not plan_record["approved_by"]
     stopped_early = bool(written.get("blocked")) or (story and any(s != DELIVERED for s in task_states.values()))
-    if not central_failed and files and not gate_shut and not stopped_early:
+    stopped_by_diff = diff_stop(diff, block.get("waiver"))
+    if not central_failed and files and not gate_shut and not stopped_early and not stopped_by_diff:
         # The mutation by hand: wrong at the named line, the tests, the named test red,
         # the line put back. One run per DISTINCT mutation, over the test files the
         # change touched when the profile can run files — a mutant is judged by the

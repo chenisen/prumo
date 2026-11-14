@@ -116,8 +116,9 @@ Workflow({name: 'prumo:deliver', args: {...workflow-args.json, stage: 'deliver'}
     premise-surveyor measures → the size is read → change-writer writes and runs its tests
     → proof-skeptic, unless the item is small          → save the return to <package>/workflow-result.json
 deliver.py conclude --package P --result P/workflow-result.json
-    scope and budget over the diff · the proof over the changed test files · the suite
-    the size asks · lint · judge · one commit · record and report · marker off
+    scope and budget over the diff — a stop there runs nothing after it · the proof over
+    the changed test files · the suite the size asks · lint · judge · one commit ·
+    record and report · marker off
 ```
 
 **A shape a person approves** (`hotfix`, `refactor`) — the gate sits between two stages:
