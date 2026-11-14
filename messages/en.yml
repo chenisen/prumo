@@ -165,6 +165,7 @@ deliver:
     premises: PREMISES
     proof: PROOF
     sceptic: sceptic
+    sceptic_not_read: 'not read — small before the write, standard over the diff ({reason}); the review reads the proof'
     skipped: SKIPPED
     measured: MEASURED
   record:

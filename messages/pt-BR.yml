@@ -169,6 +169,7 @@ deliver:
     premises: PREMISSAS
     proof: PROVA
     sceptic: cético
+    sceptic_not_read: 'não leu — pequena antes da escrita, standard sobre o diff ({reason}); a revisão lê a prova'
     skipped: PULADO
     measured: MEDIDO
   record:

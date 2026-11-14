@@ -936,6 +936,26 @@ class TheSizeDecidesWhatRuns(Fixture):
         self.assertEqual((rec["state"], rec["size"]["size"], rec["baseline"]["scope"]),
                          ("delivered", "standard", "whole"), rec)
         self.assertIn("Ran 2 of 2", (package / "run-suite-branch.txt").read_text(encoding="utf-8"))
+
+    def test_a_standard_delivery_no_sceptic_read_says_so_in_its_report(self):
+        """The first real delivery on 3.0 was sized small by its one file, landed past the
+        small limit and was delivered as a standard item no sceptic had read — and its
+        report read like a small one's. The gap is said; a small delivery owes no line."""
+        self.profile_with(suite__files_command="python3 run_files.py {tests}", delivery__small={"max_files": 1})
+        package = self.prepare(kind="behaviour-change")
+        code, rec = self.conclude(package, PROVING_TEST, measure_data=BEHAVIOUR, source=SOURCE)
+        self.assertEqual((rec["state"], rec["size"]["size"], rec["proof"]["refutation"]),
+                         ("delivered", "standard", None), rec)
+        self.assertTrue(deliver.sceptic_owed(rec))
+        self.assertIn(deliver.t("deliver.report.sceptic_not_read", reason=rec["size"]["reason"]),
+                      (package / "report.md").read_text(encoding="utf-8"))
+
+    def test_a_small_delivery_owes_no_sceptic(self):
+        package = self.prepare(kind="behaviour-change")
+        code, rec = self.conclude(package, PROVING_TEST, measure_data=BEHAVIOUR, source=SOURCE)
+        self.assertEqual((rec["state"], rec["size"]["size"]), ("delivered", "small"), rec)
+        self.assertFalse(deliver.sceptic_owed(rec))
+        self.assertNotIn(deliver.t("deliver.report.sceptic"), (package / "report.md").read_text(encoding="utf-8"))
         self.assertIn("Ran 1 of 1", (package / "run-suite-base-with-test.txt").read_text(encoding="utf-8"),
                       "the red on the base still runs only the changed test files")
 

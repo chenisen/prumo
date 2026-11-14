@@ -1426,6 +1426,14 @@ SYMBOL = {"holds": "✔", "fails": "✘", "not_assessable": "?", "red": "✔", "
           "not_run": "?", "partial": "✔"}
 
 
+def sceptic_owed(record: dict) -> bool:
+    """A delivered item whose diff is `standard` and that no sceptic read. A story is
+    `large` and read by the review; a blocked write was never handed to a sceptic."""
+    return (record.get("state") == DELIVERED
+            and (record.get("size") or {}).get("size") == "standard"
+            and not (record.get("proof") or {}).get("refutation"))
+
+
 def render(record: dict, mutations: list[dict]) -> str:
     """One fact per line, each with an address. No prose around it."""
     L = lambda key: t(f"deliver.report.{key}")  # noqa: E731
@@ -1469,6 +1477,12 @@ def render(record: dict, mutations: list[dict]) -> str:
     if ref:
         lines.append(f"{SYMBOL.get({'proves': 'holds', 'does_not_prove': 'fails'}.get(ref['verdict'], 'not_assessable'))} "
                      f"{t('deliver.report.sceptic')}: {ref['verdict']} — {ref['reason']}")
+    elif sceptic_owed(record):
+        # A standard item is read by the sceptic once. One that was not is said, never left
+        # looking like a small one: the workflow sizes again after the write, and this is
+        # what remains when the writer's count and the diff disagree.
+        lines.append(f"{SYMBOL['not_assessable']} {t('deliver.report.sceptic')}: "
+                     + t("deliver.report.sceptic_not_read", reason=(record.get("size") or {}).get("reason", "")))
     b = record["baseline"]
     lines.append(f"  suite ({b.get('scope', 'whole')}) {b['executed']}/{b['predicted']} · reds "
                  f"branch={len(b['branch_reds'])} new={len(b['new_reds'] or [])}"

@@ -52,8 +52,10 @@ lines when absent — and `delivery.wide_paths` — globs of what everything els
 | `standard` | any other single item — past a limit, on a wide path, or a shape a person approves | once | the whole suite |
 | `large` | a story | no; the review reads the branch | the whole suite, over all its tasks |
 
-It is read twice: over the files the measurement named, to decide the sceptic, and over
-the diff that landed, to decide the suite. The base is measured in neither case unless
+It is read three times: over the files the measurement named, before anything is
+written; over what the writer says landed — its files and its `lines_changed` — to decide
+the sceptic; and over the diff, to decide the suite. A delivery that still reaches
+`conclude` as a standard item no sceptic read says so in its report. The base is measured in neither case unless
 the branch turns something red. A profile with no `checks.suite.files_command` cannot
 run named test files, and every delivery there pays the whole suite — the remedy is one
 line in the profile, never a flag on the run.

@@ -118,9 +118,15 @@ JSON only:
   "tests_run": {"command": "<what you ran, or null>", "red_first": true | false | null, "green": true | false | null},
   "blocked": null | "<why this could not be delivered, with file:line>",
   "commit_message": "<what the change does, in the repository's own commit voice, without the item id>",
-  "commit": null | "<a story's task: the short hash you committed>"
+  "commit": null | "<a story's task: the short hash you committed>",
+  "lines_changed": <added plus removed lines of your change, new files included>
 }
 ```
+
+`lines_changed` is read, never estimated: run `git diff --numstat HEAD` in the working
+directory before you return, add the two columns, and add every line of a file you
+created — a new file is not in that diff. The measurement sized the item by its files;
+this number sizes what landed, and decides whether a sceptic reads the proof.
 
 `commit_message` follows the repository's recent commit subjects and its conventions —
 language, case, tense. The profile's format adds the item's id; do not repeat it.

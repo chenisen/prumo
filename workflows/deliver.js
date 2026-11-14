@@ -115,6 +115,7 @@ const WRITTEN_SCHEMA = {
     blocked: { type: ['string', 'null'] },
     commit_message: { type: 'string' },
     commit: { type: ['string', 'null'] },
+    lines_changed: { type: ['integer', 'null'] },
   },
 }
 
@@ -220,6 +221,15 @@ const sizeOf = (files) => {
   if (files.some((f) => widePatterns.some((re) => re.test(f)))) return 'standard'
   return files.length <= smallLimit.max_files ? 'small' : 'standard'
 }
+// The size AFTER the write. The measurement names files, not lines, so its reading is
+// provisional: the first real delivery on 3.0 (2026-11-13) was sized small by its one
+// file, landed 146 lines against a small of 120, and reached `conclude` as a standard
+// item no sceptic had read. The writer has a shell and says how many lines landed.
+const sizeWritten = (measure, written) => {
+  const files = [...new Set([...measure.files, ...(written.files ?? [])])]
+  if (sizeOf(files) !== 'small') return 'standard'
+  return (written.lines_changed ?? 0) > smallLimit.max_lines ? 'standard' : 'small'
+}
 
 // What the writer may run, resolved by `deliver.py prepare` from the profile's allowlist
 // for this very tree. The whole suite is never among them: `conclude` runs it once, and
@@ -319,6 +329,10 @@ async function writeItem(measure, { task = null, earlier = [], previous = null }
     // repository's voice, the writer read it.
     '`commit_message` in your return: what the change does, in the voice of this repository\'s ' +
     'recent commit subjects and its conventions — without the item\'s id, which the format adds.',
+    '`lines_changed` in your return: the lines your change added plus the lines it removed, read ' +
+    'from `git diff --numstat HEAD` in the working directory before you return, plus every line of a ' +
+    'file you created (a new file is not in that diff). It decides whether a sceptic reads the ' +
+    'proof: a number, never a guess.',
     task
       ? 'When this task\'s tests are green, commit it yourself, with a pathspec and never `git add -A`: ' +
         `\`git add -- <the files you wrote>\`, then \`git commit -m "${subject.replace('{message}', '<your commit_message>')}"\`. ` +
@@ -394,9 +408,9 @@ if (stage === 'deliver') {
     log('a central premise fails — the delivery stops before anything is written')
     return { stage, size: null, measure, written: null, refutation: null }
   }
-  const size = sizeOf(measure.files)
-  log(`size: ${size}`)
   const written = await writeItem(measure)
+  const size = written.blocked ? sizeOf(measure.files) : sizeWritten(measure, written)
+  log(`size: ${size}`)
   const refutation = size === 'small' || written.blocked ? null : await refute(measure, written)
   return { stage, size, measure, written, refutation }
 }
@@ -410,7 +424,7 @@ if (stage === 'write') {
   }
   const measure = input.measure
   const written = await writeItem(measure, { previous: input.previous ?? null })
-  const refutation = sizeOf(measure.files) === 'small' || written.blocked
+  const refutation = written.blocked || sizeWritten(measure, written) === 'small'
     ? null : await refute(measure, written, input.previous ?? null)
   return { stage, measure, written, refutation }
 }
