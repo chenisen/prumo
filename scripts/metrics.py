@@ -70,6 +70,22 @@ def aggregate(runs: list[dict]) -> dict:
                     and r["lines_changed"] > 0):
                 per_line_by_effort[r.get("effort") or "(no effort)"].append(
                     r["tokens"] / r["lines_changed"])
+        # A delivery's cost BY SIZE. The claim under test since 3.0 is "a small delivery
+        # pays less than a standard one" — no sceptic, the touched test files instead of
+        # the whole suite — and the global median cannot confirm or refute it. A delivery
+        # recorded before the size existed lands under `(no size)`, visible and apart.
+        by_size = collections.defaultdict(list)
+        for r in rs:
+            if r.get("capability") == "deliver":
+                by_size[r.get("size") or "(no size)"].append(r)
+        size_cost = {}
+        for size, group in sorted(by_size.items()):
+            spent = [r["tokens"] for r in group if isinstance(r.get("tokens"), (int, float))]
+            took = [r["minutes"] for r in group if isinstance(r.get("minutes"), (int, float))]
+            size_cost[size] = {"runs": len(group),
+                               "delivered": sum(1 for r in group if r.get("state") == "delivered"),
+                               "tokens_median": round(statistics.median(spent)) if spent else None,
+                               "minutes_median": round(statistics.median(took), 1) if took else None}
         # Who spends, agent by agent, across the history. It is the list that says where
         # to cut.
         spend = collections.defaultdict(list)
@@ -119,6 +135,7 @@ def aggregate(runs: list[dict]) -> dict:
                 e: round(statistics.median(v), 1)
                 for e, v in sorted(per_line_by_effort.items())},
             "shapes": dict(shapes),
+            "by_size": size_cost,
             "runs_without_measurement": unmeasured,
             "cost_usd_total": round(sum(usd), 4) if usd else None,
             "cost_usd_median": round(statistics.median(usd), 4) if usd else None,

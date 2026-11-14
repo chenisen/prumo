@@ -155,6 +155,24 @@ class TestMetricsForTheMural(unittest.TestCase):
         m = aggregate(self.RUNS)["r"]
         self.assertEqual((m["items_reviewed"], m["approved_first_pass"]), (2, 1))
 
+    def test_a_delivery_s_cost_is_read_by_its_size(self):
+        """"A small delivery pays less than a standard one" is the claim 3.0 made, and a
+        median over both sizes can neither confirm nor refute it. A delivery from before
+        the size was recorded stays visible, apart; a review has no size at all."""
+        runs = [
+            {"repo": "r", "capability": "deliver", "size": "small", "state": "delivered", "tokens": 100, "minutes": 1.0},
+            {"repo": "r", "capability": "deliver", "size": "small", "state": "blocked", "tokens": 300, "minutes": 3.0},
+            {"repo": "r", "capability": "deliver", "size": "standard", "state": "delivered", "tokens": 900, "minutes": 5.0},
+            {"repo": "r", "capability": "deliver", "state": "delivered", "tokens": 500},
+            {"repo": "r", "verdict": "APPROVED", "tokens": 7000},
+        ]
+        m = aggregate(runs)
+        self.assertEqual(m["r [deliver]"]["by_size"], {
+            "(no size)": {"runs": 1, "delivered": 1, "tokens_median": 500, "minutes_median": None},
+            "small": {"runs": 2, "delivered": 1, "tokens_median": 200, "minutes_median": 2.0},
+            "standard": {"runs": 1, "delivered": 1, "tokens_median": 900, "minutes_median": 5.0}})
+        self.assertEqual(m["r"]["by_size"], {})
+
     def test_the_json_form_is_versioned_and_an_absent_ledger_is_empty(self):
         import subprocess, sys, tempfile, json as _json
         script = pathlib.Path(__file__).resolve().parents[1] / "metrics.py"
