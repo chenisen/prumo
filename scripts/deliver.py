@@ -597,6 +597,22 @@ def scope_roots(block: dict, kind: str) -> list[str]:
     return list(block["source_roots"]) + list(block["test_roots"]) + list(block.get("doc_roots") or []) + generated
 
 
+def profile_extract(profile: dict, package: pathlib.Path) -> str:
+    """What a delivery's agents read of the profile, and nothing else: the stack, the
+    conventions, the base, and how the suite and the lint are run and read. The `delivery`
+    block travels beside it, already resolved. The whole profile — anchors, evals, the
+    review's own roles, every comment — used to be pasted into the workflow's arguments
+    and repeated in every message of every agent: eighteen thousand characters on the
+    first real delivery on 3.0, for a surveyor that needed the suite's red-name pattern."""
+    import yaml
+    checks = profile.get("checks") or {}
+    kept = {"profile": profile.get("profile"), "stack": profile.get("stack"),
+            "conventions": profile.get("conventions"), "base": profile.get("base"),
+            "checks": {role: checks[role] for role in ("suite", "lint") if checks.get(role)}}
+    return (f"# An extract: what a delivery reads. The whole profile is {package / 'profile.yml'}\n"
+            + yaml.safe_dump({k: v for k, v in kept.items() if v}, allow_unicode=True, sort_keys=False, width=100))
+
+
 def measured_run(repo: str, tree: str, command: str | None, package: pathlib.Path) -> str | None:
     """A suite run already taken over this exact tree by this exact command, copied into
     `package` as its base run. The tree is git's, so a commit whose message alone changed
@@ -779,8 +795,7 @@ def prepare(args) -> int:
         "wide_patterns": [glob_to_regex(p).pattern for p in block.get("wide_paths") or []],
         "evidence": block.get("evidence"),
         "evidence_dir": str(dir_reports() / args.repo / f"{args.item}-deliver" / "evidence"),
-        "inline": {"item.md": item_text,
-                   "profile.yml": (package / "profile.yml").read_text(encoding="utf-8")},
+        "inline": {"item.md": item_text, "profile.yml": profile_extract(profile, package)},
     })
     print("\n" + t("review.package_ready", path=package))
     print(t("deliver.cli.branch_at", branch=name, path=workdir, base=base_sha[:12]))

@@ -256,6 +256,23 @@ class Spine(Fixture):
         self.assertIsNone(args["commands"]["tests"], "no files_command declared: the writer runs no test")
         self.assertFalse(args["gate"])
 
+    def test_the_arguments_carry_an_extract_of_the_profile_not_the_whole_of_it(self):
+        """The whole profile was pasted into the workflow's arguments and repeated in every
+        message of every agent. A delivery reads the stack, the base and how the suite and
+        the lint are run and read; the review's anchors, evals and roles are not its
+        business, and the package still holds the whole file."""
+        import yaml
+        package = self.prepare()
+        args = json.loads((package / "workflow-args.json").read_text(encoding="utf-8"))
+        extract = yaml.safe_load(args["inline"]["profile.yml"])
+        self.assertEqual(sorted(extract), ["base", "checks", "profile", "stack"])
+        self.assertEqual(sorted(extract["checks"]), ["lint", "suite"])
+        self.assertEqual(extract["checks"]["suite"]["red_name_pattern"], r"(?m)^FAIL: (\S+)")
+        self.assertIn(str(package / "profile.yml"), args["inline"]["profile.yml"])
+        whole = yaml.safe_load((package / "profile.yml").read_text(encoding="utf-8"))
+        self.assertIn("anchors", whole, "the package keeps the profile as it was read")
+        self.assertEqual(args["delivery"], whole["delivery"], "the delivery block travels beside it, whole")
+
     def test_a_dirty_tree_is_a_stop(self):
         (self.repo / "src" / "a.py").write_text(SOURCE + "# pending\n", encoding="utf-8")
         with self.assertRaises(common.UsageError), contextlib.redirect_stdout(io.StringIO()):
