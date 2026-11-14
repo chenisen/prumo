@@ -1,7 +1,7 @@
 {
   "name": "prumo",
   "description": "Entrega e revisa. `deliver` pega UM item, corta uma worktree só dele, e um agente com shell escreve a mudança e roda os testes que tocou até ficarem verdes; o que entrou é conferido uma vez, pelo tamanho — os arquivos de teste tocados, ou a suíte inteira — e a evidência é colhida só no fim. `task-review` revisa uma entrega inteira contra o item que a pediu e fecha com APROVADO ou INTERVENÇÃO NECESSÁRIA; `run` leva um item de ponta a ponta só com as palavras da pessoa. Quem escreve não aprova. Espinha determinística em Python, folhas agênticas. Agnóstico de repositório, stack, rastreador e forge: tudo que é fato de uma instalação vem do prumo.yml.",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "author": {
     "name": "Marcio Chen",
     "url": "https://github.com/chenisen"
