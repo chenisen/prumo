@@ -1052,6 +1052,27 @@ def runnable_tests(files: list[str], block: dict, check: dict, workdir: pathlib.
             and (not named or casa_algum(f, named))]
 
 
+def own_base_run(package: pathlib.Path, check: dict) -> str | None:
+    """The whole suite on the base, already taken by an earlier `conclude` of THIS package.
+    A package has one base, so the run is the same measurement — when the command is the
+    one the package was prepared with and the run finished: a run nobody can count, or one
+    cut short, is measured again. The first real delivery on 3.0 concluded twice, blocked
+    and then delivered, and paid the base's whole suite both times."""
+    from evidence import progress
+    run, snapshot = package / "run-suite-base.txt", package / "profile.yml"
+    if not run.exists() or not snapshot.exists() or not check.get("command"):
+        return None
+    import yaml
+    prepared = ((yaml.safe_load(snapshot.read_text(encoding="utf-8")) or {}).get("checks") or {}).get("suite") or {}
+    if prepared.get("command") != check.get("command"):
+        return None
+    output = run.read_text(encoding="utf-8")
+    executed, predicted = progress(output, check.get("progress_pattern"))
+    if executed is None or predicted is None or executed < predicted:
+        return None
+    return output
+
+
 def base_run(profile: dict, man: dict, workdir: pathlib.Path, package: pathlib.Path,
              files: list[str], tests: list[str] | None) -> tuple[str | None, str]:
     """The suite on the base, taken only because the branch turned something red — a
@@ -1061,6 +1082,10 @@ def base_run(profile: dict, man: dict, workdir: pathlib.Path, package: pathlib.P
     not run. `tests` narrows it to the files the branch run was narrowed to."""
     check = (profile.get("checks") or {}).get("suite") or {}
     if tests is None:
+        own = own_base_run(package, check)
+        if own is not None:
+            print(t("deliver.cli.baseline_reused", run=str(package / "run-suite-base.txt")))
+            return own, "reused"
         tree = git(workdir, "rev-parse", f"{man['base']['sha']}^{{tree}}", check=False)
         reused = measured_run(man["repo"], tree, check.get("command"), package)
         if reused:

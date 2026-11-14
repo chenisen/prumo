@@ -1100,6 +1100,36 @@ class TheBaseIsMeasuredOnlyWhenTheBranchIsRed(Fixture):
                          ("delivered", "reused", []), rec)
         self.assertIn(str(first / "run-suite-base.txt"), out.getvalue())
 
+    def test_a_package_concluded_again_reuses_the_base_it_measured(self):
+        """One package, one base. The first real delivery on 3.0 was concluded twice —
+        blocked, then delivered — and the base's whole suite ran both times."""
+        self.inherit_a_red()
+        package = self.prepare()
+        code, rec = self.conclude(package, PROVING_TEST)
+        self.assertEqual(rec["baseline"]["base"], "measured")
+        base = package / "run-suite-base.txt"
+        base.write_text(base.read_text(encoding="utf-8") + "the first conclude's own run\n", encoding="utf-8")
+        code, rec = self.conclude(package, PROVING_TEST)
+        b = rec["baseline"]
+        self.assertEqual((rec["state"], b["base"], b["base_reds"], b["new_reds"]),
+                         ("delivered", "reused", ["test_was_always_red"], []), rec)
+        self.assertIn("the first conclude's own run", base.read_text(encoding="utf-8"), "it was not run again")
+
+    def test_a_base_run_that_did_not_finish_or_was_taken_by_another_command_is_measured_again(self):
+        self.inherit_a_red()
+        package = self.prepare()
+        self.conclude(package, PROVING_TEST)
+        base = package / "run-suite-base.txt"
+        base.write_text("FAIL: test_was_always_red\nRan 1 of 2\n", encoding="utf-8")
+        code, rec = self.conclude(package, PROVING_TEST)
+        self.assertEqual(rec["baseline"]["base"], "measured", "a run cut short is not a measurement")
+        self.assertIn("Ran 2 of 2", base.read_text(encoding="utf-8"))
+        base.write_text(base.read_text(encoding="utf-8") + "the first conclude's own run\n", encoding="utf-8")
+        self.profile_with(suite__command="python3 ./run_tests.py")
+        code, rec = self.conclude(package, PROVING_TEST)
+        self.assertEqual(rec["baseline"]["base"], "measured", "another command is another measurement")
+        self.assertNotIn("the first conclude's own run", base.read_text(encoding="utf-8"))
+
     def test_a_new_red_blocks_and_leaves_the_next_write_what_it_needs(self):
         package = self.prepare(kind="behaviour-change")
         broken = "def accept(x):\n    return False\n"
