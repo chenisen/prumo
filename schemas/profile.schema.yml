@@ -127,7 +127,7 @@ properties:
       command handed back — never a default. Nothing here names a stack: the suite is
       `checks.suite`, the base is `base.branch`.
     additionalProperties: false
-    required: [branch_format, commit_format, budget, source_roots, test_roots, mutation, kinds]
+    required: [branch_format, commit_format, source_roots, test_roots, mutation, kinds]
     properties:
       branch_format:
         type: string
@@ -173,7 +173,12 @@ properties:
         properties:
           max_files: {type: integer, minimum: 1}
           max_lines: {type: integer, minimum: 1}
-        description: over it the run stops and proposes the split; `waiver` lifts it, with a name and an expiry
+        description: >-
+          OPTIONAL, and a decision of the repository's — never drafted, never defaulted. Declared,
+          a delivery over it stops and proposes the split, and `waiver` lifts it, with a name and
+          an expiry. Absent, no delivery stops for its size: the plan says no budget is declared.
+          Read as the profile stands when `conclude` runs, so raising or removing it is heard by
+          the next conclude of the same package.
       small:
         type: object
         additionalProperties: false

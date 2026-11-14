@@ -54,6 +54,11 @@ class TestTheBudgetScalesWithTheShape(unittest.TestCase):
     def test_an_epic_buys_nothing(self):
         self.assertEqual(budget_for(self.BLOCK, "epic"), {"max_files": 0, "max_lines": 0})
 
+    def test_a_profile_that_declares_none_has_none_in_every_shape(self):
+        for shape in SHAPES:
+            self.assertIsNone(budget_for({}, shape), shape)
+            self.assertIsNone(budget_for({"budget": None}, shape), shape)
+
 
 class TestTheMappingLivesInTheConfiguration(unittest.TestCase):
     def test_the_tracker_carries_its_types_mapped(self):

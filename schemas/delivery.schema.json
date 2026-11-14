@@ -477,7 +477,11 @@
           ]
         },
         "budget": {
-          "type": "object",
+          "description": "the profile's budget scaled by the shape; null when the profile declares none",
+          "type": [
+            "object",
+            "null"
+          ],
           "additionalProperties": false,
           "required": [
             "max_files",

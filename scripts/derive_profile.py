@@ -211,7 +211,8 @@ def delivery_draft(repo_dir: pathlib.Path, profile: dict) -> dict:
         "commit_format": "{item} - {message}",
         # Every item is delivered in a worktree of its own — the default, which the
         # draft does not repeat. What it needs outside git goes in `worktree_setup`.
-        "budget": {"max_files": 4, "max_lines": 120},
+        # No `budget` is drafted: a number nobody measured becomes a stop nobody decided.
+        # A repository that wants one declares `budget: {max_files, max_lines}` itself.
         # up to where a change is small here: checked by the test files it touched
         "small": {"max_files": 3, "max_lines": 80},
         # globs of what everything leans on: a change there runs the whole suite

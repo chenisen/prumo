@@ -42,7 +42,7 @@ Each rule has a test that fails when it is broken (`scripts/tests/test_deliver.p
 | R7 | **Baseline by name, and only when needed.** A green branch owes no baseline. A red one is compared by name against the base — measured then, or reused from a package that measured the same tree. A new red stops. | script |
 | R8 | **Predicted versus executed.** A suite that did not finish is not green. | script |
 | R9 | **One commit per step**, in the profile's `commit_format`. Never `git add -A`; always a pathspec. A story's writer commits its own task. | hook + script |
-| R10 | **Budget.** `max_files` and `max_lines` from the profile, scaled by the shape. Over it stops; a waiver in the profile lifts it, with a name and an expiry. | script |
+| R10 | **Budget, where the repository declares one.** `max_files` and `max_lines` from the profile, scaled by the shape. Over it stops; raising it, or a waiver with a name and an expiry, lifts it on the next `conclude`. A profile with no `delivery.budget` stops nothing for its size — the method defaults none. | script |
 | R11 | **Stopping is a result.** `blocked`, with a reason and the next owner, weighs as much as `delivered`. | judge |
 | R12 | **Evidence illustrates, once, at the end.** No environment for showing a change is raised while the work is open; nothing the evidence finds changes the state. | route + `evidence-collector` |
 

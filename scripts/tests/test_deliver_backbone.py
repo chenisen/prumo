@@ -292,6 +292,32 @@ class Spine(Fixture):
         self.assertEqual(rec["diff"]["outside_scope"], [])
         self.assertTrue(rec["diff"]["within_budget"])
 
+    def test_a_profile_with_no_budget_stops_no_delivery_for_its_size(self):
+        """A budget is a repository's decision. Where nobody declared one the method
+        defaults none: the plan says so, and a change of any size is judged by its proof."""
+        self.profile_with(delivery__budget=None)
+        package = self.prepare()
+        man = json.loads((package / "deliver-manifest.json").read_text(encoding="utf-8"))
+        self.assertIsNone(man["budget"])
+        code, rec = self.conclude(package, PROVING_TEST + "# a line of proof\n" * 400)
+        self.assertEqual((code, rec["state"]), (0, "delivered"), rec)
+        self.assertTrue(rec["diff"]["within_budget"])
+        self.assertIsNone(rec["plan"]["budget"])
+        self.assertIn("budget none", (package / "plan.md").read_text(encoding="utf-8"))
+
+    def test_a_budget_raised_after_a_block_is_heard_by_the_next_conclude(self):
+        """The budget is read as the profile stands, like the waiver beside it. A person
+        who answers `blocked` by raising it — or removing it — concludes the same package
+        again; the manifest's number, frozen at prepare, used to keep the stop standing."""
+        package = self.prepare()
+        long_test = PROVING_TEST + "# a line of proof\n" * 400
+        code, rec = self.conclude(package, long_test)
+        self.assertEqual((code, rec["state"], rec["owner"]), (1, "blocked", "person"), rec)
+        self.profile_with(delivery__budget={"max_files": 2, "max_lines": 600})
+        code, rec = self.conclude(package, long_test)
+        self.assertEqual((code, rec["state"]), (0, "delivered"), rec)
+        self.assertEqual(rec["plan"]["budget"], {"max_files": 2, "max_lines": 600})
+
     # ---- see also: the shape tests above
 
     def test_a_proving_test_is_delivered_committed_and_handed_to_review(self):
@@ -658,18 +684,18 @@ class Spine(Fixture):
         self.assertEqual((code, rec["state"], rec["tasks"]), (0, "delivered", {"T1": "delivered", "T2": "delivered"}), rec)
 
     def test_a_story_over_its_budget_waits_for_a_person_or_a_waiver(self):
-        import yaml
         story = self.story()
-        man = json.loads((story / "deliver-manifest.json").read_text(encoding="utf-8"))
-        man["budget"] = {"max_files": 1, "max_lines": 1}
-        (story / "deliver-manifest.json").write_text(json.dumps(man), encoding="utf-8")
+        tight = {"max_files": 1, "max_lines": 1}
+        self.profile_with(delivery__budget=tight)
         result = {"stage": "tasks", "tasks": [self.write_task("T1"), self.write_task("T2")]}
         code, over = self.conclude_result(story, result)
         self.assertEqual((code, over["state"], over["owner"]), (1, "blocked", "person"))
-        self.profile_with(delivery__waiver={"approver": "someone", "reason": "a person said so", "expires": "2999-12-31"})
+        self.profile_with(delivery__budget=tight,
+                          delivery__waiver={"approver": "someone", "reason": "a person said so", "expires": "2999-12-31"})
         code, waived = self.conclude_result(story, result)
         self.assertEqual((code, waived["state"]), (0, "delivered"), waived["reason"])
-        self.profile_with(delivery__waiver={"approver": "someone", "reason": "a person said so", "expires": "2000-01-01"})
+        self.profile_with(delivery__budget=tight,
+                          delivery__waiver={"approver": "someone", "reason": "a person said so", "expires": "2000-01-01"})
         code, expired = self.conclude_result(story, result)
         self.assertEqual((code, expired["state"]), (1, "blocked"))
 

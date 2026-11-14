@@ -806,6 +806,15 @@ def without_mutations(kind: str, measure: dict) -> tuple[dict, list[dict]]:
     return dict(measure, mutations=[]), list(measure["mutations"])
 
 
+def budget_line(man: dict) -> str:
+    """What the plan says about the budget — the numbers, or that the profile declares
+    none. Said either way: a stop that cannot happen is not a silence."""
+    budget = man.get("budget")
+    if not budget:
+        return "budget none — the profile declares no `delivery.budget`"
+    return f"budget {budget['max_files']} files · {budget['max_lines']} lines"
+
+
 def render_plan(man: dict, measure: dict, dropped: list[dict] | None = None) -> str:
     """The plan a person reads before a line is written: what was measured, what will
     be touched, what will prove it. One fact per line, each with an address."""
@@ -815,7 +824,7 @@ def render_plan(man: dict, measure: dict, dropped: list[dict] | None = None) -> 
              + (f" · {t('deliver.report.gate_pending')}" if rules["gate"] else ""),
              f"{L('base'):9}{man['base']['name']}@{man['base']['sha'][:7]}   "
              f"{L('branch')} {man['branch']['name']}",
-             f"{'':9}budget {man['budget']['max_files']} files · {man['budget']['max_lines']} lines", ""]
+             f"{'':9}{budget_line(man)}", ""]
     lines.append(L("premises"))
     for p in measure.get("premises") or []:
         lines.append(f"{SYMBOL[p['state']]} {p['text']} — {p.get('evidence') or '?'}"
@@ -848,8 +857,8 @@ def render_design(man: dict, design: dict) -> str:
     if man.get("deliverable", True):
         lines.append(f"{L('base'):9}{man['base']['name']}@{man['base']['sha'][:7]}   "
                      f"{L('branch')} {man['branch']['name']}")
-    lines.append(f"{'':9}budget {man['budget']['max_files']} files · {man['budget']['max_lines']} lines"
-                 + (" · over every task" if design.get("tasks") else ""))
+    lines.append(f"{'':9}{budget_line(man)}"
+                 + (" · over every task" if design.get("tasks") and man.get("budget") else ""))
     for x in design.get("tasks") or []:
         lines += ["", f"{x['id']}  {x['title']}"
                       + (f"  ← {', '.join(x['depends_on'])}" if x.get("depends_on") else "")]
@@ -1103,7 +1112,11 @@ def conclude(args) -> int:
     named = set(measure.get("files") or [])
     written = dict(written, files=declared + [f for f in files if f in named and f not in declared])
     write_json(package / "written.json", written)
-    budget = man.get("budget") or block.get("budget") or {}
+    # The budget is the profile's AS IT STANDS, like the waiver beside it: a person who
+    # raises it, or removes it, after a `blocked` concludes the same package again and is
+    # heard. The manifest keeps the one the plan was rendered with. No budget declared,
+    # no stop: the size of a change is a repository's decision, never the method's.
+    budget = budget_for(block, shape) or {}
     # The plan is rendered here too when nobody did, so the record always holds one;
     # the gate reads the approval against the measurement as it stands.
     subject = design if story else measure
@@ -1116,8 +1129,8 @@ def conclude(args) -> int:
         write_json(package / "plan.json", dict(read_json(package / "plan.json"), digest=digest(subject)))
     plan_record = {"shape": shape, "depth": man.get("plan_depth", "measure"),
                    "gate": SHAPES[shape]["gate"], "approved_by": approval_of(package),
-                   "budget": {"max_files": int(budget.get("max_files", 0)),
-                              "max_lines": int(budget.get("max_lines", 0))}}
+                   "budget": {"max_files": int(budget["max_files"]),
+                              "max_lines": int(budget["max_lines"])} if budget else None}
     counted = [f for f in files if not casa_algum(f, generated)]
     diff = {"files": files, "added": added, "removed": removed,
             "outside_scope": scope_guard(files, allowed, roots),

@@ -91,10 +91,14 @@ def size_of(shape: str, files: list[str], lines: int | None, block: dict) -> dic
             + (f", {lines} line(s)" if lines is not None else "") + ", no wide path"}
 
 
-def budget_for(block: dict, shape: str) -> dict:
-    """The profile's budget, scaled by the shape, rounded up — a half of 3 files is 2."""
+def budget_for(block: dict, shape: str) -> dict | None:
+    """The profile's budget, scaled by the shape, rounded up — a half of 3 files is 2.
+    None when the profile declares none: a budget is a repository's decision, never a
+    default of the method, and where nobody decided one no delivery stops for its size."""
     import math
     f = SHAPES[shape]["budget"]
-    b = block.get("budget") or {}
+    b = block.get("budget")
+    if not b:
+        return None
     return {"max_files": math.ceil(b.get("max_files", 0) * f) if f else 0,
             "max_lines": math.ceil(b.get("max_lines", 0) * f) if f else 0}
