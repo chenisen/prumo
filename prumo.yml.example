@@ -223,6 +223,24 @@ forge:
 # prices:
 #   some-model-id:  { input: 3, output: 15, cache_write: 3.75, cache_read: 0.3 }
 
+# --- MODELS (optional) ----------------------------------------------------------------
+#
+# Which model embodies each DEMAND TIER in this installation. The method never names a
+# model: it reads the task's demand — the effort level the triage measured, the class
+# that fired, a finding's severity, the deliver stage — and chooses a tier; this section
+# says what answers it. `light` runs the mechanical extractions (criteria labelling,
+# evidence collection), `standard` the ordinary readings (most reviewers, the writer,
+# the surveyor), `heavy` the readings that decide what ships (correctness and domain
+# rules at full effort, the verifier of a blocking finding, the proof skeptic, the
+# story planner). A missing section, or a missing tier, means "inherit the session's
+# model" — the behaviour before tiers existed. A profile's per-agent `models:` override
+# still wins, and may name a tier or a literal model.
+#
+# models:
+#   light: some-small-model
+#   standard: some-everyday-model
+#   heavy: some-frontier-model
+
 # ------------------------------------------------------------------------------------
 # EXAMPLES FOR THE OTHER PROVIDERS
 #

@@ -360,6 +360,12 @@ class Config:
     # price for every model a run used, its cost stays `null` with the reason; never a
     # guess. Each entry: input, output, and optionally cache_write and cache_read.
     prices: tuple = ()
+    # Which model embodies each demand tier — `light`, `standard`, `heavy` — in THIS
+    # installation. The method chooses the TIER by what it measured (effort, fired
+    # classes, a finding's severity); the name that answers a tier is a vendor fact,
+    # and vendor facts live here, never in the method. A missing section, or a missing
+    # tier, means "inherit the session's model" — the safe default.
+    models: tuple = ()
     # Legacy keys found while loading. The caller prints them once; silence would let an
     # installation drift until support is removed.
     legacy_keys: tuple = ()
@@ -653,7 +659,20 @@ def build(data: dict, source: pathlib.Path | None = None) -> Config:
         prices.append((str(model), {"input": entry["input"], "output": entry["output"], **extra}))
     if data.get("prices") is not None and not isinstance(data.get("prices"), dict):
         raise InvalidConfiguration("`prices` is a mapping: model id → {input, output, …}")
+
+    models = []
+    if data.get("models") is not None:
+        if not isinstance(data.get("models"), dict):
+            raise InvalidConfiguration("`models` is a mapping: tier (light|standard|heavy) → model name")
+        for tier, name in data["models"].items():
+            if tier not in ("light", "standard", "heavy"):
+                raise InvalidConfiguration(
+                    f"`models.{tier}`: the method knows three tiers — light, standard, heavy")
+            if not isinstance(name, str) or not name.strip():
+                raise InvalidConfiguration(f"`models.{tier}` needs a model name, a non-empty string")
+            models.append((tier, name.strip()))
     return Config(forge=forge, tracker=tracker, paths=paths, source=source, prices=tuple(prices),
+                  models=tuple(models),
                   language=language, owner=owner.strip(), agnosticism=tuple(extras),
                   tolerated_repo_names=tuple(tolerated),
                   proof_registries=tuple(registries), agent_prefix=agent_prefix,

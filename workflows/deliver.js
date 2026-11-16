@@ -48,10 +48,25 @@ const prompts = input.agent_prompts ?? {}
 const spawn = (name, opts) => prompts[name]
   ? { ...opts, prompt: `${prompts[name]}\n\n---\n\n` }
   : { ...opts, agentType: `${PREFIX}${name}`, prompt: '' }
+// The model follows the task's demand. `input.models` is the installation's name per
+// tier (resolved by the spine from `prumo.yml`); each agent's tier is the method's
+// reading of how hard its question is: planning a story and refuting a proof decide
+// what ships (`heavy`); measuring and writing are ordinary readings (`standard`);
+// collecting evidence illustrates and decides nothing (`light`). An absent map or tier
+// spreads nothing, and the agent inherits the session's model.
+const MODELS = input.models ?? {}
+const TIER = {
+  'premise-surveyor': 'standard',
+  'change-writer': 'standard',
+  'task-planner': 'heavy',
+  'proof-skeptic': 'heavy',
+  'evidence-collector': 'light',
+}
 const run = (name, body, opts) => {
   const o = spawn(name, opts)
   const { prompt, ...rest } = o
-  return agent(`${prompt}${body}`, rest)
+  const model = MODELS[TIER[name]]
+  return agent(`${prompt}${body}`, model ? { ...rest, model } : rest)
 }
 const inlined = input.inline ?? {}
 const embed = (name, label) => inlined[name]

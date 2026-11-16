@@ -43,7 +43,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from common import (MissingConfiguration, InvalidConfiguration, UsageError, cfg,
                     dir_packages, dir_repositories, dir_reports, load_profile,
                     profile_path, read_json, slug, today, waiver_in_force, write_json,
-                    casa_algum, capabilities_after_preflight, hint_config)
+                    casa_algum, capabilities_after_preflight, hint_config, models_map)
 from i18n import t
 from shape import (SHAPES, resolve as resolve_shape, budget_for, UnknownShape, size_of,
                    small_limits)
@@ -711,6 +711,10 @@ def prepare(args) -> int:
                    # The repository's own conventions, as pointers: the writer reads them
                    # before the first line, the way the reviewers read them before judging.
                    "conventions": list(profile.get("conventions") or []),
+                   # The installation's model name per demand tier (prumo.yml `models:`);
+                   # the workflow assigns each agent its tier. Empty map → every agent
+                   # inherits the session's model, the behaviour before tiers existed.
+                   "models": models_map(),
                    "agent_prefix": _agent_prefix()}
     if not rules["deliverable"]:
         # An epic is cut into stories and stops there: no branch, no suite, no marker.

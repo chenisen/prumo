@@ -19,7 +19,8 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from i18n import t
 from common import (CLASSES, CHECK_ROLES, UsageError, load_profile, casa_algum,
-                   waiver_in_force, is_document, write_json, read_json, cfg)
+                   waiver_in_force, is_document, write_json, read_json, cfg,
+                   model_for, models_map)
 
 # Content patterns that hold in any stack. This is the floor under the eight classes with
 # no anchor: what is looked for is the SHAPE of the change in the diff, never a path that
@@ -392,37 +393,48 @@ def _fired(classes: list[dict], *ids: str) -> bool:
 # decides, at any level, because its ground is already a named risk — and A1/A2/A4/A5
 # force `full` anyway, so only performance-ops ever runs below it.
 #
-# `model` here is the method's choice per level; `profile.models` still wins. `max_turns`
-# travels in the plan for the record — the harness does not take a per-call turn cap
-# (verified against the Workflow agent() options), so the hard ceiling stays the agent
-# frontmatter's and the per-level budget is enforced as reasoning effort instead.
+# `model` here is the method's choice per level, as a DEMAND TIER — `light`, `standard`
+# or `heavy` — never a vendor's name: the installation's `prumo.yml` `models:` says which
+# model answers each tier, and an installation that names none inherits the session's
+# model everywhere, which is how every agent ran before tiers existed. `profile.models`
+# still wins, per agent. `max_turns` travels in the plan for the record — the harness
+# does not take a per-call turn cap (verified against the Workflow agent() options), so
+# the hard ceiling stays the agent frontmatter's and the per-level budget is enforced as
+# reasoning effort instead.
+#
+# The tier follows the question's weight at that effort. At `full`, the readings that
+# sink proposals get `heavy`: correctness (the failure-path tracing that one measured
+# delivery shipped four defects past), security, and domain rules (which only runs when
+# a business rule changed — the demand is there by construction). Scope, architecture
+# and contract stay `standard`: their questions are comparative readings, not causal
+# chains. At `minimal`, scope drops to `light` — it labels and compares, nothing more.
 REVIEWERS = [
     dict(agent="scope-coherence-reviewer",
-         levels={"minimal":  dict(slice="complete", model="sonnet", max_turns=12),
-                 "standard": dict(slice="complete", model="sonnet", max_turns=20),
-                 "full":     dict(slice="complete", model="sonnet", max_turns=25)}),
+         levels={"minimal":  dict(slice="complete", model="light", max_turns=12),
+                 "standard": dict(slice="complete", model="standard", max_turns=20),
+                 "full":     dict(slice="complete", model="standard", max_turns=25)}),
     dict(agent="correctness-proof-reviewer",
-         levels={"minimal":  dict(slice="tests", model="sonnet", max_turns=15,
+         levels={"minimal":  dict(slice="tests", model="standard", max_turns=15,
                                   when=lambda shape, classes: shape["shape"] == "proof_only",
                                   skip_key="triage.skip_minimal_correctness"),
-                 "standard": dict(slice="code-and-tests", model="sonnet", max_turns=25),
-                 "full":     dict(slice="code-and-tests", model="sonnet", max_turns=30)}),
+                 "standard": dict(slice="code-and-tests", model="standard", max_turns=25),
+                 "full":     dict(slice="code-and-tests", model="heavy", max_turns=30)}),
     dict(agent="security-privacy-reviewer",
-         levels={"minimal":  dict(slice="code-and-config", model="sonnet", max_turns=15,
+         levels={"minimal":  dict(slice="code-and-config", model="standard", max_turns=15,
                                   when=lambda shape, classes: _fired(classes, "A9", "A3"),
                                   skip_key="triage.skip_minimal_security"),
-                 "standard": dict(slice="code-and-config", model="sonnet", max_turns=20),
-                 "full":     dict(slice="code-and-config", model="opus", max_turns=30)}),
+                 "standard": dict(slice="code-and-config", model="standard", max_turns=20),
+                 "full":     dict(slice="code-and-config", model="heavy", max_turns=30)}),
     dict(agent="architecture-reviewer",
-         levels={"standard": dict(slice="code-and-tests", model="sonnet", max_turns=20,
+         levels={"standard": dict(slice="code-and-tests", model="standard", max_turns=20,
                                   when=lambda shape, classes: _fired(classes, "A6"),
                                   skip_key="triage.skip_standard_architecture"),
-                 "full":     dict(slice="code-and-tests", model="sonnet", max_turns=24)}),
-    dict(agent="contract-compat-reviewer", slice="contract",
+                 "full":     dict(slice="code-and-tests", model="standard", max_turns=24)}),
+    dict(agent="contract-compat-reviewer", slice="contract", model="standard",
          when=lambda shape, classes: _fired(classes, "A1", "A2", "A4")),
-    dict(agent="domain-rules-reviewer", slice="code-and-tests",
+    dict(agent="domain-rules-reviewer", slice="code-and-tests", model="heavy",
          when=lambda shape, classes: _fired(classes, "A5")),
-    dict(agent="performance-ops-reviewer", slice="code-and-config",
+    dict(agent="performance-ops-reviewer", slice="code-and-config", model="standard",
          when=lambda shape, classes: _fired(classes, "A10", "B7")),
 ]
 
@@ -511,7 +523,7 @@ def activation_plan(profile: dict, change: dict, classes: list[dict], size: dict
                 skipped.append({"agent": r["agent"],
                                 "reason": t("triage.reviewer_not_triggered")})
                 continue
-            chosen = dict(slice=r["slice"], model=None, max_turns=None)
+            chosen = dict(slice=r["slice"], model=r.get("model"), max_turns=None)
         else:
             cfg_level = r["levels"].get(level)
             if cfg_level is None:
@@ -526,13 +538,22 @@ def activation_plan(profile: dict, change: dict, classes: list[dict], size: dict
         agent = r["agent"]
         if agent == "architecture-reviewer" and profile.get("local_reviewer"):
             agent = profile["local_reviewer"]["name"]
+        # The profile's override wins over the level's choice, as it always won over
+        # the frontmatter's. Either side may be a demand tier (light|standard|heavy) —
+        # resolved here through the installation's `models:` — or a literal model name,
+        # which passes through untouched. A tier the installation did not name resolves
+        # to None: the agent inherits the session's model.
+        tier_or_name = (profile.get("models") or {}).get(r["agent"]) or chosen["model"]
+        resolved = (model_for(tier_or_name)
+                    if tier_or_name in ("light", "standard", "heavy") else tier_or_name)
         active.append({"agent": agent, "slice": chosen["slice"],
-                       # The profile's override wins over the level's choice, as it
-                       # always won over the frontmatter's.
-                       "model": (profile.get("models") or {}).get(r["agent"])
-                                or chosen["model"],
+                       "model": resolved,
+                       "tier": tier_or_name,
                        "max_turns": chosen["max_turns"]})
     return {"reviewers": active, "skipped": skipped,
+            # Every configured tier, resolved, for the choices only the workflow can
+            # make at runtime: the verifier's model follows the finding's severity.
+            "models": models_map(),
             "effort": level,
             "effort_reasons": effort["reasons"],
             "manual_fallback": manual_fallback(profile, classes),

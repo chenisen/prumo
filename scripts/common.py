@@ -51,6 +51,32 @@ def capabilities_after_preflight(package: pathlib.Path) -> dict:
     return read_json(path)
 
 
+def model_for(tier: str | None) -> str | None:
+    """The installation's model name for a demand tier, or None to inherit the session's.
+
+    The method decides TIERS — `light` for mechanical extraction, `standard` for an
+    ordinary reading, `heavy` for the readings that decide a verdict — from what it
+    measured: the effort level, the classes that fired, a finding's severity. Which
+    model answers each tier is `models:` in `prumo.yml`, an installation fact. No
+    section, no tier, or no configuration at all → None, and the agent inherits the
+    session's model, which is how every agent ran before tiers existed."""
+    if tier is None:
+        return None
+    try:
+        return dict(cfg().models or ()).get(tier) or None
+    except Exception:                                      # noqa: BLE001 — no config, no tiers
+        return None
+
+
+def models_map() -> dict:
+    """Every configured tier resolved, for a workflow that picks at runtime — the
+    verifier by the finding's severity, the deliver by the stage. Only the tiers the
+    installation named appear: an absent key reads as "inherit"."""
+    return {tier: name for tier, name in
+            (("light", model_for("light")), ("standard", model_for("standard")),
+             ("heavy", model_for("heavy"))) if name}
+
+
 def dir_repositories() -> pathlib.Path:
     return cfg().paths.repositories
 

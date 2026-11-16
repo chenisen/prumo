@@ -68,6 +68,12 @@ const { package: bundle, plan, profile, classes } = input
 // address — and it comes from the plan, not hard-coded here, so that a checkout outside a
 // plugin (agents loose in `.claude/agents/`) keeps working with `agent_prefix: ""`.
 const PREFIX = plan.agent_prefix ?? 'prumo:'
+// The model follows the task's demand. The spine resolved each reviewer's tier into
+// `plan.reviewers[].model`; what remains here are the choices only the workflow can
+// make at runtime, picked from `plan.models` — the installation's name per tier. An
+// absent map or tier spreads nothing, and the agent inherits the session's model.
+const MODELS = plan.models ?? {}
+const tiered = (tier) => (MODELS[tier] ? { model: MODELS[tier] } : {})
 const agentFor = (name) => `${PREFIX}${name}`
 
 // How to hand the result back. Measured over 42 workflow runs (2026-11-12): 40 of 263
@@ -310,7 +316,7 @@ if (inlined['criteria.json']) {
     embed('item.md', 'Normalised item (description + comments)'),
     RETURN_RULE,
   ].join('\n'), { agentType: agentFor('criteria-extractor'), label: 'criteria-extractor',
-                  phase: 'Criteria', schema: LABEL_SCHEMA })
+                  phase: 'Criteria', schema: LABEL_SCHEMA, ...tiered('light') })
   if (labelled) {
     labels = labelled.labels
     extracted = buildCriteria(candidates, labels)
@@ -336,7 +342,7 @@ if (inlined['criteria.json']) {
     embed('item.md', 'Normalised item (description + comments)'),
     RETURN_RULE,
   ].join('\n'), { agentType: agentFor('criteria-extractor'), label: 'criteria-extractor',
-                  phase: 'Criteria', schema: EXTRACT_SCHEMA })
+                  phase: 'Criteria', schema: EXTRACT_SCHEMA, ...tiered('light') })
   if (extracted) {
     inlined['criteria.json'] = JSON.stringify(extracted.criteria, null, 2)
     inlined['out-of-scope.json'] = JSON.stringify({ out_of_scope: extracted.out_of_scope }, null, 2)
@@ -570,7 +576,11 @@ const verified = await pipeline(blocking, (f) =>
     label: `verify:${f.id}`,
     phase: 'Verification',
     schema: VERIFICATION_SCHEMA,
-    ...(EFFORT === 'full' ? {} : { model: 'sonnet' }),
+    // The finding's severity is the demand: a blocking finding decides a gate, so its
+    // verification earns the heavy tier; anything below it takes the standard one. The
+    // old rule keyed on EFFORT — but a critical finding in a minimal review deserves no
+    // lighter a second reading than in a full one.
+    ...tiered(f.severity === 'critical' || f.severity === 'required' ? 'heavy' : 'standard'),
   }).then((v) => ({ ...f, status: v ? v.verdict : 'uncertain',
                     attributable: v ? v.attributable : f.attributable,
                     consequence_kind: v ? v.consequence_kind : null,
@@ -671,7 +681,7 @@ const scripts = templatable
       'The expected result is written BEFORE executing.',
       RETURN_RULE,
     ].join('\n'), { agentType: agentFor('manual-verification-planner'), phase: 'Manual plan',
-                    schema: SCRIPT_SCHEMA })
+                    schema: SCRIPT_SCHEMA, ...tiered('standard') })
   : null
 
 return { findings: final, coverage, conventions_observed: conventionsObserved,
