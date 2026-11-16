@@ -863,6 +863,10 @@ def render_plan(man: dict, measure: dict, dropped: list[dict] | None = None) -> 
     for p in measure.get("premises") or []:
         lines.append(f"{SYMBOL[p['state']]} {p['text']} — {p.get('evidence') or '?'}"
                      + (" · central" if p.get("central") else ""))
+    if measure.get("existing"):
+        lines += ["", L("existing")]
+        for e in measure["existing"]:
+            lines.append(f"  {e['kind']}: {e['what']} — {e.get('where') or t('deliver.report.existing_none')}")
     lines += ["", f"{L('diff'):9}" + ", ".join(measure.get("files") or []) or "?"]
     lines += ["", L("proof")]
     for m in dropped or []:

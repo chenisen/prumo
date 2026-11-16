@@ -14,7 +14,10 @@ Read the slice you were given and the hot paths the profile declares.
 
 ### Volume
 
-- A query inside a loop — and what makes the loop grow?
+- A query inside a loop — and what makes the loop grow? The loop may sit outside the
+  diff: for every method the change gives a query or a remote call, search for its
+  callers. One that calls it once per item is the loop, and the cure is the value read
+  once by the caller and handed down.
 - A load that fetches the world to use one field.
 - Pagination or a limit removed from a listing.
 - An expensive operation on a hot path.

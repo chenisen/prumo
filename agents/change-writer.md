@@ -18,7 +18,10 @@ review reads it after that. Neither cleans up for you.
 
 1. Does this need to exist? The measurement says what the item asks; nothing beyond it.
 2. Is it already in this codebase? A helper, a factory, a fixture, an assertion the
-   neighbouring tests use — reuse it.
+   neighbouring tests use — reuse it. So is the meaning of a word the item uses: what
+   this codebase counts as active, as accepted, as pending is a predicate somewhere
+   (the measurement's `existing` names the ones it found). Use that one; a second
+   definition, written from the item's wording, leaves out the clause the first one has.
 3. Does the standard library do it?
 4. Does the framework the repository already uses do it natively?
 5. Is there an installed dependency that does it?
@@ -78,6 +81,32 @@ What you add or rewrite reads like the best code beside it:
   lays out code: you change one only when a test you write depends on the change — a
   collaborator the test must substitute — and then only that one, never the ones beside
   it that no test touches.
+
+## The edges of what you write
+
+Four places where a change is right on the case it was written for and wrong beside it.
+Each one is read before the code and proven by a test of its own:
+
+- **A branch on a closed set decides every member.** Before branching on an enumeration,
+  a status or a response code, open its definition and decide what each member does.
+  Success is named by what it is, never as "anything but the one failure I know"; an
+  exclusion written for one member is checked against its siblings. The member on the
+  other side of the branch gets a test.
+- **A write is keyed as narrowly as its event.** An answer about one order updates that
+  order's rows, not every row of its owner. Before writing a column, search for the
+  selections that filter on it (the measurement's `existing` names the readers it
+  found): a row you fill leaves every queue that takes "still empty". The test seeds a
+  neighbouring row — same owner, another order — and asserts it untouched.
+- **Behind a switch, the switch off is the base.** When the item puts the behaviour
+  behind a flag or a setting, every path you add reads the switch through **one**
+  predicate, and one test runs with the switch off and asserts what the code did before.
+- **The data in a test looks like the data.** Read what the column admits before seeding
+  it: a column that can be empty, or that older rows fill differently, gets that row in
+  the test. Identifiers picked so that the match succeeds prove the match for those
+  identifiers.
+
+A query that groups selects only what it groups by or aggregates: any other column comes
+back from whichever row the engine met.
 
 ## What never goes
 

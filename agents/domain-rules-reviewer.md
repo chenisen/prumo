@@ -33,7 +33,11 @@ path where no happy-path test lives:
 Look for:
 
 1. **An invariant the change can break** through a new path — name the path.
-2. **An invariant asserted in two places** that now disagree.
+2. **An invariant asserted in two places** that now disagree — and a concept the codebase
+   already decides (what counts as active, as accepted, as pending) that the change
+   decides again, differently. Search for the standing predicate before judging the new
+   one: a second definition that leaves out a clause the first one holds counts records
+   the rest of the system treats as gone.
 3. **A business rule altered** — what the customer can buy, see or pay. This is a **human
    decision**: describe the question and the doors, leave `forma` null.
 4. **An aggregate spanning two stores.** When the value is computed in one place and

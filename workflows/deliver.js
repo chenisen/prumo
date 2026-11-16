@@ -107,6 +107,20 @@ const MEASURE_SCHEMA = {
     proving_tests: { type: 'array', items: { type: 'string' } },
     guarding_tests: { type: 'array', items: { type: 'string' } },
     related_tests: { type: 'array', items: { type: 'string' } },
+    // What already stands and the writer builds on: the definition of a word the item
+    // uses, the switch the behaviour sits behind, the readers of what will be written.
+    existing: {
+      type: 'array',
+      items: {
+        type: 'object', required: ['kind', 'what', 'where'],
+        additionalProperties: false,
+        properties: {
+          kind: { enum: ['definition', 'switch', 'reader'] },
+          what: { type: 'string' },
+          where: { type: ['string', 'null'] },
+        },
+      },
+    },
     checked: { type: 'array', items: { type: 'string' } },
   },
 }
@@ -275,6 +289,13 @@ async function measureItem() {
     'Measure every premise of the item against the code. Name the files a writer may ' +
     'touch for this kind, the tests that will prove the delivery, and in `related_tests` ' +
     'the existing test FILES that exercise the code those files hold. Propose no fix.',
+    // The review threads of 2026-11-15 sent deliveries back for what the code already
+    // held and the delivery never read: a second definition of a standing
+    // concept, a switch that gated half of the new paths, a write that emptied a queue
+    // filtering on the column it filled.
+    'In `existing`, give the address of what already stands: the definition of each word of ' +
+    'the domain the item leans on, the switch the behaviour sits behind when the item names ' +
+    'one, and the selections that filter on each column or status the delivery will write.',
   ].filter(Boolean).join('\n'), { label: 'premise-surveyor', phase: 'Measure', schema: MEASURE_SCHEMA })
   if (!measure) throw new Error('premise-surveyor returned nothing — nothing was measured')
   if (item.kind === 'behaviour-change') measure.mutations = []
@@ -339,6 +360,14 @@ async function writeItem(measure, { task = null, earlier = [], previous = null }
     'one level of nesting in what you add; nothing written twice; no comment explaining code. ' +
     'Keep the file\'s conventions — how it builds collaborators, how it names — and change one ' +
     'only where a test you write depends on it.',
+    // The same review threads: an exclusion that named one member of an
+    // enumeration and let its sibling through, a write keyed by the owner where the event
+    // was one order, a validation that ran with its flag off, a match tested only on
+    // identifiers picked to match.
+    'Four edges, each read before the code and proven by a test of its own: a branch on a ' +
+    'closed set decides every member; a write is keyed as narrowly as its event, and the readers ' +
+    'of the column it fills are searched for; behind a switch, the switch off is the base; the ' +
+    'data in a test looks like the data — the empty and the older value included.',
     // The first front-end delivery (2026-11-13) committed the item's title with its id
     // twice, against a log written in another voice: the script cannot know the
     // repository's voice, the writer read it.
@@ -380,7 +409,8 @@ async function refute(measure, written, previous = null) {
       ? 'This is a SECOND attempt on the same tree: the change under review is every file of ' +
         'the measurement that differs from the base, not only the files listed above.'
       : '',
-    'Try to show the test does NOT prove the guard. When in doubt, `uncertain`.',
+    'Try to show the test does NOT prove the guard — the values it seeds and the members ' +
+    'of a closed set it feeds included. When in doubt, `uncertain`.',
   ].filter(Boolean).join('\n'), { label: 'proof-skeptic', phase: 'Refute', schema: REFUTATION_SCHEMA })
   log(refutation ? `sceptic: ${refutation.verdict} — ${refutation.reason}`
                  : 'sceptic returned nothing — recorded as uncertain')

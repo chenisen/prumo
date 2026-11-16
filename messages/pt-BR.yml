@@ -164,6 +164,8 @@ deliver:
     base: BASE
     branch: BRANCH
     diff: DIFF
+    existing: JÁ EXISTE
+    existing_none: 'procurado, nenhum encontrado'
     item: ITEM
     next: PRÓXIMO
     premises: PREMISSAS

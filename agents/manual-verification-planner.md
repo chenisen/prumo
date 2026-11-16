@@ -18,6 +18,12 @@ acceptance criterion.
 verification from observation. A script whose expected result is "it works" is no script
 at all.
 
+When what has to be proven is what the data holds — how many rows a write reaches, whether
+a column the code matches on is filled — the steps are a **read-only query** a person
+runs, and the expected result is the count, or the rows, that would clear the change and
+the ones that would not. The method holds no credential to any environment: never write a
+step that assumes the harness can run the query.
+
 When the trigger is an acceptance criterion, derive the cases by equivalence partitioning
 and boundary value from the text of the criterion, and deliver the table of cases.
 

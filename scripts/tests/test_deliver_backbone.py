@@ -977,6 +977,19 @@ class TheSizeDecidesWhatRuns(Fixture):
         self.assertEqual(rec["state"], "delivered", rec)
         self.assertIn("Ran 2 of 2", (package / "run-suite-branch-focused.txt").read_text(encoding="utf-8"))
 
+    def test_the_plan_names_what_already_stands_with_its_address(self):
+        package = self.prepare(kind="behaviour-change")
+        man = json.loads((package / "deliver-manifest.json").read_text(encoding="utf-8"))
+        heading = deliver.t("deliver.report.existing")
+        measure = dict(BEHAVIOUR, existing=[
+            {"kind": "definition", "what": "active line", "where": "src/a.py:12"},
+            {"kind": "switch", "what": "release flag", "where": None}])
+        plan = deliver.render_plan(man, measure)
+        self.assertIn(heading, plan)
+        self.assertIn("definition: active line — src/a.py:12", plan)
+        self.assertIn(f"switch: release flag — {deliver.t('deliver.report.existing_none')}", plan)
+        self.assertNotIn(heading, deliver.render_plan(man, BEHAVIOUR))
+
     def test_past_the_small_limit_the_whole_suite_runs_once(self):
         self.profile_with(suite__files_command="python3 run_files.py {tests}", delivery__small={"max_files": 1})
         package = self.prepare(kind="behaviour-change")

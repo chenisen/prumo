@@ -160,6 +160,8 @@ deliver:
     base: BASE
     branch: BRANCH
     diff: DIFF
+    existing: ALREADY THERE
+    existing_none: 'searched, none found'
     item: ITEM
     next: NEXT
     premises: PREMISES

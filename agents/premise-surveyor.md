@@ -39,9 +39,25 @@ JSON only:
   "proving_tests": ["<behaviour-change only: the tests that must be red on the base and green after>"],
   "guarding_tests": ["<refactor only: the existing tests that exercise the code being reshaped>"],
   "related_tests": ["<the existing test FILES that exercise the code the named files hold>"],
+  "existing": [
+    {"kind": "definition" | "switch" | "reader",
+     "what": "<the concept, the switch or the column, in the item's words>",
+     "where": "<file:line>" | null}
+  ],
   "checked": ["<what you read>"]
 }
 ```
+
+- `existing` is what already stands in the code and the writer must build on, not beside.
+  Three kinds, each searched for and given an address — `where` is `null` only when you
+  searched and found none, and `what` then says what you searched for:
+  - `definition` — for each word of the domain the item leans on (active, accepted,
+    pending, eligible), the predicate, scope or constant where this codebase already
+    decides it. A writer who never saw it writes a second one.
+  - `switch` — when the item puts the behaviour behind a flag or a setting, the place
+    that reads it today. Every new path will have to pass through one predicate.
+  - `reader` — for each column or status the delivery will write, the selections that
+    filter on it: the queues and pollers whose reach the write changes.
 
 - `central` is true when the item's whole point rests on it: the guard exists, no test
   covers it, the file is where the item says. A central premise that fails ends the

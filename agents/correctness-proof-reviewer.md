@@ -18,7 +18,64 @@ points to (when there is one — if the profile declares it `absent`, say so and
 Boundary conditions, the empty case, null, order of operations, concurrency, an ignored
 return value, state left half-mutated when something fails midway, an error path that
 fails silently — an empty `catch`, a fallback with no record, an error that turns into a
-success.
+success. A column read under a grouping that neither groups by it nor aggregates it: the
+engine answers with the value of whichever row it met, and a decision taken on it is
+taken by chance.
+
+### A closed set, member by member
+
+When the change branches on a value drawn from a closed set — an enumeration, a status
+constant, an action type, a response code — the branch is judged over the **whole** set,
+not over the members the author had in mind. Open the set's definition, list its members,
+and say what the changed code does with each:
+
+- **A member the branch does not name falls somewhere.** An exclusion written for one
+  member, where a sibling means the same thing here, lets the sibling through: a sum that
+  skips the removed item and still adds the replaced one counts the same thing twice.
+- **A step that runs for every member runs for the failing one.** A write that follows
+  "an answer arrived", with no test of which answer, records a reported failure as a
+  success.
+- **"Everything except X" is a claim about every other member**, the ones added later
+  included. Success is named by what it is, never by what it is not.
+
+Every member the item gives a different outcome has a test on its own side of the
+branch. A suite that only ever feeds the branch the member it was written for proves
+that one member.
+
+### The reach of a write
+
+Read every write and every exclusion the change adds by its **key**, against the key of
+the event that causes it:
+
+- **A write keyed wider than its event touches rows the event does not speak for.** An
+  answer about one order that updates by the customer reaches that customer's other
+  orders. Name the key of the event, the key of the clause, and the rows between them.
+- **The column it writes is somebody's predicate.** Search for the selections that
+  filter on each column the change writes — the diff did not touch them, and they are in
+  scope. A queue that takes "identifier still empty" loses every row this write fills,
+  whether or not that row was ever sent.
+- **An exclusion keyed wider than the thing excluded holds back its siblings:** a filter
+  that drops a whole request because one item of it is settled.
+
+A test that seeds only the row the event is about cannot tell a narrow write from a wide
+one. The proof is a neighbouring row — same owner, another order — asserted untouched.
+
+### Behind a switch
+
+When the item or the code says the new behaviour lives behind a switch — a flag, a
+setting, a release toggle — the switch off is the base's behaviour, on **every** path the
+change added. Trace each new path back to the switch: a validation, a query or a limit
+that runs whatever the switch says ships the feature's defects before the feature. One
+predicate reads the switch; two readings of it drift apart. The proof is a test with the
+switch off that asserts what the base did.
+
+### What only the data answers
+
+You read files, not rows. When the weight of a finding rests on what the data holds — how
+many rows sit between the event's key and the clause's, whether a column the code matches
+on is filled at all — say so, and write in the finding the read-only query a person runs
+to count it, with what each answer would mean. The method holds no credential to any
+environment and asks for none: the count is a person's to take.
 
 ### The failure path's next cycle
 
@@ -58,6 +115,9 @@ revert this line?**
   failure mode.
 - A guard proven only by accident — the test would pass just the same without it — is a
   `required` finding.
+- A match proven only on values picked to match discriminates nothing either: every
+  identifier equal on both sides, no empty value where the column admits one. Read what
+  the column admits — its schema, its writers — and name the row the test never seeds.
 - A test removed or weakened is a **human decision**: do not propose the fix.
 
 When the property cannot be proven by any finite test, say so and describe what a person

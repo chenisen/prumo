@@ -24,7 +24,15 @@ Read the measurement (the guard, its line, the mutation) and the files written. 
 3. **Does it pass for the right reason?** A green that would stay green with the guard
    deleted — because a fake answers for it, because an exception is swallowed, because
    the assertion is on a side effect the guard does not own — is not proof.
-4. **Is anything outside the named files touched?** Say so; the script measures it too.
+4. **Does the data in the test look like the data?** A match proven only on values
+   picked to match — the same identifier on both sides, no empty value where the column
+   admits one — proves the match for those values. Read what the column admits, in its
+   schema and its writers; when the guard decides on a column that can be empty or carry
+   an older value and no test seeds that row, the verdict is `uncertain`, naming the row.
+5. **Is every member of a closed set on its side?** When the guard branches on an
+   enumeration or a status, a test for the one member the writer had in mind leaves the
+   others unread: name the member whose outcome the item states and no test asserts.
+6. **Is anything outside the named files touched?** Say so; the script measures it too.
 
 On a **second attempt** on the same tree, the change under review is every file of the
 measurement that differs from the base, not only the files the request lists.
