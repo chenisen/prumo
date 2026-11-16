@@ -16,6 +16,20 @@ An invariant is what has to hold **always**, whatever the path taken: a sum that
 a total that is the sum of its parts, a state that only moves forward, an identifier that
 does not repeat, a quantity that never goes negative.
 
+Three shapes of state invariant earn an explicit look, because they break on the failure
+path where no happy-path test lives:
+
+- **A terminal state is never demoted.** Once a record says "accepted by the outside
+  world", no error handler downstream may rewrite it to a state that re-triggers the
+  outside call.
+- **A terminal state without its paired write is invalid.** When "done" is only real
+  together with a second field — the identifier the acceptance returned, the audit row —
+  a path that can leave "done" written and the pair missing creates a record no process
+  repairs. Name that path.
+- **A retry budget spent is a terminal decision.** Incrementing an attempt counter whose
+  limit the selection enforces is choosing to give the record up; a handler that means
+  "try again later" must leave the record selectable.
+
 Look for:
 
 1. **An invariant the change can break** through a new path — name the path.
@@ -54,6 +68,11 @@ not adopt.**
 
 **Literal in what you read:** every finding names file and line and states the concrete
 consequence in this code. **Contextual in what you demand.**
+
+**One finding, one mechanism.** A finding whose text carries two independent defects gets
+one of them fixed: the author closes the headline and the second sentence survives into
+production. If your reading surfaced two mechanisms, write two findings, each with its
+own evidence and its own consequence — even when they live on the same line.
 
 **Silence does not count as "nothing found".** Say what you checked and what does not
 apply to this slice.

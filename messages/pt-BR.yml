@@ -483,6 +483,14 @@ review:
   help_proposal_file: a descrição da proposta (markdown). Exigida quando a origem é uma proposta
     e não há token no ambiente.
   help_release: remove um marcador vazado por queda no meio da revisão
+  help_freshness: se a revisão concluída mais recente de uma origem ainda fala pela ponta da branch — sai 0 só quando o HEAD da branch é o HEAD revisado e o veredito foi APROVADO
+  freshness_none: 'nenhuma revisão concluída registrada para {repo} · {origin} — nada fala por esta branch ainda'
+  freshness_no_branch: 'branch {origin} não encontrada em {repo} — faça fetch antes de medir a vigência'
+  freshness_stale: 'VENCIDA: {n} commit(s) depois do HEAD revisado {reviewed} (revisão de {date}); a branch agora aponta para {head}. Um veredito fala pelos commits que mediu — revise de novo antes de publicar'
+  freshness_open: 'ABERTA: a revisão mais recente ({date}) concluiu {verdict}, não APROVADO — o caminho de volta é nova revisão sobre as correções, nunca publicação em cima de veredito aberto'
+  freshness_ok: 'VIGENTE: a revisão mais recente ({date}) viu exatamente este HEAD {head} e concluiu APROVADO'
+  way_back_fix: 'o caminho de volta: `deliver.py prepare --repo <repo> --fix {package}` — as rotas author_fix viram UMA entrega, cada achado com sua prova vermelha-primeiro. Commit de lote à mão, ou um "refactor" por cima, contorna o escritor, o cético e a revisão delta — e é exatamente assim que uma correção embarca defeito novo sem ninguém ler.'
+  freshness_note: 'este veredito fala por {head} e por nada depois dele. Antes de qualquer ato de publicação: `review.py freshness --repo {repo} --origin {origin}`'
   impediment: 'IMPEDIMENTO: {reason}'
   preflight_wrote_nothing: 'o preflight não escreveu {path}: a mensagem dele acima diz por quê, e a revisão não começa sem isso'
   impediment_open: a revisão não começa com impedimento aberto

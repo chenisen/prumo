@@ -52,6 +52,11 @@ not adopt.**
 **Literal in what you read:** every finding names a file and a line and states the
 concrete consequence in this code. **Contextual in what you demand.**
 
+**One finding, one mechanism.** A finding whose text carries two independent defects gets
+one of them fixed: the author closes the headline and the second sentence survives into
+production. If your reading surfaced two mechanisms, write two findings, each with its
+own evidence and its own consequence — even when they live on the same line.
+
 **Silence does not count as "nothing found".** Say what you checked and what does not
 apply to this slice.
 

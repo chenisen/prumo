@@ -890,8 +890,63 @@ def conclude(args) -> int:
              if ver["verdict"] == "APPROVED" else ""))
     if ver["verdict"] != "APPROVED":
         print("     " + t("review.act_no_approve"))
+        if any(r.get("type") == "author_fix" for r in ver["routes"]):
+            print("\n" + t("review.way_back_fix", package=package))
+    print(t("review.freshness_note", head=man["head_sha"][:12], repo=man["repo"],
+            origin=man["origin"]))
     print(t("review.never", **vocab))
     unmark()
+    return 0
+
+
+def freshness(args) -> int:
+    """Whether the newest concluded review of an origin still speaks for its tip.
+
+    Deterministic: `runs.jsonl` says what the last review measured and concluded; git
+    says what the branch points at now. Exit 0 only when the two agree AND the verdict
+    was APPROVED. Born from a delivery where two commits — a batch fix and a refactor —
+    landed after the only review and carried four defects into the proposal: a verdict
+    speaks for the commits it measured, never for the ones that came after it.
+    """
+    newest = None
+    runs = dir_reports() / "runs.jsonl"
+    if runs.exists():
+        for raw in runs.read_text(encoding="utf-8").splitlines():
+            try:
+                line = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if line.get("repo") == args.repo and line.get("origin") == args.origin:
+                newest = line     # append-only file: the last match is the newest
+    if newest is None:
+        print(t("review.freshness_none", repo=args.repo, origin=args.origin))
+        return 1
+
+    repo_dir = dir_repositories() / args.repo
+    head = None
+    for ref in (args.origin, f"refs/remotes/origin/{args.origin}"):
+        probe = subprocess.run(["git", "-C", str(repo_dir), "rev-parse", "--verify",
+                                "--quiet", ref], capture_output=True, text=True)
+        if probe.returncode == 0:
+            head = probe.stdout.strip()
+            break
+    if head is None:
+        print(t("review.freshness_no_branch", origin=args.origin, repo=str(repo_dir)))
+        return 1
+
+    if head != newest["head_sha"]:
+        count = subprocess.run(["git", "-C", str(repo_dir), "rev-list", "--count",
+                                f"{newest['head_sha']}..{head}"],
+                               capture_output=True, text=True)
+        n = count.stdout.strip() if count.returncode == 0 else "?"
+        print(t("review.freshness_stale", n=n, reviewed=newest["head_sha"][:12],
+                head=head[:12], date=newest["date"]))
+        return 1
+    if newest.get("verdict") != "APPROVED":
+        print(t("review.freshness_open", verdict=newest.get("verdict"),
+                date=newest["date"]))
+        return 1
+    print(t("review.freshness_ok", head=head[:12], date=newest["date"]))
     return 0
 
 
@@ -927,6 +982,10 @@ def main() -> int:
 
     sub.add_parser("release", help=t("review.help_release"))
 
+    c = sub.add_parser("freshness", help=t("review.help_freshness"))
+    c.add_argument("--repo", required=True)
+    c.add_argument("--origin", required=True)
+
     args = p.parse_args()
     hint_config(getattr(args, "package", None), getattr(args, "item_file", None),
                 getattr(args, "delivery", None), getattr(args, "workflow_result", None))
@@ -935,6 +994,8 @@ def main() -> int:
         print(t("review.marker_removed", path=marker()))
         return 0
     try:
+        if args.command == "freshness":
+            return freshness(args)
         return prepare(args) if args.command == "prepare" else conclude(args)
     except (MissingConfiguration, InvalidConfiguration) as e:
         # An incomplete installation is not a review stop: it is an impediment to use.

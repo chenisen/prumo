@@ -20,6 +20,32 @@ return value, state left half-mutated when something fails midway, an error path
 fails silently — an empty `catch`, a fallback with no record, an error that turns into a
 success.
 
+### The failure path's next cycle
+
+A failure handler is judged by what the **next execution** does with what it wrote, not
+by what it logs. For every status, flag or attempt counter the change writes on a failure
+path, answer three questions, reading the selection that consumes it even when the diff
+did not touch that selection — the readers of what the diff writes are in scope:
+
+- **Who selects this record afterwards?** Name the query or poller. A write that takes
+  the record out of every reader's reach is a terminal decision; if the handler's intent
+  was "retry later", that is a `required` finding.
+- **Does an attempt counter meet its limit?** Writing `attempts + 1` against a limit of 1
+  is not "keep pending" — it is "give up", whatever the method is called. A name that
+  promises one behaviour over a body that does the opposite is itself a finding: the next
+  author will trust the name.
+- **Is there a point of no return?** Once an external call succeeded — an order placed,
+  a payment captured — no local failure after it (a log write, an audit entry, a
+  notification) may rewrite the record into a state that makes the external call run
+  again. Re-execution of a non-idempotent external effect is the concrete consequence to
+  state. The cure lives in the code under review: the post-success steps isolated so
+  their failure cannot demote the success, never the other way round.
+
+Two writes that must both happen — the status and its paired identifier, the record and
+its audit row — either share a transaction or the reader tolerates the gap; when neither
+holds, name the state the crash between them leaves behind and which process recovers it.
+"Nothing recovers it" is a finding, not a note.
+
 ### Proof
 
 For **every** behaviour the change introduces or alters, ask: **which test goes red if I
@@ -60,6 +86,11 @@ not adopt.**
 
 **Literal in what you read:** every finding names a file and a line and states the
 concrete consequence in this code. **Contextual in what you demand.**
+
+**One finding, one mechanism.** A finding whose text carries two independent defects gets
+one of them fixed: the author closes the headline and the second sentence survives into
+production. If your reading surfaced two mechanisms, write two findings, each with its
+own evidence and its own consequence — even when they live on the same line.
 
 **Silence does not count as "nothing found".** Say what you checked and what does not
 apply to this slice.

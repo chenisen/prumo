@@ -483,6 +483,14 @@ review:
   help_proposal_file: the proposal's description (markdown). Required when the origin is a proposal
     and there is no token in the environment.
   help_release: removes a marker leaked by a crash in the middle of a review
+  help_freshness: whether the newest concluded review of an origin still speaks for its tip — exit 0 only when the branch head is the reviewed head and the verdict was APPROVED
+  freshness_none: 'no concluded review on record for {repo} · {origin} — nothing speaks for this branch yet'
+  freshness_no_branch: 'branch {origin} not found in {repo} — fetch it before measuring freshness'
+  freshness_stale: 'STALE: {n} commit(s) after the reviewed head {reviewed} (review of {date}); the branch now points at {head}. A verdict speaks for the commits it measured — review again before publishing'
+  freshness_open: 'OPEN: the newest review ({date}) concluded {verdict}, not APPROVED — the route back is a new review over the fixes, never a publication on top of an open verdict'
+  freshness_ok: 'FRESH: the newest review ({date}) saw this very head {head} and concluded APPROVED'
+  way_back_fix: 'the way back: `deliver.py prepare --repo <repo> --fix {package}` — the author_fix routes become ONE delivery, each finding with its own red-first proof. A batch commit by hand, or a "refactor" on top, walks around the writer, the skeptic and the delta review — and is exactly how a fix ships a new defect unread.'
+  freshness_note: 'this verdict speaks for {head} and for nothing after it. Before any publication act: `review.py freshness --repo {repo} --origin {origin}`'
   impediment: 'IMPEDIMENT: {reason}'
   preflight_wrote_nothing: 'the preflight wrote no {path}: its own message above says why, and the review does not start without it'
   impediment_open: the review does not start with an open impediment

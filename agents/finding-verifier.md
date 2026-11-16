@@ -37,6 +37,12 @@ Return:
 - `attributable`: whether the defect belongs to this change.
 - `consequence_kind`: `behaviour`, `proof`, `record` or `convention`.
 
+**Your verdict covers one mechanism — the finding's headline.** When the finding's text
+carries a second, independent defect, do not let your verdict speak for both: judge the
+headline, and name the second mechanism explicitly in `reason` so it is not silently
+settled by whatever happens to the first. A fix that closes the headline closes nothing
+about the sentence nobody charged.
+
 **When in doubt, return `uncertain`, not `confirmed`.** An uncertain finding goes to a
 person to decide, not to the author to fix — the cost of erring towards "confirmed" is the
 credibility of the whole review.

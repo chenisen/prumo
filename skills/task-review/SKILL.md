@@ -445,6 +445,9 @@ report and does not hold the proposal.
 - **Write into the target repository.** Only under `<reports>/<repo>/`.
 - **Publish without authorisation.** The item comment, the proposal comment and the Approve
   are three external acts, each with **its own** explicit yes.
+- **Publish a stale verdict.** Before any of the three acts, `review.py freshness`:
+  a branch that gained commits after the reviewed head blocks all three — the verdict
+  speaks for the head it measured and for nothing after it (`reference/publication.md`).
 - **Fix.** Whoever fixes is the author.
 - **Approve on its own when it could not assess.** See the third state.
 

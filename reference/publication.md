@@ -19,6 +19,23 @@ recorded in `runs.jsonl` as `verdict_contested`.
 
 One yes never drags the next one along. Asking for all three at once defeats the point.
 
+## Freshness: a verdict speaks only for the head it measured
+
+Before **any** of the three acts, run `review.py freshness --repo R --origin B`:
+
+- **STALE** — the branch gained commits after the reviewed head — blocks **all three
+  acts**. Whatever landed afterwards (a batch fix, a "refactor") was read by nobody:
+  publishing the old verdict puts the harness's name on code it never saw. The route is
+  a new review — `delta.py` makes the second pass cheap.
+- **OPEN** — the head matches but the verdict is not APPROVED — blocks only the
+  **Approve** act; the two comment acts publish an intervention verdict legitimately.
+- **FRESH** — head matches, verdict APPROVED — all three acts are available.
+
+This rule is paid for: one delivery shipped four defects to its proposal inside two
+commits made after its only review — a hand-made batch fix and a refactor that
+introduced new behaviour — because nothing at publication time asked whether the verdict
+still spoke for the branch.
+
 **What never happens:** merge, moving the item, push. The hook blocks it; the bot account
 does not hold the right; and it is written down here so that nobody reintroduces it by
 accident.
