@@ -128,6 +128,19 @@ class SameTest(unittest.TestCase):
         self.assertFalse(deliver.same_test("packages/kit/test/a.test.ts > g > t", "test/b.test.ts > g > t"))
         self.assertFalse(deliver.same_test("packages/kit/test/a.test.ts > g > t", "pa.test.ts > g > t"))
 
+    def test_a_file_path_names_the_test_a_runner_prints_by_its_class(self):
+        # First real block (2026-11-17): the measure wrote `tests/Unit/GuardTest.x::refuses`,
+        # the runner printed `Tests\Unit\GuardTest::refuses`, and a killed mutant read green.
+        self.assertTrue(deliver.same_test("tests/Unit/GuardTest.x::refuses", "Tests\\Unit\\GuardTest::refuses"))
+        self.assertTrue(deliver.same_test("tests/Unit/GuardTest.x::refuses",
+                                          'Tests\\Unit\\GuardTest::refuses with data set "empty"'))
+        self.assertTrue(deliver.same_test("tests/test_guard.py::test_refuses", "test_guard.py::test_refuses"))
+
+    def test_another_method_or_another_class_is_still_another_test(self):
+        self.assertFalse(deliver.same_test("tests/Unit/GuardTest.x::refuses", "Tests\\Unit\\GuardTest::refuses_twice"))
+        self.assertFalse(deliver.same_test("tests/Unit/GuardTest.x::refuses", "Tests\\Unit\\OtherGuardTest::refuses"))
+        self.assertFalse(deliver.same_test("tests/Unit/GuardTest.x::refuses", "Tests\\Unit\\GuardTestCase::refuses"))
+
 
 class Fixture(unittest.TestCase):
     """The throwaway repository, its profile and the two commands, shared by the

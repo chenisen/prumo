@@ -476,11 +476,36 @@ def same_test(expected: str, name: str) -> bool:
     runner from where it ran (`packages/kit/test/a.test.ts` and `test/a.test.ts`)."""
     if expected in name:
         return True
+    if "::" in expected and "::" in name:
+        return _same_unit_and_case(expected, name)
     sep = " > "
     if sep not in expected or sep not in name:
         return False
     (f1, t1), (f2, t2) = expected.split(sep, 1), name.split(sep, 1)
     return t1 == t2 and (f1 == f2 or f1.endswith("/" + f2) or f2.endswith("/" + f1))
+
+
+def _same_unit_and_case(expected: str, name: str) -> bool:
+    """`<unit>::<case>` on both sides, where the measure may name the unit by its file
+    (`tests/Unit/GuardTest.x`) and the runner by its class (`Tests\\Unit\\GuardTest`), and
+    may add a data set to the case (`refuses with data set "empty"`). The case must match
+    whole; the unit's last part must match without its extension, and the parts before it
+    must agree as far as the shorter side goes."""
+    (u1, c1), (u2, c2) = expected.split("::", 1), name.split("::", 1)
+    if not (c2 == c1 or c2.startswith(c1 + " ")):
+        return False
+    p1, p2 = _unit_parts(u1), _unit_parts(u2)
+    if not p1 or not p2 or p1[-1] != p2[-1]:
+        return False
+    n = min(len(p1), len(p2))
+    return p1[-n:] == p2[-n:]
+
+
+def _unit_parts(unit: str) -> list[str]:
+    parts = [p for p in re.split(r"[\\/]", unit.strip()) if p]
+    if parts and "." in parts[-1]:
+        parts[-1] = parts[-1].rsplit(".", 1)[0]
+    return [p.lower() for p in parts]
 
 
 def file_stands_for(name: str, test_files: list[str]) -> bool:
