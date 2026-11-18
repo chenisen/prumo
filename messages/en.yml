@@ -125,6 +125,7 @@ deliver:
     branch_at: 'branch `{branch}` at {path}, cut from {base}'
     delivery_block_draft: 'a `delivery:` draft for `{repo}` — paste it into the profile and confirm it:'
     fix_item: 'Fix the routes the review opened on {item}'
+    fix_beyond_item: 'reach: a consumer the item does not name. Return that consumer to what the base does. Give the item''s own path its own entry. Remove what earlier rounds added to adapt it, and never adapt it further'
     fix_no_routes: 'the review at {path} opened no `author_fix` route — nothing to fix'
     fix_needs_branch: 'the review''s origin is `{origin}`, not a branch — pass --branch'
     continue_needs_branch: '--continue writes on a branch that already exists — pass --branch'
@@ -685,6 +686,7 @@ verdict:
     missing_capability: the profile is updated and reviewed in a proposal
     missing_profile: a person confirms the profile; closes once per repository
   detail_finding_on_criterion: 'finding about an acceptance criterion of the {item}, charged where the {item} is charged'
+  detail_beyond_item: '{ids}: the change reached a consumer the {item} does not name. It closes by returning that consumer to what the base does, never by adapting it'
   detail_criterion_unmet: criterion of the {item} that the delivery did not meet
   detail_criterion_unrecorded: criterion the diff does not decide and that nobody recorded
   detail_delivery_untested: behaviour this delivery wrote that no test covers

@@ -445,6 +445,8 @@ def fix_item(review: pathlib.Path) -> tuple[str, str, str]:
                           f"  consequence: {f.get('consequence', '')}"]
                 if f.get("form"):
                     lines.append(f"  form: {f['form']}")
+                if f.get("beyond_item"):
+                    lines.append("  " + t("deliver.cli.fix_beyond_item"))
             else:
                 lines.append(f"- **{fid}** {r.get('details') or r.get('closes_when') or ''}")
     return item, man.get("origin") or "", "\n".join(lines) + "\n"

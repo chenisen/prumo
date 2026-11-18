@@ -108,6 +108,14 @@ Each one is read before the code and proven by a test of its own:
 A query that groups selects only what it groups by or aggregates: any other column comes
 back from whichever row the engine met.
 
+**A shared entry is widened for the item, never for its other consumers.** Before you widen
+what a class, an input, a validation or a query accepts, find who else calls it (the
+measurement's `existing` names the readers it found). A consumer the item does not name
+keeps exactly what the base gives it: the item's path gets its own entry — its own method,
+its own input — and one test drives that consumer and asserts the base's behaviour. When a
+finding says the change reached such a consumer, the fix takes the reach away; it never
+adapts the consumer, and whatever earlier rounds added to adapt it goes with it.
+
 ## What never goes
 
 - a drive-by: a rename, a reformat, a refactor "while here", a comment explaining code;

@@ -18,7 +18,10 @@ Look, in this order, for:
 1. **A criterion of the item with no counterpart in the code.** For each criterion, point
    to where it was met, or say you did not find it.
 2. **Code with no counterpart in the item.** A file touched that no criterion asks for is
-   scope growth — name the file.
+   scope growth — name the file. So is a consumer the item does not name whose behaviour
+   changed because the change widened something it shares: set `beyond_item: true`, and
+   the form is to give the item's path its own entry and leave that consumer as the base
+   has it. Code earlier rounds added only to adapt such a consumer is scope growth too.
 3. **Divergence between the three stories.** The item states one rule, the proposal
    describes another, the code does a third. When the divergence is about a business
    rule, it is a human decision: do not propose the fix.

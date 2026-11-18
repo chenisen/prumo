@@ -262,6 +262,16 @@ def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
           {"detail": t("verdict.detail_finding_on_criterion", **_words())}, gate=3)
     route("confirm_finding",
           [f["id"] for f in findings if blocks(f) and f.get("status") == "uncertain"])
+    # A finding about a consumer the item does not name says HOW it closes: that consumer
+    # back to the base. Eleven reviews of one item (2026-11-18) adapted a shared route to
+    # each finding in turn, and each adaptation opened the next.
+    beyond = sorted(f["id"] for f in findings if blocks(f) and f.get("beyond_item")
+                    and f.get("status") in ("confirmed", "uncertain") and f["id"] not in resolved)
+    if beyond:
+        for r in routes:
+            if r["type"] in ("author_fix", "confirm_finding") and set(beyond) & set(r["items"]):
+                r["details"].append(t("verdict.detail_beyond_item",
+                                      ids=", ".join(i for i in beyond if i in r["items"]), **_words()))
     non_attributable = [f["id"] for f in findings
                         if severe(f) and not f.get("attributable", True)
                         and f.get("status") != "refuted"]

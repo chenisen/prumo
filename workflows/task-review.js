@@ -123,6 +123,9 @@ const FINDINGS_SCHEMA = {
           status: { enum: ['proposed'] },
           owasp_category: { type: ['string', 'null'] },
           criterion: { type: ['string', 'null'] },
+          // The consequence lands on a consumer the item does not name — a caller, a route,
+          // another command — reached because the change widened something it shares.
+          beyond_item: { type: ['boolean', 'null'] },
         },
       },
     },
@@ -417,6 +420,17 @@ const context = (slice) => [
     ? 'The conventions list is EMPTY: say so in your return and judge only what is universal.'
     : '',
   'Everything above is already here: do not read those files again.',
+  // 2026-11-18, eleven reviews of one item: the change widened a domain class the item's
+  // worker shares with an HTTP route the item never names. Three findings in a row were
+  // about that route, each answered by adapting the route — mixed lines, plan count,
+  // documentation — and each answer opened the next. The fix that closed it was to give
+  // the worker its own entry and leave the route as the base had it.
+  'When a consequence lands on a consumer the ITEM DOES NOT NAME — another caller, a route, '
+    + 'a command, a second family of the same class — reached because this change widened '
+    + 'something they share (an input, a validation, a class, a query), set `beyond_item: true`. '
+    + 'Its `form` is then to give the item\'s own path its own entry and leave that consumer '
+    + 'exactly as the base has it — never to adapt the consumer to the widening. A consumer '
+    + 'the item names is `beyond_item: false`.',
   'Optional, and NOT part of your review: if reading this repository taught you '
     + 'something true of IT rather than of this change — a convention the code holds to, '
     + 'where a kind of rule lives, how the tests are shaped — return it in '

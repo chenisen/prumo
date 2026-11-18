@@ -595,3 +595,41 @@ class TestSeverityGetsASecondReading(unittest.TestCase):
     def test_a_refuted_finding_is_gone_not_read_down(self):
         v = judge(findings=[self.finding(status="refuted", consequence_kind="record")])
         self.assertEqual(v["summary"]["findings_severity_read_down"], [])
+
+
+class TestAFindingBeyondTheItem(unittest.TestCase):
+    """2026-11-18, eleven reviews of one item: a shared route the item never named was
+    adapted to each finding in turn, and each adaptation opened the next. A finding whose
+    consequence lands on a consumer the item does not name now says how it closes."""
+
+    def finding(self, **kw):
+        return dict({"id": "COR-1", "severity": "required", "status": "confirmed",
+                     "beyond_item": True}, **kw)
+
+    def detail_of(self, v, kind):
+        from i18n import t
+        r = next(r for r in v["routes"] if r["type"] == kind)
+        return [d for d in r["details"] if "COR-1" in d]
+
+    def test_the_author_is_told_to_return_the_consumer_to_the_base(self):
+        v = judge(findings=[self.finding()])
+        self.assertEqual(v["verdict"], INTERVENTION)
+        self.assertEqual(len(self.detail_of(v, "author_fix")), 1)
+
+    def test_an_uncertain_one_carries_it_to_the_person(self):
+        v = judge(findings=[self.finding(status="uncertain")])
+        self.assertEqual(len(self.detail_of(v, "confirm_finding")), 1)
+
+    def test_a_finding_on_the_item_s_own_path_carries_nothing(self):
+        v = judge(findings=[self.finding(beyond_item=False)])
+        self.assertEqual(self.detail_of(v, "author_fix"), [])
+
+    def test_the_gate_counts_the_finding_once(self):
+        v = judge(findings=[self.finding()])
+        self.assertEqual(v["gates"][0]["items"], ["COR-1"])
+
+    def test_a_refuted_or_resolved_one_says_nothing(self):
+        self.assertNotIn("author_fix", route_types(judge(findings=[self.finding(status="refuted")])))
+        v = judge(findings=[self.finding()],
+                  resolutions=[{"type": "decision", "item": "COR-1", "text": "ok", "decided_by": "p"}])
+        self.assertNotIn("author_fix", route_types(v))

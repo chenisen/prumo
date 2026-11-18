@@ -129,6 +129,7 @@ deliver:
     branch_at: 'branch `{branch}` em {path}, cortada de {base}'
     delivery_block_draft: 'rascunho de `delivery:` para `{repo}` — cole no perfil e confirme:'
     fix_item: 'Corrigir as rotas que a revisão abriu em {item}'
+    fix_beyond_item: 'alcance: um consumidor que o item não nomeia. Devolva esse consumidor ao que a base faz. Dê ao caminho do item uma entrada própria. Retire o que rodadas anteriores acrescentaram para adaptá-lo, e nunca o adapte mais'
     fix_no_routes: 'a revisão em {path} não abriu rota `author_fix` — nada a corrigir'
     fix_needs_branch: 'a origem da revisão é `{origin}`, não uma branch — passe --branch'
     continue_needs_branch: '--continue escreve numa branch que já existe — passe --branch'
@@ -687,6 +688,7 @@ verdict:
     missing_capability: o perfil é atualizado e versionado numa proposta
     missing_profile: uma pessoa confirma o perfil; fecha uma vez por repositório
   detail_finding_on_criterion: 'achado sobre um critério de aceite d{item_with_article}, cobrado no mesmo portão que {item_with_article}'
+  detail_beyond_item: '{ids}: a mudança alcançou um consumidor que {item_with_article} não nomeia. Fecha devolvendo esse consumidor ao que a base faz, nunca adaptando-o'
   detail_criterion_unmet: critério d{item_with_article} que a entrega não atendeu
   detail_criterion_unrecorded: critério que o diff não decide e que ninguém registrou
   detail_delivery_untested: comportamento que esta entrega escreveu e nenhum teste cobre

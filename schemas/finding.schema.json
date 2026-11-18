@@ -133,6 +133,13 @@
         "null"
       ],
       "description": "the verifier's one sentence, or why the finding was not sent to it"
+    },
+    "beyond_item": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "The consequence lands on a consumer the item does not name, reached because the change widened something it shares. The fix returns that consumer to the base; it never adapts the consumer to the widening."
     }
   },
   "allOf": [

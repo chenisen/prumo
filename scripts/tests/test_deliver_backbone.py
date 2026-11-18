@@ -510,13 +510,17 @@ class Spine(Fixture):
         (review / "verdict.json").write_text(json.dumps({"verdict": "INTERVENTION_REQUIRED", "routes": [
             {"type": "author_fix", "items": ["COR-1"], "owner": "author", "closes_when": "push"}]}))
         (review / "findings.json").write_text(json.dumps([{"id": "COR-1", "claim": "nine is not refused",
-            "evidence": [{"file": "src/a.py", "line": 2}], "consequence": "x", "form": None}]))
+            "evidence": [{"file": "src/a.py", "line": 2}], "consequence": "x", "form": None,
+            "beyond_item": True}]))
         fix_pkg = self.prepare(fix=str(review), package="pkg-fix")
         man = json.loads((fix_pkg / "deliver-manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(man["base"], {"name": branch, "sha": head})
         self.assertEqual(man["branch"]["name"], branch)
         self.assertEqual(man["item"]["kind"], "behaviour-change")
         self.assertIn("nine is not refused", (fix_pkg / "item.md").read_text(encoding="utf-8"))
+        # a finding on a consumer the item does not name tells the writer how it closes
+        from i18n import t
+        self.assertIn(t("deliver.cli.fix_beyond_item"), (fix_pkg / "item.md").read_text(encoding="utf-8"))
         # the sceptic reads a round that answers a review whatever its size; a fresh item not
         fix_args = json.loads((fix_pkg / "workflow-args.json").read_text(encoding="utf-8"))
         self.assertTrue(fix_args["answers_review"])
