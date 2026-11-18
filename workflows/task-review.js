@@ -736,6 +736,11 @@ if (manualCandidates.length !== needsScript.length) {
 // has no fallback entry: that is a real finding about this change, and it keeps the
 // agent.
 const fallback = plan.manual_fallback ?? {}
+// A grouped entry carries several ids joined by `, ` — each keeps its own anchor.
+const anchorsFor = (entries) => Object.fromEntries(entries
+  .flatMap((c) => String(c.id).split(', '))
+  .filter((id) => (profile?.anchors ?? {})[id])
+  .map((id) => [id, profile.anchors[id]]))
 const templatable = EFFORT === 'minimal' && needsScript.length > 0
   && needsScript.every((c) => c.cause && fallback[c.cause])
 if (templatable) {
@@ -753,7 +758,15 @@ const scripts = templatable
       'report, package or item you find elsewhere on disk belongs to a different review:',
       'do not read it, and never take its item id, its SHAs or its findings as yours.',
       `Classes: ${JSON.stringify(needsScript.map((c) => ({ id: c.id, reason: c.reason })))}`,
-      `Profile (the anchor says where and against what to verify): ${bundle}/profile.yml`,
+      // The anchors come inline and without `cards`: an anchor's cards are the items that
+      // taught the profile the class, and a planner once wrote one into its script as the
+      // item under review — provenance stopped the conclude on an id the manifest lacks.
+      'The anchors of these classes (where and against what to verify): ' +
+        JSON.stringify(anchorsFor(needsScript)),
+      'An item id or a commit SHA inside an anchor\'s note is the project\'s HISTORY — an ' +
+      'earlier item that taught the profile this class. It is never the item under review: ' +
+      'never write it in a script. The only item and SHAs a script names are the manifest\'s.',
+      `Anything else of the profile is at ${bundle}/profile.yml, under the same rule.`,
       `Criteria from the item: ${bundle}/criteria.json`,
       `The item itself: ${bundle}/item.md`,
       'The expected result is written BEFORE executing.',

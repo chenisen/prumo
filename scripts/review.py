@@ -638,7 +638,8 @@ def prepare(args) -> int:
         "package": str(package),
         "plan": plan,
         "profile": {"status": profile.get("status"),
-                    "conventions": profile.get("conventions") or []},
+                    "conventions": profile.get("conventions") or [],
+                    "anchors": anchors_without_history(profile)},
         "classes": read_json(package / "classes.json"),
         "inline": inline_payload(package),
     }
@@ -651,6 +652,20 @@ def prepare(args) -> int:
     print("\nWorkflow({name: '" + workflow_name("task-review") + "', args: <the object in that file>})")
     print("\n" + t("review.then_conclude", path=package))
     return 0
+
+
+def anchors_without_history(profile: dict) -> dict:
+    """The profile's anchors as the manual planner gets them: where and against what to
+    verify, without the `cards` that taught the profile each class.
+
+    Those cards are the project's history — earlier items — and never the item under
+    review. On 2026-11-18 the planner of a review copied an anchor's card into its
+    script as the item, and provenance stopped the conclude: the id was nowhere in the
+    manifest. What is not handed over cannot be copied; a note keeps its text, because
+    it says what to look at, and the workflow says what an id inside it is."""
+    return {cid: {k: v for k, v in anchor.items() if k != "cards"}
+            for cid, anchor in (profile.get("anchors") or {}).items()
+            if isinstance(anchor, dict)}
 
 
 # The small package files, carried IN the prompt instead of pointed at.

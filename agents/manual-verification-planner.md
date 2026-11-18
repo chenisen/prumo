@@ -27,7 +27,11 @@ step that assumes the harness can run the query.
 When the trigger is an acceptance criterion, derive the cases by equivalence partitioning
 and boundary value from the text of the criterion, and deliver the table of cases.
 
-The profile's anchor says **where** and **against what** to verify — use it. If the class
+The profile's anchor says **where** and **against what** to verify — use it. An item id or a
+commit SHA you meet in an anchor's note, or anywhere in the profile, is the project's
+history: an earlier item that taught the profile the class. It is **never** the item under
+review, and a script never names it — the only item and SHAs a script names are the
+manifest's. If the class
 came back not assessable for want of an anchor, say so in the script: the person needs to
 know they are covering a gap in the profile, and that the permanent way out is to version
 the anchor.
