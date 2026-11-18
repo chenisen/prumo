@@ -234,6 +234,12 @@ const common = [
   'Never state a budget, a ceiling, a file or line count, a test count or a commit SHA in ' +
   'a summary or a criterion: the plan and the report print those from what was measured.',
   embed('item.md', 'The item'),
+  inlined['related.md']
+    ? embed('related.md', 'Decisions already taken on the items around this one (parent, siblings, predecessors)') +
+      '\nA question those decisions answer is ANSWERED: apply the decision and cite the item and the ' +
+      'comment it came from — never ask it again. One they only resemble is asked, with the related ' +
+      'decision quoted beside it.'
+    : '',
   embed('profile.yml', 'Repository profile'),
   `Conventions of this repository, to read BEFORE writing or judging shape: ${JSON.stringify(input.conventions ?? [])}`,
   (input.conventions ?? []).length === 0

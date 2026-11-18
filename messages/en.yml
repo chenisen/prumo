@@ -125,6 +125,7 @@ deliver:
     branch_at: 'branch `{branch}` at {path}, cut from {base}'
     delivery_block_draft: 'a `delivery:` draft for `{repo}` — paste it into the profile and confirm it:'
     fix_item: 'Fix the routes the review opened on {item}'
+    help_related_file: 'decisions already taken on the parent, siblings and predecessors, read from the tracker. A question they answer is not asked again'
     fix_beyond_item: 'reach: a consumer the item does not name. Return that consumer to what the base does. Give the item''s own path its own entry. Remove what earlier rounds added to adapt it, and never adapt it further'
     fix_no_routes: 'the review at {path} opened no `author_fix` route — nothing to fix'
     fix_needs_branch: 'the review''s origin is `{origin}`, not a branch — pass --branch'

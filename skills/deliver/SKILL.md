@@ -98,6 +98,12 @@ A missing input is a stop that names everything missing at once:
 | the kind, when the item does not say | one of `reference/delivery-kinds.md`, or `unsupported` |
 | the base, when the profile names none | the branch to measure against |
 
+Not a stop, but read before `prepare` whenever the item has a parent, siblings or
+predecessors: the comments on them that carry a decision — `#decision` markers and the
+answers a person gave in prose — written to a file and passed as `--related-file`. A
+question those decisions answer is answered; the design of a story once put back to a
+person a question a sibling's comment had settled the day before.
+
 A profile without a `delivery:` block is `not_assessable`, and the stop hands
 `derive_profile.py <repo> --delivery` ready to paste. Never a default.
 
@@ -110,7 +116,7 @@ composed. Save each workflow return, whole, to the file the step names.
 **An item with no gate** (`debt`, `bug`, a fix) — three steps:
 
 ```
-deliver.py prepare --repo R --item C --item-file ITEM.md (--type T | --shape S) [--kind K] [--branch B]
+deliver.py prepare --repo R --item C --item-file ITEM.md (--type T | --shape S) [--kind K] [--branch B] [--related-file RELATED.md]
     resolves the shape and the base, cuts the branch in its own worktree, marks. Runs no suite.
 Workflow({name: 'prumo:deliver', args: {...workflow-args.json, stage: 'deliver'}})
     premise-surveyor measures → the size is read → change-writer writes and runs its tests

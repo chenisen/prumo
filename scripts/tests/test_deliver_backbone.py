@@ -1331,3 +1331,39 @@ class TestARoundThatClosesACauseTrimsTheEarlierOnes(unittest.TestCase):
         self.assertIn("input.answers_review && input.item_base", source)
         self.assertIn("git diff ${input.item_base}...HEAD", source)
         self.assertIn("remove what your fix leaves with no caller and no criterion", source)
+
+
+class DecisionsOnRelatedItemsTravel(Fixture):
+    """2026-11-18: the design of a story put back to a person a question a sibling's
+    comment had answered the day before. What was decided around the item now travels to
+    every agent of the delivery, with the rule that an answered question is not asked."""
+
+    def prepare_with(self, related):
+        args = argparse.Namespace(repo="repo-x", item="ITEM-1", item_file=str(self.root / "item.md"),
+                                  kind=None, branch=None, package=str(self.root / "pkg"), fix=None,
+                                  shape="debt", type=None, related_file=related)
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(deliver.prepare(args), 0)
+        return json.loads((self.root / "pkg" / "workflow-args.json").read_text(encoding="utf-8"))
+
+    def test_the_related_decisions_are_inline_and_kept_in_the_package(self):
+        related = self.root / "related.md"
+        related.write_text("ITEM-0 comment 9: shippingItemsAmount is the sum per plan\n", encoding="utf-8")
+        args = self.prepare_with(str(related))
+        self.assertIn("sum per plan", args["inline"]["related.md"])
+        self.assertTrue((self.root / "pkg" / "related.md").exists())
+
+    def test_without_them_nothing_is_inline(self):
+        self.assertNotIn("related.md", self.prepare_with(None)["inline"])
+
+    def test_an_empty_or_missing_file_is_refused(self):
+        (self.root / "empty.md").write_text("  \n", encoding="utf-8")
+        for path in (str(self.root / "empty.md"), str(self.root / "nowhere.md")):
+            with self.assertRaises(deliver.UsageError):
+                self.prepare_with(path)
+
+    def test_the_workflow_says_an_answered_question_is_not_asked(self):
+        source = (pathlib.Path(__file__).resolve().parent.parent.parent
+                  / "workflows" / "deliver.js").read_text(encoding="utf-8")
+        self.assertIn("embed('related.md'", source)
+        self.assertIn("never ask it again", source)

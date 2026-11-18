@@ -404,6 +404,24 @@ def read_item(path: str, package: pathlib.Path) -> None:
     shutil.copy2(source, package / "item.md")
 
 
+def read_related(path: str | None, package: pathlib.Path) -> str | None:
+    """What was already decided on the items around this one — its parent, its siblings,
+    its predecessors — as the conductor read it from the tracker. The design of a story
+    (2026-11-18) put back to a person a question a sibling's comment had answered the day
+    before, and the person had to say so. Kept in the package; carried to every agent."""
+    if not path:
+        stored = package / "related.md"
+        return stored.read_text(encoding="utf-8") if stored.exists() else None
+    source = pathlib.Path(path)
+    if not source.is_file():
+        raise UsageError(t("review.reading_missing", path=path))
+    text = source.read_text(encoding="utf-8")
+    if not text.strip():
+        raise UsageError(t("review.reading_empty", path=path))
+    (package / "related.md").write_text(text, encoding="utf-8")
+    return text
+
+
 def branch_name(block: dict, item: str, item_text: str, given: str | None) -> str:
     """The invocation's branch; else the one the item names on a `Branch:` line — a
     tracker's field the harness writes into the item; else the profile's format over
@@ -713,6 +731,7 @@ def prepare(args) -> int:
         (package / "item.md").write_text(text, encoding="utf-8")
     else:
         read_item(args.item_file, package)
+    related = read_related(getattr(args, "related_file", None), package)
 
     _py("preflight.py", "--repo", args.repo, "--package", str(package),
         "--origin", "branch", "--item-read", check=False)
@@ -758,7 +777,8 @@ def prepare(args) -> int:
                     "budget": budget_for(block, shape), "deliverable": False}
         write_json(package / "deliver-manifest.json", manifest)
         write_json(package / "workflow-args.json", {
-            **common_args, "item": manifest["item"], "inline": {"item.md": item_text}})
+            **common_args, "item": manifest["item"],
+            "inline": {"item.md": item_text, **({"related.md": related} if related else {})}})
         print("\n" + t("review.package_ready", path=package))
         print(_invocation(package, "design"))
         print(f"deliver.py plan --package {package} --design <the file its return was saved to>")
@@ -834,7 +854,8 @@ def prepare(args) -> int:
         "wide_patterns": [glob_to_regex(p).pattern for p in block.get("wide_paths") or []],
         "evidence": block.get("evidence"),
         "evidence_dir": str(dir_reports() / args.repo / f"{args.item}-deliver" / "evidence"),
-        "inline": {"item.md": item_text, "profile.yml": profile_extract(profile, package)},
+        "inline": {"item.md": item_text, "profile.yml": profile_extract(profile, package),
+                   **({"related.md": related} if related else {})},
     })
     print("\n" + t("review.package_ready", path=package))
     print(t("deliver.cli.branch_at", branch=name, path=workdir, base=base_sha[:12]))
@@ -1619,6 +1640,7 @@ def main() -> int:
     a.add_argument("--repo", required=True)
     a.add_argument("--item")
     a.add_argument("--item-file", help=t("review.help_item_file"))
+    a.add_argument("--related-file", help=t("deliver.cli.help_related_file"))
     a.add_argument("--kind")
     a.add_argument("--branch")
     a.add_argument("--package")

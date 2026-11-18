@@ -129,6 +129,7 @@ deliver:
     branch_at: 'branch `{branch}` em {path}, cortada de {base}'
     delivery_block_draft: 'rascunho de `delivery:` para `{repo}` — cole no perfil e confirme:'
     fix_item: 'Corrigir as rotas que a revisão abriu em {item}'
+    help_related_file: 'decisões já tomadas no pai, nos irmãos e nos predecessores, lidas do rastreador. Pergunta que elas respondem não volta a ser feita'
     fix_beyond_item: 'alcance: um consumidor que o item não nomeia. Devolva esse consumidor ao que a base faz. Dê ao caminho do item uma entrada própria. Retire o que rodadas anteriores acrescentaram para adaptá-lo, e nunca o adapte mais'
     fix_no_routes: 'a revisão em {path} não abriu rota `author_fix` — nada a corrigir'
     fix_needs_branch: 'a origem da revisão é `{origin}`, não uma branch — passe --branch'
