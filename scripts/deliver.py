@@ -732,7 +732,8 @@ def prepare(args) -> int:
     rules = SHAPES[shape]
     item_text = (package / "item.md").read_text(encoding="utf-8")
     common_args = {"package": str(package), "repo": args.repo, "shape": shape,
-                   "plan_depth": rules["plan"], "gate": rules["gate"], "delivery": block,
+                   "plan_depth": rules["plan"], "gate": rules["gate"],
+                   "delivery": block_as_the_agents_read_it(block, shape),
                    # The repository's own conventions, as pointers: the writer reads them
                    # before the first line, the way the reviewers read them before judging.
                    "conventions": list(profile.get("conventions") or []),
@@ -863,6 +864,17 @@ def without_mutations(kind: str, measure: dict) -> tuple[dict, list[dict]]:
     if kind != "behaviour-change" or not measure.get("mutations"):
         return measure, []
     return dict(measure, mutations=[]), list(measure["mutations"])
+
+
+def block_as_the_agents_read_it(block: dict, shape: str) -> dict:
+    """The profile's delivery block with its budget already resolved for the shape.
+
+    The raw block carries the budget of one item; a story's is scaled from it. The design
+    of a story (2026-11-18) read the raw `budget` in its prompt and wrote "8 files, above
+    the ceiling of 7, waiver expired" into the summary a person approves — the story's
+    budget was 21 files. A number an agent restates is one nobody computed: the agents get
+    the number the spine will hold the diff to, and the plan prints it."""
+    return {**block, "budget": budget_for(block, shape)}
 
 
 def budget_line(man: dict) -> str:

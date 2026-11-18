@@ -228,7 +228,11 @@ const EVIDENCE_SCHEMA = {
 const common = [
   `Repository: ${repo} · working directory: ${workdir}`,
   `Item ${item.id} · shape ${input.shape ?? '?'} · plan depth ${input.plan_depth ?? '?'} · kind ${item.kind}`,
-  `Delivery block of the profile: ${JSON.stringify(delivery)}`,
+  `Delivery block of the profile, its budget already resolved for this shape: ${JSON.stringify(delivery)}`,
+  // A number restated by an agent is a number nobody computed: the budget, the size and
+  // the counts a person reads are printed by the spine from the diff and the manifest.
+  'Never state a budget, a ceiling, a file or line count, a test count or a commit SHA in ' +
+  'a summary or a criterion: the plan and the report print those from what was measured.',
   embed('item.md', 'The item'),
   embed('profile.yml', 'Repository profile'),
   `Conventions of this repository, to read BEFORE writing or judging shape: ${JSON.stringify(input.conventions ?? [])}`,

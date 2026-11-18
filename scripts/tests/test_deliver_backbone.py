@@ -1255,3 +1255,35 @@ class AStageReturnReadsFromAnyFileAtHand(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheAgentsReadTheResolvedBudget(unittest.TestCase):
+    """2026-11-18: a story's design read the raw `budget` of the delivery block (7 files,
+    the budget of ONE item) and told the person approving it that 8 files were above the
+    ceiling, waiver expired. The story's budget was 21. The agents now get the block with
+    the budget the spine will hold the diff to, and are told never to restate one."""
+
+    BLOCK = {"budget": {"max_files": 7, "max_lines": 375}, "commit_format": "{item} - {message}"}
+
+    def test_the_block_carries_the_shape_budget(self):
+        import deliver
+        from shape import budget_for
+        for shape in ("bug", "story"):
+            view = deliver.block_as_the_agents_read_it(self.BLOCK, shape)
+            self.assertEqual(view["budget"], budget_for(self.BLOCK, shape), shape)
+            self.assertEqual(view["commit_format"], "{item} - {message}")
+
+    def test_the_profile_block_is_not_changed(self):
+        import deliver
+        deliver.block_as_the_agents_read_it(self.BLOCK, "story")
+        self.assertEqual(self.BLOCK["budget"], {"max_files": 7, "max_lines": 375})
+
+    def test_no_budget_declared_stays_none(self):
+        import deliver
+        self.assertIsNone(deliver.block_as_the_agents_read_it({}, "story")["budget"])
+
+    def test_the_workflow_tells_the_agents_not_to_restate_numbers(self):
+        source = (pathlib.Path(__file__).resolve().parent.parent.parent
+                  / "workflows" / "deliver.js").read_text(encoding="utf-8")
+        self.assertIn("its budget already resolved for this shape", source)
+        self.assertIn("Never state a budget, a ceiling", source)

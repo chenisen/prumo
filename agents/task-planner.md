@@ -47,7 +47,7 @@ JSON only. For a story:
 
 ```
 {
-  "summary": "<one sentence: what the branch will hold when every task is delivered>",
+  "summary": "<one sentence: what the branch will hold when every task is delivered — no budget, count or SHA: the plan prints those>",
   "tasks": [
     {"id": "T1", "title": "<the objective, as a sentence>",
      "criteria": ["<one falsifiable condition>"],
