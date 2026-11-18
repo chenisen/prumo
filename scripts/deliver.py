@@ -940,6 +940,14 @@ def without_mutations(kind: str, measure: dict) -> tuple[dict, list[dict]]:
     return dict(measure, mutations=[]), list(measure["mutations"])
 
 
+def report_name(package: pathlib.Path) -> str:
+    """The report's file under the item's directory: one per package and day. It was one
+    per day, and on 2026-11-17/18 every conclude of a fix or a block overwrote the
+    delivery's own report — twelve rounds of one item left one file. A package concluded
+    again the same day still replaces its own."""
+    return f"deliver-{today()}-{package.name}.md"
+
+
 def block_as_the_agents_read_it(block: dict, shape: str) -> dict:
     """The profile's delivery block with its budget already resolved for the shape.
 
@@ -1492,10 +1500,10 @@ def conclude(args) -> int:
     (package / "report.md").write_text(report, encoding="utf-8")
     destination = dir_reports() / man["repo"] / f"{man['item']['id']}-deliver"
     destination.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(package / "report.md", destination / f"deliver-{today()}.md")
+    shutil.copy2(package / "report.md", destination / report_name(package))
     unmark(package)
     print(report)
-    print(t("review.report_at", path=destination / f"deliver-{today()}.md"))
+    print(t("review.report_at", path=destination / report_name(package)))
     if man.get("in_worktree"):
         print(t("deliver.cli.release_hint", path=package))
 

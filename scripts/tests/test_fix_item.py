@@ -83,6 +83,20 @@ class ThePackagesOwnItem(unittest.TestCase):
             self.assertEqual((package / "item.md").read_text(encoding="utf-8"), "# new\n")
 
 
+
+class OneReportPerPackage(unittest.TestCase):
+    """Every conclude of the same item on the same day overwrote the delivery's report."""
+
+    def test_two_packages_of_one_day_name_two_files(self):
+        a = deliver.report_name(pathlib.Path("/p/repo-deliver-52468"))
+        b = deliver.report_name(pathlib.Path("/p/repo-deliver-52468-fix1"))
+        self.assertNotEqual(a, b)
+        self.assertTrue(a.startswith("deliver-") and a.endswith("-repo-deliver-52468.md"))
+
+    def test_the_same_package_names_the_same_file(self):
+        self.assertEqual(deliver.report_name(pathlib.Path("/p/x")), deliver.report_name(pathlib.Path("/q/x")))
+
+
 if __name__ == "__main__":
     unittest.main()
 
