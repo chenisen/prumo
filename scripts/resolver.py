@@ -60,7 +60,8 @@ def fetch_proposal_ref(repo_dir: pathlib.Path, iid: int) -> str | None:
     return git(repo_dir, "rev-parse", "--verify", "-q", f"refs/prumo/proposta-{iid}") or None
 
 
-def resolve(repo: str, mr: int | None, branch: str | None, item: str | None) -> dict:
+def resolve(repo: str, mr: int | None, branch: str | None, item: str | None,
+            base: str | None = None) -> dict:
     repo_dir = dir_repositories() / repo
     if not repo_dir.is_dir():
         raise UsageError(t("resolver.repo_missing", repo=repo, root=dir_repositories()))
@@ -79,7 +80,16 @@ def resolve(repo: str, mr: int | None, branch: str | None, item: str | None) -> 
     base_name = (profile.get("base") or {}).get("branch") or "main"
     base_ref = f"origin/{base_name}"
     base_local = False
-    if not git(repo_dir, "rev-parse", "--verify", "-q", base_ref):
+    # A base a person names for THIS review — a ref or a commit — when the branch has more
+    # than one common ancestor with the profile's: a branch cut from another line and
+    # merged with the work it needs measures against what it was built on. Twice on
+    # 2026-11-17/18 that took a temporary ref and the profile's `base.branch` edited for
+    # the length of a prepare, then restored by hand.
+    if base:
+        if not git(repo_dir, "rev-parse", "--verify", "-q", f"{base}^{{commit}}"):
+            raise UsageError(t("resolver.base_unresolved", base=base, repo=repo))
+        base_ref, base_name = base, base
+    elif not git(repo_dir, "rev-parse", "--verify", "-q", base_ref):
         alternative = git(repo_dir, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
         if alternative:
             base_ref, base_name = alternative, alternative.split("/", 1)[-1]
@@ -125,8 +135,9 @@ def resolve(repo: str, mr: int | None, branch: str | None, item: str | None) -> 
         "origin_kind": origin_kind,
         "base": {"name": base_name, "ref": base_ref, "sha": base_sha,
                  "local": base_local,
-                 "source": (t("resolver.base_local") if base_local
-                           else t("resolver.base_from_profile"))
+                 "source": t("resolver.base_given") if base
+                          else (t("resolver.base_local") if base_local
+                                else t("resolver.base_from_profile"))
                           if base_name == (profile.get("base") or {}).get("branch")
                           else t("resolver.base_from_head")},
         "head_sha": head,
@@ -179,11 +190,12 @@ def main() -> int:
     p.add_argument("--proposal", "--mr", dest="mr", type=int)
     p.add_argument("--branch")
     p.add_argument("--item")
+    p.add_argument("--base")
     p.add_argument("--package")
     args = p.parse_args()
 
     try:
-        r = resolve(args.repo, args.mr, args.branch, args.item)
+        r = resolve(args.repo, args.mr, args.branch, args.item, args.base)
     except (MissingConfiguration, InvalidConfiguration) as e:
         print(t("config.impediment", reason=e))
         return 2

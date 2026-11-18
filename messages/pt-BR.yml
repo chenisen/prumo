@@ -455,6 +455,7 @@ report:
   verdict_title: Veredito
   where: Onde
 resolver:
+  base_given: nomeada para esta revisão (--base)
   base: base
   base_from_head: origin/HEAD (a base do perfil não resolveu)
   base_from_profile: perfil
@@ -473,6 +474,7 @@ resolver:
   source_commit_subject: assunto de commit
   summary: repo {repo} · origem {origin} · base {base} ({source})
 review:
+  help_base: 'ref ou commit contra o qual medir, no lugar da base do perfil, quando a branch nasceu de outra linha'
   delivery_record_set_aside: 'o registro da entrega é de {sha}, e o código mudou entre ele e a cabeça revisada {head}. Fica no pacote, e nenhum agente o recebe'
   run_count_word: de
   stale_number: '{file}:{line} cita {kind} `{text}` — número que vale para um commit e envelhece no seguinte; diga o que ele mede, não o valor'

@@ -454,6 +454,7 @@ report:
   verdict_title: Verdict
   where: Where
 resolver:
+  base_given: named for this review (--base)
   base: base
   base_from_head: origin/HEAD (the profile's base did not resolve)
   base_from_profile: profile
@@ -473,6 +474,7 @@ resolver:
   source_commit_subject: commit subject
   summary: repo {repo} · origin {origin} · base {base} ({source})
 review:
+  help_base: 'a ref or commit to measure against instead of the profile''s base, when the branch was built on another line'
   delivery_record_set_aside: 'the delivery record is about {sha}, and code changed between it and the reviewed head {head}. It stays in the package and no agent is handed it'
   run_count_word: of
   stale_number: '{file}:{line} cites {kind} `{text}` — a number that is true for one commit and stale after the next; say what it measures, not the figure'

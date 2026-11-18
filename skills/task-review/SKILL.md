@@ -116,6 +116,7 @@ Workflow.
 ```
 review.py prepare --repo R [--proposal N | --branch B] --item C
                   --item-file ITEM.md [--proposal-file DESC.md]   # F0 F1 F2 F3
+                  [--base REF] [--delivery P]
 Workflow({name: 'prumo:task-review', args: {...}})                # F4 F5 F8 — the name carries the agents' prefix
 review.py conclude --package P --workflow-result W                # F7 F9 F11 F12
 ```
@@ -127,6 +128,12 @@ output file for the task, as it came (`{summary, logs, result, …}`): `conclude
 `conventions_observed.json`, `scripts_manual.json`, the reviewers' criterion readings
 and — when the package carried no `criteria.json` — the extractor's list. The five
 separate flags (`--findings`, `--coverage`, …) still work for a file written by hand.
+
+**A branch built on another line names its base.** When the branch was cut from one line
+and merged with the work it needs, the profile's base has more than one common ancestor
+with it and the diff drags in commits that are not the item's. `--base <ref or commit>`
+measures this review against what the branch was built on; the manifest says the base was
+named. Never edit the profile's `base.branch` for one review.
 
 **A branch the prumo delivered carries its own proof.** `prepare --delivery <package>`
 takes the delivery's `delivery.json` into the review as `delivery-record.json`. When the

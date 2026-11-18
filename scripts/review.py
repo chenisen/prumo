@@ -600,6 +600,8 @@ def prepare(args) -> int:
         target += ["--branch", args.branch]
     if args.item:
         target += ["--item", args.item]
+    if getattr(args, "base", None):
+        target += ["--base", args.base]
     _py("resolver.py", *target, "--package", str(package))
     _py("package.py", "--package", str(package))
     cap = read_json(package / "capabilities.json")
@@ -1125,6 +1127,7 @@ def main() -> int:
     a.add_argument("--package")
     a.add_argument("--advisory", action="store_true")
     a.add_argument("--delivery", help=t("review.help_delivery"))
+    a.add_argument("--base", help=t("review.help_base"))
 
     b = sub.add_parser("conclude")
     b.add_argument("--package", required=True)
