@@ -741,7 +741,10 @@ def prepare(args) -> int:
                    # the workflow assigns each agent its tier. Empty map → every agent
                    # inherits the session's model, the behaviour before tiers existed.
                    "models": models_map(),
-                   "agent_prefix": _agent_prefix()}
+                   "agent_prefix": _agent_prefix(),
+                   # A round that answers a review: its proof is what the review doubted,
+                   # so the sceptic reads it whatever its size.
+                   "answers_review": bool(fix)}
     if not rules["deliverable"]:
         # An epic is cut into stories and stops there: no branch, no suite, no marker.
         manifest = {"repo": args.repo, "item": {"id": args.item, "kind": "none", "source": "tracker"},

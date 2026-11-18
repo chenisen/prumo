@@ -6,7 +6,7 @@ export const meta = {
     { title: 'Design', detail: 'a story cut into tasks, an epic into stories, before anything is written' },
     { title: 'Measure', detail: 'every premise of the item against the code, with an address' },
     { title: 'Write', detail: 'the smallest change, written and run by one agent in the item\'s worktree' },
-    { title: 'Refute', detail: 'a sceptic that has not seen the writer tries to break the proof — never on a small item' },
+    { title: 'Refute', detail: 'a sceptic that has not seen the writer tries to break the proof — on a small item only when it answers a review or is itself a proof' },
     { title: 'Evidence', detail: 'what was done, shown — once, after the item is delivered' },
   ],
 }
@@ -248,6 +248,14 @@ const common = [
 // will read them again over the diff that lands — `shape.size_of` is the rule, this is
 // its first reading. A small item buys no sceptic; the review that follows reads it.
 const smallLimit = input.small ?? { max_files: 3, max_lines: 80 }
+// A small item buys no sceptic — except where the proof IS what is being delivered: a
+// round that answers a review, and an item whose kind is a coverage gap. On 2026-11-18 a
+// small round answering three review findings came back delivered, focused run green, no
+// sceptic; a mutation by hand at the third guard stayed GREEN — the test threw before the
+// payload it claimed to pin was ever built. Size measures how much was written, not how
+// much rides on whether the test proves it.
+const proofIsTheSubject = Boolean(input.answers_review) || item.kind === 'coverage-gap'
+const sceptical = (size, written) => !written.blocked && (size !== 'small' || proofIsTheSubject)
 const widePatterns = (input.wide_patterns ?? []).map((p) => new RegExp(p))
 const sizeOf = (files) => {
   if (input.gate) return 'standard'
@@ -460,7 +468,7 @@ if (stage === 'deliver') {
   const written = await writeItem(measure)
   const size = written.blocked ? sizeOf(measure.files) : sizeWritten(measure, written)
   log(`size: ${size}`)
-  const refutation = size === 'small' || written.blocked ? null : await refute(measure, written)
+  const refutation = sceptical(size, written) ? await refute(measure, written) : null
   return { stage, size, measure, written, refutation }
 }
 
@@ -473,8 +481,8 @@ if (stage === 'write') {
   }
   const measure = input.measure
   const written = await writeItem(measure, { previous: input.previous ?? null })
-  const refutation = written.blocked || sizeWritten(measure, written) === 'small'
-    ? null : await refute(measure, written, input.previous ?? null)
+  const refutation = sceptical(sizeWritten(measure, written), written)
+    ? await refute(measure, written, input.previous ?? null) : null
   return { stage, measure, written, refutation }
 }
 

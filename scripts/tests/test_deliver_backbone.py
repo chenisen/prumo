@@ -517,6 +517,11 @@ class Spine(Fixture):
         self.assertEqual(man["branch"]["name"], branch)
         self.assertEqual(man["item"]["kind"], "behaviour-change")
         self.assertIn("nine is not refused", (fix_pkg / "item.md").read_text(encoding="utf-8"))
+        # the sceptic reads a round that answers a review whatever its size; a fresh item not
+        fix_args = json.loads((fix_pkg / "workflow-args.json").read_text(encoding="utf-8"))
+        self.assertTrue(fix_args["answers_review"])
+        first = json.loads((package / "workflow-args.json").read_text(encoding="utf-8"))
+        self.assertFalse(first["answers_review"])
         current = subprocess.run(("git", "branch", "--show-current"), cwd=self.repo,
                                  capture_output=True, text=True).stdout.strip()
         self.assertEqual(current, branch)
@@ -1287,3 +1292,23 @@ class TestTheAgentsReadTheResolvedBudget(unittest.TestCase):
                   / "workflows" / "deliver.js").read_text(encoding="utf-8")
         self.assertIn("its budget already resolved for this shape", source)
         self.assertIn("Never state a budget, a ceiling", source)
+
+
+class TestTheScepticReadsAProofThatIsTheSubject(unittest.TestCase):
+    """2026-11-18: a small round answering three review findings came back delivered with
+    no sceptic, and a mutation by hand at its third guard stayed green. A small item still
+    buys no sceptic — unless it answers a review, or its kind is a coverage gap."""
+
+    def setUp(self):
+        self.source = (pathlib.Path(__file__).resolve().parent.parent.parent
+                       / "workflows" / "deliver.js").read_text(encoding="utf-8")
+
+    def test_the_exception_is_the_review_and_the_coverage_gap(self):
+        self.assertIn("const proofIsTheSubject = Boolean(input.answers_review) || "
+                      "item.kind === 'coverage-gap'", self.source)
+        self.assertIn("(size !== 'small' || proofIsTheSubject)", self.source)
+
+    def test_both_write_paths_ask_the_same_rule(self):
+        self.assertIn("const sceptical = (size, written)", self.source)
+        self.assertEqual(self.source.count("sceptical("), 2)   # the deliver and the write stage
+        self.assertNotIn("=== 'small' || written.blocked ? null", self.source)

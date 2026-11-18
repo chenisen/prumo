@@ -509,7 +509,7 @@ class TestTheWriterExecutes(unittest.TestCase):
 
     def test_an_item_with_no_gate_is_measured_and_written_in_one_call(self):
         self.assertIn("if (stage === 'deliver')", self.WORKFLOW)
-        self.assertIn("const refutation = size === 'small' || written.blocked ? null : await refute(measure, written)",
+        self.assertIn("const refutation = sceptical(size, written) ? await refute(measure, written) : null",
                       self.WORKFLOW)
 
     def test_the_size_is_read_again_after_the_write_by_the_lines_that_landed(self):
@@ -517,7 +517,7 @@ class TestTheWriterExecutes(unittest.TestCase):
         a standard one, and the sceptic reads it — in the one-call stage and in `write`."""
         self.assertIn("const size = written.blocked ? sizeOf(measure.files) : sizeWritten(measure, written)",
                       self.WORKFLOW)
-        self.assertIn("written.blocked || sizeWritten(measure, written) === 'small'", self.WORKFLOW)
+        self.assertIn("sceptical(sizeWritten(measure, written), written)", self.WORKFLOW)
         self.assertIn("(written.lines_changed ?? 0) > smallLimit.max_lines ? 'standard' : 'small'", self.WORKFLOW)
         self.assertIn("lines_changed: { type: ['integer', 'null'] }", self.WORKFLOW)
         self.assertIn("`lines_changed` is read, never estimated", self.WRITER)
