@@ -217,12 +217,14 @@ stories it decomposes into, each an item for the tracker, and the plan is where 
 ## A fix, a widened item
 
 ```
-deliver.py prepare --repo R --fix <review package> [--branch B]
+deliver.py prepare --repo R --fix <review package> [--findings ID,ID] [--branch B]
 deliver.py prepare --repo R --item C --item-file ITEM.md --shape S --branch B --continue
 ```
 
-A fix delivers the `author_fix` routes a review opened, written from the findings behind
-them, on the review's own branch. A widened item is a new ask on a branch that already
+A fix delivers the `author_fix` and `confirm_finding` routes a review opened — asking for
+the fix of an uncertain finding is the person's confirmation — written from the findings
+behind them, on the review's own branch. With `--findings`, exactly the ids a person chose,
+nits included, and no others. A widened item is a new ask on a branch that already
 holds a delivery. In both the branch's head is the base, the shape has no gate, and the
 sequence is the three steps above.
 

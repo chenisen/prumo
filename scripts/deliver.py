@@ -401,7 +401,11 @@ def read_item(path: str, package: pathlib.Path) -> None:
         raise UsageError(t("review.reading_missing", path=path))
     if not source.read_text(encoding="utf-8").strip():
         raise UsageError(t("review.reading_empty", path=path))
-    shutil.copy2(source, package / "item.md")
+    target = package / "item.md"
+    # The package's own item, handed back to prepare (`--continue` on the same package),
+    # is already where it goes: copying a file onto itself raised SameFileError.
+    if not (target.exists() and source.resolve() == target.resolve()):
+        shutil.copy2(source, target)
 
 
 def read_related(path: str | None, package: pathlib.Path) -> str | None:
@@ -442,14 +446,27 @@ def item_title(item_text: str, item: str) -> str:
     return re.sub(rf"^{re.escape(str(item))}\s*[-—–:·]?\s*", "", first) if item else first
 
 
-def fix_item(review: pathlib.Path) -> tuple[str, str, str]:
-    """The item a fix delivers: the `author_fix` routes a review opened, each with the
-    finding behind it. Returns (item id, origin, item text)."""
+def fix_item(review: pathlib.Path, chosen: list[str] | None = None) -> tuple[str, str, str]:
+    """The item a fix delivers. Returns (item id, origin, item text).
+
+    By default, the findings behind the review's `author_fix` routes AND its
+    `confirm_finding` ones: a person who asks for the fix of an uncertain finding has
+    confirmed it — on 2026-11-18 that ask was refused, and the round went in through
+    `--continue` with the item written by hand. With `chosen`, exactly those finding ids,
+    whatever their severity: the same person chose two nits beside the uncertain finding,
+    and a fix takes what a person chose, never more."""
     man = read_json(review / "manifest.json")
     verdict = read_json(review / "verdict.json")
     findings = {f["id"]: f for f in (read_json(review / "findings.json")
                                      if (review / "findings.json").exists() else [])}
-    routes = [r for r in verdict.get("routes") or [] if r.get("type") == "author_fix"]
+    routes = [r for r in verdict.get("routes") or [] if r.get("type") in ("author_fix", "confirm_finding")]
+    if chosen:
+        unknown = [i for i in chosen if i not in findings]
+        if unknown:
+            raise UsageError(t("deliver.cli.fix_unknown_findings", ids=", ".join(unknown), path=review))
+        confirmed = {i for r in routes if r["type"] == "confirm_finding" for i in r.get("items") or []}
+        routes = [{"type": "confirm_finding" if i in confirmed else "author_fix", "items": [i]}
+                  for i in chosen]
     if not routes:
         raise UsageError(t("deliver.cli.fix_no_routes", path=review))
     item = str(man["item"]["id"] or "no-item")
@@ -465,6 +482,8 @@ def fix_item(review: pathlib.Path) -> tuple[str, str, str]:
                     lines.append(f"  form: {f['form']}")
                 if f.get("beyond_item"):
                     lines.append("  " + t("deliver.cli.fix_beyond_item"))
+                if r["type"] == "confirm_finding":
+                    lines.append("  " + t("deliver.cli.fix_confirmed_by_asking"))
             else:
                 lines.append(f"- **{fid}** {r.get('details') or r.get('closes_when') or ''}")
     return item, man.get("origin") or "", "\n".join(lines) + "\n"
@@ -720,7 +739,8 @@ def prepare(args) -> int:
         # A fix delivers the routes a review opened, on the review's own branch: the
         # item is written from the findings, and the base is that branch's head, so the
         # red before the green is measured against what the review read.
-        fix_id, fix_origin, text = fix_item(fix)
+        chosen = [i.strip() for i in (getattr(args, "findings", None) or "").split(",") if i.strip()]
+        fix_id, fix_origin, text = fix_item(fix, chosen or None)
         args.item = args.item or fix_id
         args.kind = args.kind or "behaviour-change"
         args.shape = getattr(args, "shape", None) or "bug"
@@ -1644,7 +1664,8 @@ def main() -> int:
     a.add_argument("--kind")
     a.add_argument("--branch")
     a.add_argument("--package")
-    a.add_argument("--fix", help="a review package whose author_fix routes become the item")
+    a.add_argument("--fix", help="a review package whose author_fix and confirm_finding routes become the item")
+    a.add_argument("--findings", help=t("deliver.cli.help_findings"))
     a.add_argument("--continue", dest="continue_branch", action="store_true",
                    help="write the item on --branch, which already holds a delivery; its head is the base")
     a.add_argument("--shape", choices=sorted(SHAPES), help="the item's shape; or --type")
