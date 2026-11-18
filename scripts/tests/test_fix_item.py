@@ -16,7 +16,7 @@ import deliver
 from i18n import t
 
 
-class FixItem(unittest.TestCase):
+class Review(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.review = pathlib.Path(self.tmp.name)
@@ -37,6 +37,9 @@ class FixItem(unittest.TestCase):
 
     def verdict(self, *routes):
         (self.review / "verdict.json").write_text(json.dumps({"routes": list(routes)}))
+
+
+class FixItem(Review):
 
     def test_an_uncertain_finding_is_fixed_when_a_person_asks(self):
         self.verdict({"type": "confirm_finding", "items": ["COR-1"]})
@@ -82,3 +85,28 @@ class ThePackagesOwnItem(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AFixOfProofOnly(Review):
+    """Twice on 2026-11-18 a `--fix` of findings about tests that did not prove came back
+    BLOCKED as a behaviour change — nothing goes red on a base whose behaviour the round
+    never meant to change — and was prepared again by hand as debt · coverage-gap."""
+
+    def test_every_finding_read_as_proof_makes_a_proof_round(self):
+        for f in self.findings:
+            f["consequence_kind"] = "proof"
+        (self.review / "findings.json").write_text(json.dumps(self.findings))
+        self.verdict({"type": "author_fix", "items": ["COR-1", "COR-2"]})
+        self.assertTrue(deliver.fix_is_proof_only(self.review))
+
+    def test_one_behaviour_finding_keeps_it_a_behaviour_change(self):
+        self.findings[0]["consequence_kind"] = "proof"
+        self.findings[1]["consequence_kind"] = "behaviour"
+        (self.review / "findings.json").write_text(json.dumps(self.findings))
+        self.verdict({"type": "author_fix", "items": ["COR-1", "COR-2"]})
+        self.assertFalse(deliver.fix_is_proof_only(self.review))
+        self.assertTrue(deliver.fix_is_proof_only(self.review, ["COR-1"]))
+
+    def test_a_finding_nobody_read_twice_is_not_presumed_proof(self):
+        self.verdict({"type": "author_fix", "items": ["COR-1"]})
+        self.assertFalse(deliver.fix_is_proof_only(self.review))

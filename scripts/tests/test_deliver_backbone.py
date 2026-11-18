@@ -533,6 +533,22 @@ class Spine(Fixture):
                                  capture_output=True, text=True).stdout.strip()
         self.assertEqual(current, branch)
 
+    def test_a_fix_of_proof_findings_is_prepared_as_a_coverage_gap(self):
+        package = self.prepare()
+        code, rec = self.conclude(package, PROVING_TEST)
+        branch = rec["branch"]["name"]
+        review = self.root / "review-proof"; review.mkdir()
+        (review / "manifest.json").write_text(json.dumps({"item": {"id": "ITEM-1"}, "origin": branch,
+                                                          "merge_base": "x"}))
+        (review / "verdict.json").write_text(json.dumps({"routes": [
+            {"type": "author_fix", "items": ["COR-1"]}]}))
+        (review / "findings.json").write_text(json.dumps([{"id": "COR-1", "claim": "the test seeds matching ids",
+            "evidence": [{"file": "tests/test_a.py", "line": 1}], "consequence": "x", "form": None,
+            "consequence_kind": "proof"}]))
+        fix_pkg = self.prepare(fix=str(review), package="pkg-proof")
+        man = json.loads((fix_pkg / "deliver-manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual((man["shape"], man["item"]["kind"]), ("debt", "coverage-gap"))
+
     def test_a_widened_item_continues_its_delivered_branch_from_its_head(self):
         """The person widened an item after its branch was delivered. `--continue` writes
         the new ask on that branch, with its head as the base — never a branch recut from

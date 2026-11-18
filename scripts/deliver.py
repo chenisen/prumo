@@ -446,15 +446,8 @@ def item_title(item_text: str, item: str) -> str:
     return re.sub(rf"^{re.escape(str(item))}\s*[-—–:·]?\s*", "", first) if item else first
 
 
-def fix_item(review: pathlib.Path, chosen: list[str] | None = None) -> tuple[str, str, str]:
-    """The item a fix delivers. Returns (item id, origin, item text).
-
-    By default, the findings behind the review's `author_fix` routes AND its
-    `confirm_finding` ones: a person who asks for the fix of an uncertain finding has
-    confirmed it — on 2026-11-18 that ask was refused, and the round went in through
-    `--continue` with the item written by hand. With `chosen`, exactly those finding ids,
-    whatever their severity: the same person chose two nits beside the uncertain finding,
-    and a fix takes what a person chose, never more."""
+def fix_selection(review: pathlib.Path, chosen: list[str] | None) -> tuple[dict, list[dict], dict]:
+    """The review's manifest, the routes a fix delivers, and the findings by id."""
     man = read_json(review / "manifest.json")
     verdict = read_json(review / "verdict.json")
     findings = {f["id"]: f for f in (read_json(review / "findings.json")
@@ -469,6 +462,30 @@ def fix_item(review: pathlib.Path, chosen: list[str] | None = None) -> tuple[str
                   for i in chosen]
     if not routes:
         raise UsageError(t("deliver.cli.fix_no_routes", path=review))
+    return man, routes, findings
+
+
+def fix_is_proof_only(review: pathlib.Path, chosen: list[str] | None = None) -> bool:
+    """Every finding the fix delivers is about a test that does not prove what it claims —
+    the verifier read its consequence as `proof`. Such a round changes tests only, and as a
+    `behaviour-change` it is blocked: nothing goes red on a base whose behaviour it never
+    meant to change. Twice on 2026-11-18 a `--fix` came back BLOCKED for exactly that and
+    was prepared again by hand as `--shape debt --kind coverage-gap`."""
+    _, routes, findings = fix_selection(review, chosen)
+    ids = [i for r in routes for i in r.get("items") or []]
+    return bool(ids) and all((findings.get(i) or {}).get("consequence_kind") == "proof" for i in ids)
+
+
+def fix_item(review: pathlib.Path, chosen: list[str] | None = None) -> tuple[str, str, str]:
+    """The item a fix delivers. Returns (item id, origin, item text).
+
+    By default, the findings behind the review's `author_fix` routes AND its
+    `confirm_finding` ones: a person who asks for the fix of an uncertain finding has
+    confirmed it — on 2026-11-18 that ask was refused, and the round went in through
+    `--continue` with the item written by hand. With `chosen`, exactly those finding ids,
+    whatever their severity: the same person chose two nits beside the uncertain finding,
+    and a fix takes what a person chose, never more."""
+    man, routes, findings = fix_selection(review, chosen)
     item = str(man["item"]["id"] or "no-item")
     lines = [f"# {t('deliver.cli.fix_item', item=item)}", ""]
     for r in routes:
@@ -742,8 +759,11 @@ def prepare(args) -> int:
         chosen = [i.strip() for i in (getattr(args, "findings", None) or "").split(",") if i.strip()]
         fix_id, fix_origin, text = fix_item(fix, chosen or None)
         args.item = args.item or fix_id
-        args.kind = args.kind or "behaviour-change"
-        args.shape = getattr(args, "shape", None) or "bug"
+        proof_only = not args.kind and not getattr(args, "shape", None) and fix_is_proof_only(fix, chosen or None)
+        args.kind = args.kind or ("coverage-gap" if proof_only else "behaviour-change")
+        args.shape = getattr(args, "shape", None) or ("debt" if proof_only else "bug")
+        if proof_only:
+            print(t("deliver.cli.fix_proof_only"))
         args.branch = args.branch or (fix_origin if fix_origin and not fix_origin.startswith("refs/")
                                       and fix_origin != "HEAD" else None)
         if not args.branch:
@@ -804,6 +824,10 @@ def prepare(args) -> int:
         print(f"deliver.py plan --package {package} --design <the file its return was saved to>")
         return 0
     kind = args.kind or (rules["kinds"][0] if rules["kinds"] else "coverage-gap")
+    if not args.kind and kind == "behaviour-change" and continuing:
+        # A widened item that only adds tests is no behaviour change: nothing goes red on
+        # its base, and the round comes back BLOCKED after the writer's whole context.
+        print(t("deliver.cli.kind_presumed", kind=kind))
     if kind not in rules["kinds"]:
         raise UsageError(t("deliver.cli.kind_not_for_shape", kind=kind, shape=shape,
                            kinds=", ".join(rules["kinds"])))

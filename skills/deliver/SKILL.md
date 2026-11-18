@@ -224,7 +224,11 @@ deliver.py prepare --repo R --item C --item-file ITEM.md --shape S --branch B --
 A fix delivers the `author_fix` and `confirm_finding` routes a review opened — asking for
 the fix of an uncertain finding is the person's confirmation — written from the findings
 behind them, on the review's own branch. With `--findings`, exactly the ids a person chose,
-nits included, and no others. A widened item is a new ask on a branch that already
+nits included, and no others. When every finding of the fix was read by the verifier as a
+test that does not prove (`consequence_kind: proof`) and no shape or kind is given, the
+round is `debt · coverage-gap`: it changes tests only, and a behaviour change would be
+blocked for having nothing red on the base. A `--continue` that only adds tests says so
+itself: `--shape debt --kind coverage-gap`, which `prepare` reminds when the kind is presumed. A widened item is a new ask on a branch that already
 holds a delivery. In both the branch's head is the base, the shape has no gate, and the
 sequence is the three steps above.
 
