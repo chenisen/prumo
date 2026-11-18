@@ -144,8 +144,14 @@ record's prose nor the one `test` a mutation names, says what a mutant killed: o
 first real review with the runs attached, both reviewers raised from the prose that a
 mutant had turned one test red while its run held seventeen beyond the base.
 
-A finding the verifier never saw — below the blocking severities nothing is sent — comes
-out `unverified`, never `confirmed`: the reviewer's word, unrefuted and unchecked. And a
+Below the blocking severities, every finding gets ONE light reading together — one cheap
+sceptic over the whole set, on the slices the findings came from — and comes out
+`confirmed`, `refuted` or `uncertain` with `[light reading]` in its reason. A refuted one
+is shown apart in the report, struck from what anyone is asked to do; a finding that
+reading did not return comes out `unverified`, never `confirmed`: the reviewer's word,
+unrefuted and unchecked. Measured before it: 100 of 121 findings over 17 reviews went out
+unread, one of them false, and a person applying seven of them in one go opened three
+correction rounds. And a
 severe finding whose every evidence entry names a file of the review package — the record,
 the digest, the item — is about the record, not the delivery: the judge declares it and it
 closes no gate. The rule is narrow: a claim about the record pointed at a repository file

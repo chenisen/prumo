@@ -272,12 +272,17 @@ def build_report(package: pathlib.Path) -> str:
         parts = []
         rd = {x['id']: x['consequence_kind']
               for x in (verd.get('summary') or {}).get('findings_severity_read_down', [])}
-        for a in sorted(findings, key=lambda x: SEVERITY_ORDER.index(x["severity"])):
+        # A refuted finding is not erased — somebody raised it and somebody read it twice —
+        # but it goes last, marked, so nobody works down the list into it.
+        for a in sorted(findings, key=lambda x: (x.get("status") == "refuted",
+                                                 SEVERITY_ORDER.index(x["severity"]))):
             ev = "; ".join(f"`{e['file']}`:{e.get('line') or '?'}" for e in a["evidence"])
             mark = "" if a.get("attributable", True) else "  " + t("report.finding_from_project")
             res = resolved.get(a["id"])
             if res:
                 mark += "  " + t("report.finding_resolved_mark")
+            if a.get("status") == "refuted":
+                mark += "  " + t("report.finding_refuted_mark")
             parts.append(
                 f"### {a['id']} — `{a['severity']}`{mark}\n\n"
                 f"{escape(a['claim'])}\n\n"

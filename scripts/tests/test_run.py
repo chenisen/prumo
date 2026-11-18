@@ -632,6 +632,22 @@ class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
         schema = json.loads((PRUMO_ROOT / "schemas" / "finding.schema.json").read_text(encoding="utf-8"))
         self.assertIn("unverified", json.dumps(schema))
 
+    def test_findings_below_blocking_get_one_light_reading(self):
+        """100 of 121 findings over 17 reviews went out unread, one of them false by the
+        code it named. Below the blocking severities the workflow now sends the whole set
+        to ONE sceptic on the light tier, concurrently with the blocking verification, and
+        takes back only the ids it sent."""
+        workflow = (PRUMO_ROOT / "workflows" / "task-review.js").read_text(encoding="utf-8")
+        self.assertIn("const belowBlocking = findings.filter", workflow)
+        self.assertIn("label: 'verify:below-blocking'", workflow)
+        self.assertIn("schema: LIGHT_VERIFICATION_SCHEMA", workflow)
+        light = workflow[workflow.index("const lightReading"):workflow.index("const verifyBlocking")]
+        self.assertIn("...tiered('light')", light)
+        self.assertNotIn("tiered('heavy')", light)
+        self.assertIn("await parallel([verifyBlocking, lightReading])", workflow)
+        self.assertIn(".filter((v) => belowBlocking.some((f) => f.id === v.id))", workflow)
+        self.assertIn("never `confirmed`", light)
+
     def test_conclude_reads_the_workflows_object_out_of_the_harness_envelope(self):
         """The task's output file wraps the object in `{summary, logs, result, …}`. The
         first real run of 2.8.0 handed that file to `conclude` and nothing was split."""
@@ -792,9 +808,11 @@ class TestEveryAgentIsToldHowToReturn(unittest.TestCase):
     wrapped the JSON as a string under `input`. The rule travels with every prompt."""
 
     def test_the_rule_reaches_reviewers_extractor_verifier_and_planner(self):
+        # six: labeller, extractor, reviewers, the blocking verifier, the light reading,
+        # the manual planner
         workflow = (PRUMO_ROOT / "workflows" / "task-review.js").read_text(encoding="utf-8")
         self.assertIn("const RETURN_RULE", workflow)
-        self.assertEqual(workflow.count("RETURN_RULE,"), 5)
+        self.assertEqual(workflow.count("RETURN_RULE,"), 6)
         self.assertIn("never wrapped under `input`", workflow)
 
     def test_no_reviewer_still_asks_for_the_single_finding_schema(self):

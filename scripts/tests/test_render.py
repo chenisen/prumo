@@ -265,3 +265,31 @@ class TestResolvedFindingInTheReport(unittest.TestCase):
                           "waiver": {"reason": "r", "approver": "a",
                                      "expires": "2000-01-01"}}]))
         self.assertNotIn(t("report.finding_resolved_mark"), report)
+
+
+class TestRefutedFindingInTheReport(TestResolvedFindingInTheReport):
+    """Below the blocking severities a finding now gets one light reading. One it refuted
+    stays in the report — somebody raised it — but last and marked, so a person working
+    down the list never acts on it: a person's "apply all of them" over seven unread nits
+    once opened three correction rounds."""
+
+    def nit(self, id_, status):
+        return {**self.FINDING, "id": id_, "severity": "nit", "status": status,
+                "claim": f"claim of {id_}",
+                "verifier_reason": "[light reading] the line says otherwise"}
+
+    def test_a_refuted_finding_is_marked(self):
+        from i18n import t
+        report = build_report(self.package(findings=[self.nit("COR-2", "refuted")]))
+        self.assertIn(t("report.finding_refuted_mark"), report)
+
+    def test_a_refuted_finding_goes_after_every_standing_one(self):
+        report = build_report(self.package(findings=[
+            self.nit("COR-2", "refuted"), self.nit("COR-3", "confirmed"), self.FINDING]))
+        self.assertLess(report.index("### F-1"), report.index("### COR-3"))
+        self.assertLess(report.index("### COR-3"), report.index("### COR-2"))
+
+    def test_a_standing_finding_carries_no_refuted_mark(self):
+        from i18n import t
+        report = build_report(self.package(findings=[self.nit("COR-3", "confirmed")]))
+        self.assertNotIn(t("report.finding_refuted_mark"), report)

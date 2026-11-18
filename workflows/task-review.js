@@ -5,7 +5,7 @@ export const meta = {
   phases: [
     { title: 'Criteria', detail: "the item's acceptance criteria, extracted once with stable ids, when the package carries none" },
     { title: 'Review', detail: 'the reviewers triage activated, each over its own slice' },
-    { title: 'Verification', detail: 'one sceptic per blocking finding, in a clean context' },
+    { title: 'Verification', detail: 'one sceptic per blocking finding, in a clean context, and one light reading of the rest' },
     { title: 'Manual plan', detail: 'a script for what no test reaches' },
   ],
 }
@@ -180,6 +180,32 @@ const VERIFICATION_SCHEMA = {
     consequence_kind: { enum: ['behaviour', 'proof', 'record', 'convention'] },
   },
 }
+
+// The light reading of the findings below the blocking severities: one call for all of
+// them, a verdict and a sentence each. No `attributable` and no `consequence_kind` — a
+// finding that decides no gate has no severity to read down and no proposal to hold.
+const LIGHT_VERIFICATION_SCHEMA = {
+  type: 'object',
+  required: ['verdicts'],
+  additionalProperties: false,
+  properties: {
+    verdicts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['id', 'verdict', 'reason'],
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string' },
+          verdict: { enum: ['confirmed', 'refuted', 'uncertain'] },
+          reason: { type: 'string' },
+        },
+      },
+    },
+  },
+}
+// Prefixed to the reason a light reading gave, so the report says which sceptic read it.
+const LIGHT_MARK = '[light reading]'
 
 const SCRIPT_SCHEMA = {
   type: 'object',
@@ -544,7 +570,49 @@ if (preExistingSevere.length) {
 // the stage, capped by its own scheduler — so `full` already verifies in parallel with
 // a concurrency limit, and a `parallel()` barrier would change nothing but the name.
 const sliceOf = new Map(plan.reviewers.map((r) => [r.agent, r.slice]))
-const verified = await pipeline(blocking, (f) =>
+
+// Below the blocking severities, ONE light reading for all of them together. They decide
+// no gate, which is why they were never verified — but a person reads them, and acts on
+// them. Measured over 17 reviews (2026-11-14 to 18): 100 of 121 findings went out
+// `unverified`; one of them, a fyi saying copied lines keep their flag, was false by the
+// writer's own code in another repository; and a person's "apply all of them" over seven
+// unverified nits opened three correction rounds, the first of which introduced the bug
+// the next review confirmed. One cheap sceptic over the whole set, on the slices the
+// findings came from, costs one context and turns the reviewer's word into a reading.
+const belowBlocking = findings.filter((f) => !['critical', 'required'].includes(f.severity)
+                                          && f.attributable !== false)
+const lightReading = () => (belowBlocking.length
+  ? agent([
+      `Try to REFUTE each of these ${belowBlocking.length} findings. You have not seen the ` +
+      'reasoning of whoever raised them. They are below the blocking severities, so read ' +
+      'each one quickly, but read it: open the line its evidence points at and say whether ' +
+      'the code there is what the claim says.',
+      ...belowBlocking.map((f) =>
+        `- ${f.id} [${f.severity}] read in ${bundle}/slices/` +
+        `${sliceOf.get(f.reviewer) ?? 'complete'}.patch — claim: ${f.claim} — ` +
+        `consequence: ${f.consequence} — evidence: ${JSON.stringify(f.evidence)}`),
+      'Stay inside the slice each finding names; open the repository only when the slice ' +
+      'cannot decide, and say so. `refuted` is for a claim the code you read contradicts — ' +
+      'the line does not say that, the path cannot be reached, a guard already handles it, ' +
+      'or another file the claim relies on says otherwise. A claim about data, an ' +
+      'environment or another system you cannot read is `uncertain`, never `confirmed`.',
+      inlined['delivery-record.json']
+        ? `A claim about what the delivery's record says was executed is decided by ` +
+          `${bundle}/delivery-digest.json or the run file, never by the record's prose.`
+        : '',
+      'Return one entry per finding id above, and no other id.',
+      'When in doubt, return `uncertain` — never `confirmed`.',
+      RETURN_RULE,
+    ].filter(Boolean).join('\n'), {
+      agentType: agentFor('finding-verifier'),
+      label: 'verify:below-blocking',
+      phase: 'Verification',
+      schema: LIGHT_VERIFICATION_SCHEMA,
+      ...tiered('light'),
+    })
+  : Promise.resolve(null))
+
+const verifyBlocking = () => pipeline(blocking, (f) =>
   agent([
     'Try to REFUTE this finding. You have not seen the reasoning of whoever raised it.',
     `Claim: ${f.claim}`,
@@ -586,10 +654,20 @@ const verified = await pipeline(blocking, (f) =>
                     consequence_kind: v ? v.consequence_kind : null,
                     verifier_reason: v ? v.reason : 'the verifier did not return' })))
 
-const byId = new Map(verified.filter(Boolean).map((f) => [f.id, f]))
+const [verified, light] = await parallel([verifyBlocking, lightReading])
+const byId = new Map((verified ?? []).filter(Boolean).map((f) => [f.id, f]))
+const lightById = new Map(((light && light.verdicts) || [])
+  .filter((v) => belowBlocking.some((f) => f.id === v.id))
+  .map((v) => [v.id, v]))
+for (const f of belowBlocking) {
+  const v = lightById.get(f.id)
+  if (v) byId.set(f.id, { ...f, status: v.verdict, verifier_reason: `${LIGHT_MARK} ${v.reason}` })
+}
+log(`${lightById.size} of ${belowBlocking.length} findings below the blocking severities ` +
+    'read once by the light sceptic')
 const NOT_SENT_BELOW_BLOCKING =
-  'not sent to the verifier: below the blocking severities a finding decides no gate — ' +
-  "the reviewer's word, unrefuted and unchecked"
+  'the light sceptic did not return it: below the blocking severities a finding decides ' +
+  "no gate — the reviewer's word, unrefuted and unchecked"
 const SKIPPED_PRE_EXISTING =
   'not verified: marked attributable:false, and a finding the change did not cause never ' +
   'holds the proposal — the verifier would decide nothing'
@@ -604,7 +682,7 @@ const final = findings.map((f) => byId.get(f.id)
       // record's prose once went out as "confirmed" while the run file refuted both.
       // `unverified` is what happened — the reviewer's word, unrefuted and unchecked.
       : { ...f, status: 'unverified',
-          verifier_reason: ['critical', 'required'].includes(f.severity)
+          verifier_reason: f.attributable === false
             ? SKIPPED_PRE_EXISTING
             : NOT_SENT_BELOW_BLOCKING }))
 
