@@ -473,6 +473,7 @@ resolver:
   source_commit_subject: assunto de commit
   summary: repo {repo} · origem {origin} · base {base} ({source})
 review:
+  delivery_record_set_aside: 'o registro da entrega é de {sha}, e o código mudou entre ele e a cabeça revisada {head}. Fica no pacote, e nenhum agente o recebe'
   run_count_word: de
   stale_number: '{file}:{line} cita {kind} `{text}` — número que vale para um commit e envelhece no seguinte; diga o que ele mede, não o valor'
   stale_kind_commit: um commit

@@ -106,5 +106,47 @@ class TheGateReadsIt(unittest.TestCase):
         self.assertFalse(ev["delivery_record"])
 
 
+
+class NoAgentIsHandedTheRecordOfAnotherHead(unittest.TestCase):
+    """2026-11-18: a review prepared with the record of a head two hand commits behind had
+    its reviewers cite that head's SHA from the inlined record, and provenance stopped the
+    conclude. A record that does not stand for the head stays in the package, uninlined."""
+
+    def payload(self, after_path):
+        repos = pathlib.Path(tempfile.mkdtemp())
+        repo = repos / "r"
+        repo.mkdir()
+        git(repo, "init", "-q")
+        git(repo, "config", "user.email", "t@example.com")
+        git(repo, "config", "user.name", "t")
+        record = commit(repo, "src/a.txt", "a")
+        head = commit(repo, after_path, "x")
+        pkg = pathlib.Path(tempfile.mkdtemp())
+        (pkg / "manifest.json").write_text(json.dumps({"repo": "r", "head_sha": head}))
+        (pkg / "profile.yml").write_text("delivery:\n  source_roots: [src]\n  test_roots: [tests]\n")
+        (pkg / "delivery-record.json").write_text(json.dumps({"branch": {"sha": record}}))
+        (pkg / review.DIGEST_FILE).write_text(json.dumps({"runs": {}}))
+        with mock.patch.object(review, "dir_repositories", return_value=repos):
+            return review.record_stands(pkg), review.inline_payload(pkg), pkg
+
+    def test_code_after_the_record_sets_it_aside(self):
+        stands, inline, pkg = self.payload("src/b.txt")
+        self.assertFalse(stands)
+        self.assertNotIn("delivery-record.json", inline)
+        self.assertNotIn(review.DIGEST_FILE, inline)
+        self.assertTrue((pkg / "delivery-record.json").exists(), "kept for the reader")
+        self.assertIn("manifest.json", inline)
+
+    def test_docs_after_the_record_keep_it_in_hand(self):
+        stands, inline, _ = self.payload("docs/plan.md")
+        self.assertTrue(stands)
+        self.assertIn("delivery-record.json", inline)
+
+    def test_no_record_sets_nothing_aside(self):
+        pkg = pathlib.Path(tempfile.mkdtemp())
+        (pkg / "manifest.json").write_text(json.dumps({"repo": "r", "head_sha": "h"}))
+        self.assertTrue(review.record_stands(pkg))
+
+
 if __name__ == "__main__":
     unittest.main()

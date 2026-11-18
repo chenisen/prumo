@@ -473,6 +473,7 @@ resolver:
   source_commit_subject: commit subject
   summary: repo {repo} · origin {origin} · base {base} ({source})
 review:
+  delivery_record_set_aside: 'the delivery record is about {sha}, and code changed between it and the reviewed head {head}. It stays in the package and no agent is handed it'
   run_count_word: of
   stale_number: '{file}:{line} cites {kind} `{text}` — a number that is true for one commit and stale after the next; say what it measures, not the figure'
   stale_kind_commit: a commit

@@ -449,6 +449,24 @@ def delivery_record_for(package: pathlib.Path, head_sha: str) -> dict | None:
     return record if (record.get("branch") or {}).get("sha") == head_sha else None
 
 
+def record_stands(package: pathlib.Path) -> bool:
+    """The delivery record in the package speaks for the reviewed head: it is about that
+    head, or every commit after it touches no source or test root. No record: True —
+    there is nothing to set aside."""
+    path = package / "delivery-record.json"
+    if not path.exists() or not (package / "manifest.json").exists():
+        return True
+    man = read_json(package / "manifest.json")
+    sha = (read_json(path).get("branch") or {}).get("sha")
+    if sha == man.get("head_sha"):
+        return True
+    profile_file = package / "profile.yml"
+    profile = (yaml.safe_load(profile_file.read_text(encoding="utf-8")) or {}
+               if profile_file.exists() else {})
+    return bool(man.get("repo")) and code_free_since(
+        dir_repositories() / man["repo"], profile.get("delivery") or {}, sha, man.get("head_sha")) is not None
+
+
 def code_free_since(repo_dir: pathlib.Path, block: dict, since: str, head: str) -> list[str] | None:
     """The files changed from `since` to `head` when NONE of them is under the profile's
     source or test roots, else None. Commits that touch only documentation cannot change
@@ -648,6 +666,10 @@ def prepare(args) -> int:
     # the invocation became a wall of JSON that whoever conducts the review has to carry
     # in their context and echo back in the tool call — paying for the payload twice, in
     # the one place that was not the problem. A file costs one read.
+    if not record_stands(package):
+        sha = (read_json(package / "delivery-record.json").get("branch") or {}).get("sha") or "?"
+        print("  " + t("review.delivery_record_set_aside", sha=sha[:12],
+                       head=read_json(package / "manifest.json")["head_sha"][:12]))
     workflow_args = {
         "package": str(package),
         "plan": plan,
@@ -770,6 +792,11 @@ def inline_payload(package: pathlib.Path) -> dict:
     the prompt, which is the same thing the agent would have discovered by reading a
     path that is not there, minus the round trip."""
     out = {}
+    # A record about an earlier head with code changed since is no proof of this one, and
+    # the agents are not handed it: on 2026-11-18 a review prepared with the record of a
+    # head two hand commits behind had its reviewers cite that head's SHA, and provenance
+    # stopped the conclude. The record stays in the package; the report says whose it is.
+    stale = set() if record_stands(package) else {"delivery-record.json", DIGEST_FILE}
     # The slices too, under the same ceiling: a reviewer handed a path to an 85-line
     # patch spent two of its turns reading it — twice, measured on two reviews of the
     # same delivery. A slice that fits is carried like any other package file, and the
@@ -779,7 +806,7 @@ def inline_payload(package: pathlib.Path) -> dict:
     plan = read_json(package / "plan.json") if (package / "plan.json").exists() else {}
     wanted = {r.get("slice") for r in plan.get("reviewers") or [] if r.get("slice")}
     slices = [package / "slices" / f"{name}.patch" for name in sorted(wanted)]
-    for f in [package / name for name in INLINE_FILES] + slices:
+    for f in [package / name for name in INLINE_FILES if name not in stale] + slices:
         if not f.is_file():
             continue
         text = f.read_text(encoding="utf-8")
