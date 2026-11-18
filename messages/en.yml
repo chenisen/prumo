@@ -466,6 +466,10 @@ resolver:
   source_commit_subject: commit subject
   summary: repo {repo} · origin {origin} · base {base} ({source})
 review:
+  run_count_word: of
+  stale_number: '{file}:{line} cites {kind} `{text}` — a number that is true for one commit and stale after the next; say what it measures, not the figure'
+  stale_kind_commit: a commit
+  stale_kind_run_count: a run count
   suite_record_docs_after: '; measured on {sha}, and every commit after it touches only files outside the source and test roots: {files}'
   suite_record_other_head: 'not run on this head; the delivery record measured {sha}, and code changed after it'
   help_delivery: 'the package of the delivery that produced this branch: its record is evidence for the suite and the criteria'

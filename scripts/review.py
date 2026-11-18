@@ -590,6 +590,20 @@ def prepare(args) -> int:
     if registry is not cap["proof_registry"]:
         cap["proof_registry"] = registry
         write_json(package / "capabilities.json", cap)
+    reviewed = read_json(package / "manifest.json")
+    own = subprocess.run(("git", "-C", str(dir_repositories() / args.repo), "rev-list",
+                          f"{reviewed.get('merge_base')}..{reviewed.get('head_sha')}"),
+                         capture_output=True, text=True).stdout.split()
+    stale = stale_numbers((package / "diff.patch").read_text(encoding="utf-8")
+                          if (package / "diff.patch").exists() else "", own)
+    if stale:
+        cap.setdefault("warnings", []).extend(
+            t("review.stale_number", file=s["file"], line=s["line"], kind=t("review.stale_kind_" + s["kind"]),
+              text=s["text"]) for s in stale)
+        write_json(package / "capabilities.json", cap)
+        for s in stale:
+            print("  " + t("review.stale_number", file=s["file"], line=s["line"],
+                           kind=t("review.stale_kind_" + s["kind"]), text=s["text"]))
 
     # The profile goes INTO the package: that is where the agents read it from, and that
     # is how the version actually used stays recorded next to the run.
@@ -666,6 +680,53 @@ def anchors_without_history(profile: dict) -> dict:
     return {cid: {k: v for k, v in anchor.items() if k != "cards"}
             for cid, anchor in (profile.get("anchors") or {}).items()
             if isinstance(anchor, dict)}
+
+
+# Prose a change adds — a spec, a plan, a changelog — that names a number only a run or
+# the history knows. On 2026-11-18 a delivery's tech plan said "8 tests" where 6 stood and
+# "711 of 711" where 713 ran, and an item comment said 709: each true once, each written by
+# hand, each stale one commit later, and one review spent a finding on them. A SHA that
+# the range made and a count of the form N/N or N of N are the two shapes measured; nothing
+# here blocks — the report says it, and whoever wrote it decides. Only the range's own
+# commits count: the base a spec says it was cut from is a fact that does not move.
+PROSE_SUFFIXES = (".md", ".markdown", ".rst", ".adoc", ".txt")
+_HEX = re.compile(r"(?<![0-9A-Za-z])[0-9a-f]{7,40}(?![0-9A-Za-z])")
+_RUN = r"(?<![\d/])(\d{{2,}})(?:\s*/\s*|\s+(?:{words})\s+)\1(?![\d/])"
+
+
+def _run_count() -> re.Pattern:
+    """N/N, and N of N in the method's language and in the installation's."""
+    words = {"of", *(w.strip() for w in t("review.run_count_word").split("|") if w.strip())}
+    return re.compile(_RUN.format(words="|".join(sorted(map(re.escape, words)))))
+
+
+def stale_numbers(patch: str, own_commits: list[str]) -> list[dict]:
+    """The added prose lines of `patch` that cite one of `own_commits` — the commits the
+    reviewed range itself made — or a run count N/N. Returns [{file, line, kind:
+    commit|run_count, text}]. The base's SHA a spec names is a fixed fact and stays; a
+    hex word that is no commit of the range — a UUID's group, a price id — stays too."""
+    found, file, line = [], None, 0
+    own = [c.lower() for c in own_commits if c]
+    run_count = _run_count()
+    for raw in patch.splitlines():
+        if raw.startswith("+++ "):
+            name = raw[4:].strip()
+            file = name[2:] if name.startswith("b/") else None if name == "/dev/null" else name
+            continue
+        if raw.startswith("@@"):
+            m = re.search(r"\+(\d+)", raw)
+            line = int(m.group(1)) if m else 0
+            continue
+        if raw.startswith("+") and file and file.lower().endswith(PROSE_SUFFIXES):
+            text = raw[1:]
+            for word in _HEX.findall(text):
+                if any(c.isalpha() for c in word) and any(c.startswith(word) for c in own):
+                    found.append({"file": file, "line": line, "kind": "commit", "text": word})
+            for m in run_count.finditer(text):
+                found.append({"file": file, "line": line, "kind": "run_count", "text": m.group(0)})
+        if not raw.startswith("-"):
+            line += 1
+    return found
 
 
 # The small package files, carried IN the prompt instead of pointed at.
