@@ -307,6 +307,7 @@ preflight:
     reviewing
   proof_registry_absent: 'the profile declares `absent`: ledger 2 stays empty, and the review
     says so in the report'
+  proof_registry_at_head: '`{root}` is not in the checkout, and the reviewed head {head} holds it'
   proof_registry_unresolved: '`{root}` does not resolve from {repo_dir}'
   proposal_not_read: the DESCRIPTION of the {proposal} was not read
   proposal_remedy_mcp: 'read it through the {forge} connector the harness carries and hand it over in `--proposal-file` — no script here reaches a forge API, so the text always arrives as a file (reference/forge-connection.md)'

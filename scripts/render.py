@@ -240,7 +240,8 @@ def build_report(package: pathlib.Path) -> str:
         r = cap["proof_registry"]
         if r["type"] == "absent":
             return t("report.no_proof_registry")
-        state = (t("report.proof_resolves") if r["resolve"]
+        state = (t("report.proof_resolves") + (f" ({r['reason']})" if r.get("reason") else "")
+                 if r["resolve"]
                  else t("report.proof_does_not_resolve", reason=r.get("reason") or ""))
         return (t("report.proof_registry_line", type=r["type"], root=r["root"], state=state)
                 + f"\n\n{r.get('note') or ''}")

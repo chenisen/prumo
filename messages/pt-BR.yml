@@ -308,6 +308,7 @@ preflight:
   profile_invalid: o perfil existe mas não valida contra o contrato — corrija antes de revisar
   proof_registry_absent: 'o perfil declara `ausente`: o livro-razão 2 fica vazio, e a revisão
     diz isso no relatório'
+  proof_registry_at_head: '`{root}` não está no checkout, e a cabeça revisada {head} o tem'
   proof_registry_unresolved: '`{root}` não resolve a partir de {repo_dir}'
   proposal_not_read: a DESCRIÇÃO d{proposal_with_article} não foi lida
   proposal_remedy_mcp: 'leia-a pelo conector de {forge} que o harness carrega e entregue em `--proposal-file` — nenhum script daqui alcança API de forge, então o texto sempre chega como arquivo (reference/forge-connection.md)'

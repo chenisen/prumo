@@ -89,6 +89,23 @@ def measure_proof_registry(profile: dict, repo_dir: pathlib.Path) -> dict:
                       t("preflight.proof_registry_unresolved", root=root, repo_dir=repo_dir)}
 
 
+def proof_registry_at_head(reg: dict, repo_dir: pathlib.Path, head: str) -> dict:
+    """The registry as the reviewed head has it. The preflight runs before the head is
+    known and looks in the checkout, which may sit on another branch: the first review of
+    a delivery whose spec was its own first commit reported the registry as not resolving
+    while the spec was right there in the diff. A registry the checkout lacks but the
+    head holds resolves, and says where it was found."""
+    root = reg.get("root")
+    if reg.get("type") == "absent" or reg.get("resolve") or not root or not head:
+        return reg
+    found = subprocess.run(("git", "-C", str(repo_dir), "cat-file", "-e", f"{head}:{root.rstrip('/')}"),
+                           capture_output=True).returncode == 0
+    if not found:
+        return reg
+    return {**reg, "resolve": True,
+            "reason": t("preflight.proof_registry_at_head", root=root, head=head[:12])}
+
+
 def measure_conventions(profile: dict, repo_dir: pathlib.Path) -> list[dict]:
     """A broken path raises nothing: it reads empty. So it is checked, never assumed."""
     return [{"caminho": c, "resolve": (repo_dir / c).exists()} for c in (profile.get("conventions") or [])]

@@ -36,6 +36,7 @@ from common import (MissingConfiguration, dir_repositories, InvalidConfiguration
                    today, read_json, slug, cfg, capabilities_after_preflight, hint_config,
                    report_dir_name)
 from i18n import t
+from preflight import proof_registry_at_head
 from evidence import red_names, progress, authorise, resolve, run_command, time_limit
 
 ROOT = pathlib.Path(__file__).resolve().parent
@@ -583,6 +584,12 @@ def prepare(args) -> int:
         target += ["--item", args.item]
     _py("resolver.py", *target, "--package", str(package))
     _py("package.py", "--package", str(package))
+    cap = read_json(package / "capabilities.json")
+    registry = proof_registry_at_head(cap["proof_registry"], dir_repositories() / args.repo,
+                                      read_json(package / "manifest.json")["head_sha"])
+    if registry is not cap["proof_registry"]:
+        cap["proof_registry"] = registry
+        write_json(package / "capabilities.json", cap)
 
     # The profile goes INTO the package: that is where the agents read it from, and that
     # is how the version actually used stays recorded next to the run.
