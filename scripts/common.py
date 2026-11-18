@@ -122,7 +122,12 @@ def tracker():
 CLASSES = {
     "A1":  dict(section="A", anchor_required=True,
                 question="was an already-applied schema artefact edited?"),
-    "A2":  dict(section="A", anchor_required=True,
+    # A2, A4, A10, B2, B3 and B4 ask about what the SYSTEM exposes, calls or computes; a
+    # profile's pattern matched inside a test is the test's fixture, not the surface. A
+    # test that mounted the legacy store in memory fired A4 and B2 on 2026-11-17 and
+    # opened two gates on a delivery whose gateway was out of the diff. Their PATHS still
+    # fire as before: only the pattern search leaves proof out.
+    "A2":  dict(section="A", anchor_required=True, code_only=True, production_only=True,
                 question="did the shape of an outbound contract change?"),
     # A3 asks what the SYSTEM authorises, so proof is not where it happens: a test that
     # asserts a 401 or names a tenant touches no authorisation scope, and matching the
@@ -132,7 +137,7 @@ CLASSES = {
     "A3":  dict(section="A", anchor_required=False, code_only=True, production_only=True,
                 combination="e",
                 question="was an authorisation-scope or tenant clause touched?"),
-    "A4":  dict(section="A", anchor_required=True,
+    "A4":  dict(section="A", anchor_required=True, code_only=True, production_only=True,
                 question="did an integration surface change?"),
     "A5":  dict(section="A", anchor_required=False, code_only=True, production_only=True, combination="e",
                 question="did a business rule change?"),
@@ -144,15 +149,15 @@ CLASSES = {
                 question="was a test removed or weakened?"),
     "A9":  dict(section="A", anchor_required=False, check="secrets",
                 question="did a secret, a credential or key material get in?"),
-    "A10": dict(section="A", anchor_required=True,
+    "A10": dict(section="A", anchor_required=True, code_only=True, production_only=True,
                 question="was a hot path touched with an effect at volume?"),
     "B1":  dict(section="B", anchor_required=True,
                 question="was a derived artefact, observable only by running, affected?"),
-    "B2":  dict(section="B", anchor_required=True,
+    "B2":  dict(section="B", anchor_required=True, code_only=True, production_only=True,
                 question="was an integration with a legacy internal system touched?"),
-    "B3":  dict(section="B", anchor_required=True, combination="e",
+    "B3":  dict(section="B", anchor_required=True, code_only=True, production_only=True, combination="e",
                 question="was an external provider touched?"),
-    "B4":  dict(section="B", anchor_required=True,
+    "B4":  dict(section="B", anchor_required=True, code_only=True, production_only=True,
                 question="did an aggregate spanning two stores change?"),
     "B5":  dict(section="B", anchor_required=True,
                 question="did a screen, a flow or interface text change?"),

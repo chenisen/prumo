@@ -84,5 +84,41 @@ class TestWhichClassesAreAboutProduction(unittest.TestCase):
                 self.assertTrue(meta.get("code_only"), class_id)
 
 
+class TestAnchoredSurfaceClassesReadPatternsInProductionOnly(unittest.TestCase):
+    """2026-11-17: a profile anchored A4 and B2 on the expression that opens the legacy
+    store's connection; a new test mounted that store in memory with the same expression,
+    and both classes fired on a delivery whose gateway was out of the diff."""
+
+    PROFILE = {"profile": "repo-x", "anchors": {
+        cid: {"paths": ["src/Gateway/**"], "patterns": [r"Store::connection\('legacy'\)"]}
+        for cid in ("A4", "B2")}}
+    DIFF_TEST = ("diff --git a/tests/Feature/GatewayTest.x b/tests/Feature/GatewayTest.x\n"
+                 "+++ b/tests/Feature/GatewayTest.x\n"
+                 "+        Store::connection('legacy')->statement('CREATE TABLE lines (id INTEGER)');\n")
+    DIFF_PRODUCTION = ("diff --git a/src/Steps/SaveStep.x b/src/Steps/SaveStep.x\n"
+                       "+++ b/src/Steps/SaveStep.x\n"
+                       "+        Store::connection('legacy')->table('lines')->insert($rows);\n")
+
+    def assess(self, cid, files, diff):
+        return assess_class(cid, CLASSES[cid], self.PROFILE, change(files, diff), CAP)
+
+    def test_the_pattern_inside_a_test_does_not_fire(self):
+        files = ["src/Steps/Other.x", "tests/Feature/GatewayTest.x"]
+        diff = ("diff --git a/src/Steps/Other.x b/src/Steps/Other.x\n+++ b/src/Steps/Other.x\n+ $a = 1;\n"
+                + self.DIFF_TEST)
+        for cid in ("A4", "B2"):
+            self.assertEqual(self.assess(cid, files, diff)["state"], "did_not_fire", cid)
+
+    def test_the_same_pattern_in_production_still_fires(self):
+        for cid in ("A4", "B2"):
+            c = self.assess(cid, ["src/Steps/SaveStep.x"], self.DIFF_PRODUCTION)
+            self.assertEqual(c["state"], "fired", cid)
+
+    def test_the_anchor_path_still_fires_whatever_the_file_holds(self):
+        diff = "diff --git a/src/Gateway/Db.x b/src/Gateway/Db.x\n+++ b/src/Gateway/Db.x\n+ $a = 1;\n"
+        for cid in ("A4", "B2"):
+            self.assertEqual(self.assess(cid, ["src/Gateway/Db.x"], diff)["state"], "fired", cid)
+
+
 if __name__ == "__main__":
     unittest.main()
