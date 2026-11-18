@@ -54,6 +54,7 @@ closure:
   waiver_incomplete: '`#waiver {item}`: dispensa exige motivo, aprovador e validade (AAAA-MM-DD)
     — ignorada'
 comment:
+  suite_other_head: não rodou nesta cabeça — o registro da entrega é de {sha}
   acceptance_value: '{met} de {total} atendidos'
   baseline_note: "Linha de base do repositório, que NÃO entra na regra por não ser\
     \ dívida desta entrega:"
@@ -71,6 +72,8 @@ comment:
   not_merge: Aprovar não mergeia e não move {item_with_article}.
   not_ran: não rodou
   open_routes: Rotas abertas
+  origin_branch: branch {branch}
+  origin_head: o HEAD do checkout
   ran: rodou
   section_criteria: Critérios de aceite
   section_project_pending: Pendências do PROJETO — declaradas, fora do veredito
@@ -346,6 +349,7 @@ provenance:
   contaminated: '{file}: fala de OUTRA revisão — {refs}. Uma revisão se relaciona só ao próprio item e à própria proposta.'
   remedy: 'Rode de novo o agente que o produziu, nomeando o manifesto desta revisão. Não corrija os ids à mão: o que leu a revisão errada teve um motivo, e a próxima rodada faria igual.'
 report:
+  closed_on_item: 'fechado no item por uma pessoa (#{kind}): {text}'
   about_the_record: 'sobre o registro da entrega, não sobre a entrega: toda evidência nomeia arquivo do pacote da revisão — declarado, e não fecha portão'
   severity_read_down: 'severidade lida pela segunda vez, pelo verificador: a consequência é {kind} — `{severity}` pede consequência demonstrável neste código, então é cobrado como nit; o rótulo do revisor fica como foi escrito'
   consequence_kind_record: 'do registro da entrega, não do código'
@@ -460,6 +464,8 @@ resolver:
   source_commit_subject: assunto de commit
   summary: repo {repo} · origem {origin} · base {base} ({source})
 review:
+  suite_record_docs_after: '; medida em {sha}, e todo commit depois dele só toca arquivos fora das raízes de código e de teste: {files}'
+  suite_record_other_head: 'não rodou nesta cabeça; o registro da entrega mediu {sha}, e o código mudou depois dele'
   help_delivery: 'o pacote da entrega que produziu esta branch: o registro dela é evidência para a suíte e os critérios'
   help_criteria: 'a leitura dos revisores de cada critério, com o registro (lista JSON de {{id, state, record}})'
   suite_from_delivery: 'medida pela entrega nesta mesma cabeça: {executed} executados, {reds} vermelhos na base, nenhum novo por nome'

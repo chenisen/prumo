@@ -308,5 +308,58 @@ class TestResolvedFindingInTheCount(unittest.TestCase):
         self.assertIn(t("comment.findings_value", total=1, blocking=1, ids="F-1"), h)
 
 
+class TestWhatWasReviewed(unittest.TestCase):
+    """The header names what was reviewed. A branch whose name opens with the item's id
+    once came out as `MR !<item id>`, a proposal that did not exist."""
+
+    def comment(self, **manifest):
+        d = package(**{"verdict": {"verdict": "APPROVED", "routes": [], "gates": [],
+                                   "summary": {}}})
+        (d / "manifest.json").write_text(json.dumps({**MANIFEST, **manifest}), encoding="utf-8")
+        return build_item_comment(d)
+
+    def test_a_branch_is_named_as_a_branch(self):
+        h = self.comment(origin="12345-save-the-lines", origin_kind="branch")
+        self.assertIn(t("comment.origin_branch", branch="12345-save-the-lines"), h)
+        self.assertNotIn("!12345", h)
+
+    def test_an_older_manifest_with_no_kind_still_tells_a_branch_from_a_proposal(self):
+        self.assertNotIn("!12345", self.comment(origin="12345-save-the-lines"))
+        self.assertIn("!411", self.comment(origin="refs/merge-requests/411/head"))
+
+    def test_a_proposal_keeps_its_number(self):
+        self.assertIn("!411", self.comment(origin_kind="proposal"))
+
+
+class TestASuiteMeasuredOnAnotherHead(unittest.TestCase):
+    """`Not run in this round` read as if nobody ran it, on a delivery whose record had
+    measured the suite a commit earlier: the line says whose run it is."""
+
+    def test_the_record_s_commit_is_named(self):
+        h = approved(evidence={"suite": "not_run", "delivery_record_sha": "a915af91ab4a"})
+        self.assertIn(t("comment.suite_other_head", sha="a915af91ab4a"), h)
+        self.assertNotIn(t("suite.not_run"), measured_line(h, t("comment.label_suite")))
+
+
+class TestACriterionClosedOnTheItem(unittest.TestCase):
+    """A criterion a person closed with `#evidence` holds no gate; the record printed
+    it as unverifiable and counted it out of the met ones, under five green gates."""
+
+    CRITERIA = [{"id": "AC-1", "text": "first", "state": "met", "record": "r"},
+                {"id": "AC-2", "text": "second", "state": "not_verifiable"}]
+    EVIDENCE = [{"type": "evidence", "item": "AC-2", "text": "both lines selected https://x"}]
+
+    def test_it_reads_met_with_what_the_person_wrote(self):
+        h = approved(criteria=self.CRITERIA, resolutions=self.EVIDENCE)
+        self.assertIn(t("comment.acceptance_value", met=2, total=2), h)
+        self.assertIn(t("report.closed_on_item", kind="evidence", text="both lines selected https://x"), h)
+        self.assertNotIn("not_verifiable", h)
+
+    def test_without_the_marker_it_stays_unverifiable(self):
+        h = approved(criteria=self.CRITERIA)
+        self.assertIn(t("comment.acceptance_value", met=1, total=2), h)
+        self.assertIn("not_verifiable", h)
+
+
 if __name__ == "__main__":
     unittest.main()

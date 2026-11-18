@@ -90,7 +90,7 @@ def resolve(repo: str, mr: int | None, branch: str | None, item: str | None) -> 
 
     if mr:
         head = fetch_proposal_ref(repo_dir, mr)
-        origin = forge().proposal_ref(mr)
+        origin, origin_kind = forge().proposal_ref(mr), "proposal"
         if not head:
             raise UsageError(t("resolver.proposal_fetch_failed", ref=origin,
                                proposal=forge().proposal,
@@ -102,11 +102,12 @@ def resolve(repo: str, mr: int | None, branch: str | None, item: str | None) -> 
         # empty, and the review reports "nothing to review" about a delivery that exists.
         head = (git(repo_dir, "rev-parse", "--verify", "-q", f"origin/{branch}")
                 or git(repo_dir, "rev-parse", "--verify", "-q", branch))
-        origin = branch
+        origin, origin_kind = branch, "branch"
         if not head:
             raise UsageError(t("resolver.branch_unresolved", branch=branch))
     else:
         head, origin = git(repo_dir, "rev-parse", "--verify", "-q", "HEAD"), "HEAD"
+        origin_kind = "head"
 
     base_sha = git(repo_dir, "rev-parse", "--verify", "-q", base_ref)
     merge_base = git(repo_dir, "merge-base", base_sha, head) or base_sha
@@ -121,6 +122,7 @@ def resolve(repo: str, mr: int | None, branch: str | None, item: str | None) -> 
     return {
         "repo": repo,
         "origin": origin,
+        "origin_kind": origin_kind,
         "base": {"name": base_name, "ref": base_ref, "sha": base_sha,
                  "local": base_local,
                  "source": (t("resolver.base_local") if base_local

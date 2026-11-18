@@ -222,6 +222,7 @@ def build_report(package: pathlib.Path) -> str:
     # so the resolver reads both files — an id whose text sits in the other list would
     # otherwise come out bare, which is the defect this resolver exists to remove.
     meaning = meanings_for(classes, criteria, findings + observations)
+    criteria = closed_on_item(criteria, list(resolved.values()))
 
     def sec_criteria():
         if not criteria:
@@ -409,12 +410,48 @@ def build_report(package: pathlib.Path) -> str:
 # How the suite ended, in one line. The full reason lives in the report; the item comment
 # states the STATE, because that is what decides, and the long sentence would drown the
 # rest. The keys on the left are DATA, written by the evidence step.
+def closed_on_item(criteria: list[dict], resolutions: list[dict]) -> list[dict]:
+    """The criteria as the verdict reads them. A criterion the reviewers could not verify
+    and a person then closed on the item (`#evidence AC-4 …`) no longer holds gate 3, so
+    it is not `not_verifiable` either: the first approval reached that way printed the
+    criterion as unverifiable, and counted it out of the met ones, under five green
+    gates. The record it shows is what the person wrote, and it says where it came from."""
+    by_item = {r["item"]: r for r in resolutions or []
+               if r.get("type") != "waiver" or waiver_in_force(r.get("waiver"))}
+    out = []
+    for c in criteria:
+        r = by_item.get(c.get("id"))
+        if r and c.get("state") != "met":
+            c = {**c, "state": "met",
+                 "record": t("report.closed_on_item", kind=r["type"], text=r.get("text", ""))}
+        out.append(c)
+    return out
+
+
 SUITE_READABLE = {
     "green": "suite.green",
     "red_not_attributable": "suite.red_baseline",
     "red_attributable": "suite.red_delivery",
     "not_run": "suite.not_run",
 }
+
+
+def origin_label(man: dict) -> str:
+    """What was reviewed, as the item's reader names it: the proposal (`MR !436`) when the
+    origin is one, the branch by its name when it is a branch. Digits pulled out of a
+    branch name are not a proposal number — the first branch review whose name opened
+    with the item's id printed `MR !<item id>`, a proposal that does not exist."""
+    kind, origin = man.get("origin_kind"), man["origin"]
+    if kind is None:
+        # Manifests written before `origin_kind` existed: a proposal's ref is the only
+        # origin that is a `refs/` path or a bare number.
+        kind = ("proposal" if origin.startswith("refs/") or origin.isdigit()
+                else "head" if origin == "HEAD" else "branch")
+    if kind == "proposal":
+        return forge().label(re.sub(r"\D", "", origin) or "?")
+    if kind == "head":
+        return t("comment.origin_head")
+    return t("comment.origin_branch", branch=origin)
 
 
 def build_item_comment(package: pathlib.Path) -> str:
@@ -454,7 +491,8 @@ def build_item_comment(package: pathlib.Path) -> str:
 
     man, verd = read_json(package / "manifest.json"), optional("verdict.json", {})
     summary = verd.get("summary", {})
-    evidence, criteria = optional("evidence.json", {}), optional("criteria.json", [])
+    evidence = optional("evidence.json", {})
+    criteria = closed_on_item(optional("criteria.json", []), optional("resolutions.json", []))
     findings, size = optional("findings.json", []), optional("size.json", {})
     meaning = meanings_for(optional("classes.json", []), criteria,
                            findings + optional("observations.json", []))
@@ -467,6 +505,10 @@ def build_item_comment(package: pathlib.Path) -> str:
     suite = evidence.get("suite")
     if suite:
         readable = t(SUITE_READABLE[suite]) if suite in SUITE_READABLE else suite
+        if suite == "not_run" and evidence.get("delivery_record_sha"):
+            # "Not run in this round" read as if nobody ran it, on a delivery whose
+            # record had measured the suite one commit earlier. Say whose run it is.
+            readable = t("comment.suite_other_head", sha=evidence["delivery_record_sha"])
         measured.append(f"<li><strong>{t('comment.label_suite')}</strong> "
                         f"{escape(readable)}</li>")
     for role, c in (evidence.get("checks") or {}).items():
@@ -594,7 +636,7 @@ def build_item_comment(package: pathlib.Path) -> str:
     return template.format(
 
         title=tracker().heading_for(t("comment.title", verdict=t(READABLE[verd["verdict"]]))),
-        proposal_label=escape(forge().label(re.sub(r"\D", "", man["origin"]) or "?")),
+        proposal_label=escape(origin_label(man)),
         item=escape(tracker().item),
         sha_initial=escape(man["merge_base"][:12]), sha_final=escape(man["head_sha"][:12]),
         body=body,

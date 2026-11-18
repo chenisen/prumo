@@ -29,6 +29,8 @@ import subprocess
 import sys
 import time
 
+import yaml
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from common import (MissingConfiguration, dir_repositories, InvalidConfiguration, dir_packages, dir_reports, forge, tracker, UsageError, profile_path, load_profile, write_json,
                    today, read_json, slug, cfg, capabilities_after_preflight, hint_config,
@@ -446,6 +448,30 @@ def delivery_record_for(package: pathlib.Path, head_sha: str) -> dict | None:
     return record if (record.get("branch") or {}).get("sha") == head_sha else None
 
 
+def code_free_since(repo_dir: pathlib.Path, block: dict, since: str, head: str) -> list[str] | None:
+    """The files changed from `since` to `head` when NONE of them is under the profile's
+    source or test roots, else None. Commits that touch only documentation cannot change
+    what the suite measures — the method itself asks for the spec and the plan to be
+    reconciled after the code, and the first delivery that did so came to its review with
+    a record one docs commit behind the head and a suite gate that read "not run".
+    No roots declared, `since` not an ancestor of `head`, or git failing: None, and the
+    record stays somebody else's proof."""
+    roots = [r.rstrip("/") for r in (block.get("source_roots") or []) + (block.get("test_roots") or [])]
+    if not roots or not since or not head:
+        return None
+    def git(*a):
+        return subprocess.run(("git", "-C", str(repo_dir), *a), capture_output=True, text=True)
+    if git("merge-base", "--is-ancestor", since, head).returncode != 0:
+        return None
+    diff = git("diff", "--name-only", since, head)
+    if diff.returncode != 0:
+        return None
+    files = [f for f in diff.stdout.splitlines() if f]
+    if any(f == r or f.startswith(r + "/") for f in files for r in roots):
+        return None
+    return files
+
+
 def suite_from_record(record: dict) -> tuple[str, str] | None:
     """The suite as the delivery measured it on this head: green when it finished and
     turned nothing red by name; red when it did. A record that did not read the names
@@ -472,12 +498,32 @@ def initial_evidence(package: pathlib.Path) -> dict:
     cap = read_json(package / "capabilities.json")
     suite = cap["checks"].get("suite") or {}
     record = delivery_record_for(package, man["head_sha"])
+    path = package / "delivery-record.json"
+    other = read_json(path) if path.exists() and not record else None
+    other_sha = ((other or {}).get("branch") or {}).get("sha")
+    docs_after = None
+    if other_sha:
+        profile_file = package / "profile.yml"
+        profile = (yaml.safe_load(profile_file.read_text(encoding="utf-8")) or {}
+                   if profile_file.exists() else {})
+        docs_after = (code_free_since(dir_repositories() / man["repo"],
+                                      profile.get("delivery") or {}, other_sha, man["head_sha"])
+                      if man.get("repo") else None)
+        if docs_after is not None:
+            record = other
     measured = suite_from_record(record) if record else None
+    if measured and docs_after is not None:
+        measured = (measured[0], measured[1] + t("review.suite_record_docs_after",
+                                                 sha=other_sha[:12], files=", ".join(docs_after)))
     lint = (record or {}).get("lint") or {}
+    reason = (measured[1] if measured
+              else t("review.suite_record_other_head", sha=other_sha[:12]) if other_sha
+              else suite.get("reason") or t("review.suite_not_run"))
     return {
         "suite": measured[0] if measured else "not_run",
-        "suite_reason": measured[1] if measured else (suite.get("reason") or t("review.suite_not_run")),
+        "suite_reason": reason,
         "delivery_record": bool(record),
+        **({"delivery_record_sha": other_sha[:12]} if other_sha else {}),
         **({"checks": {"lint": {"state": lint["state"], "reason": lint.get("reason", "")}}}
            if lint.get("state") in ("green", "red") else {}),
         "behind_base": man.get("behind_base", False),

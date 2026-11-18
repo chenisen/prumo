@@ -50,6 +50,7 @@ closure:
   waiver_incomplete: '`#waiver {item}`: a waiver requires a reason, an approver and an expiry
     date (YYYY-MM-DD) — ignored'
 comment:
+  suite_other_head: not run on this head — the delivery record is about {sha}
   acceptance_value: '{met} of {total} met'
   baseline_note: "Repository baseline, which does NOT enter the rule, not being this\
     \ delivery's debt:"
@@ -67,6 +68,8 @@ comment:
   not_merge: Approving does not merge and does not move the {item}.
   not_ran: did not run
   open_routes: Open routes
+  origin_branch: branch {branch}
+  origin_head: the checked-out HEAD
   ran: ran
   section_criteria: Acceptance criteria
   section_project_pending: PROJECT pending items — declared, outside the verdict
@@ -345,6 +348,7 @@ provenance:
   contaminated: '{file}: speaks about ANOTHER review — {refs}. A review relates only to its own item and its own proposal.'
   remedy: 'Re-run the agent that produced it, naming this review''s manifest. Do not hand-edit the ids: whatever read the wrong review read it for a reason, and the next run would do it again.'
 report:
+  closed_on_item: 'closed on the item by a person (#{kind}): {text}'
   about_the_record: 'about the delivery''s record, not the delivery: every evidence entry names a file of the review package — declared, and it closes no gate'
   severity_read_down: 'severity read a second time, by the verifier: the consequence is {kind} — `{severity}` asks for a demonstrable consequence in this code, so it is charged as a nit; the reviewer''s label stays as written'
   consequence_kind_record: 'of the delivery''s record, not of the code'
@@ -460,6 +464,8 @@ resolver:
   source_commit_subject: commit subject
   summary: repo {repo} · origin {origin} · base {base} ({source})
 review:
+  suite_record_docs_after: '; measured on {sha}, and every commit after it touches only files outside the source and test roots: {files}'
+  suite_record_other_head: 'not run on this head; the delivery record measured {sha}, and code changed after it'
   help_delivery: 'the package of the delivery that produced this branch: its record is evidence for the suite and the criteria'
   help_criteria: 'the reviewers'' reading of each criterion, with its record (JSON list of {{id, state, record}})'
   suite_from_delivery: 'measured by the delivery on this very head: {executed} executed, {reds} red on the base, none new by name'
