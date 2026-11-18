@@ -350,7 +350,17 @@ async function writeItem(measure, { task = null, earlier = [], previous = null }
         'code is not as the design assumed, write nothing and return `blocked` with the address.'
       : '',
     storyContext,
-    `Measurement: ${JSON.stringify(measure)}`,
+    // 2026-11-18: the tenth round of one item closed the cause — the item's worker got its
+    // own entry and a shared route went back to the base. The patches rounds five, eight,
+    // eleven and twelve had grown on that route stayed behind, unreached, until a person
+    // asked for the delivery to be trimmed and they were removed by hand.
+    input.answers_review && input.item_base
+      ? 'This round answers a review of an item written in earlier rounds. When your fix ' +
+        `closes a cause, read \`git diff ${input.item_base}...HEAD\` — every round of this ` +
+        'item — and remove what your fix leaves with no caller and no criterion: a branch no ' +
+        'path reaches any more, a helper only a removed path called, a test that drives only ' +
+        'such code. Each removal goes in `files`, with its reason in `skipped`.'
+      : '',
     `The files named for this change: ${measure.files.join(', ')}. A file outside them, that the change ` +
     'cannot be delivered without, is declared in `files` with the reason in `skipped`; anything else is a defect.',
     measure.mutations.length

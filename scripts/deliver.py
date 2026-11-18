@@ -746,7 +746,11 @@ def prepare(args) -> int:
                    "agent_prefix": _agent_prefix(),
                    # A round that answers a review: its proof is what the review doubted,
                    # so the sceptic reads it whatever its size.
-                   "answers_review": bool(fix)}
+                   "answers_review": bool(fix),
+                   # Where the item began: the base the review measured. A round that
+                   # closes a cause reads every earlier round from here, for what it left dead.
+                   "item_base": (read_json(fix / "manifest.json").get("merge_base")
+                                 if fix else None)}
     if not rules["deliverable"]:
         # An epic is cut into stories and stops there: no branch, no suite, no marker.
         manifest = {"repo": args.repo, "item": {"id": args.item, "kind": "none", "source": "tracker"},

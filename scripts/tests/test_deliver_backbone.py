@@ -506,7 +506,8 @@ class Spine(Fixture):
         head = subprocess.run(("git", "rev-parse", "HEAD"), cwd=self.repo,
                               capture_output=True, text=True).stdout.strip()
         review = self.root / "review"; review.mkdir()
-        (review / "manifest.json").write_text(json.dumps({"item": {"id": "ITEM-1"}, "origin": branch}))
+        (review / "manifest.json").write_text(json.dumps({"item": {"id": "ITEM-1"}, "origin": branch,
+                                                          "merge_base": "base-of-the-item"}))
         (review / "verdict.json").write_text(json.dumps({"verdict": "INTERVENTION_REQUIRED", "routes": [
             {"type": "author_fix", "items": ["COR-1"], "owner": "author", "closes_when": "push"}]}))
         (review / "findings.json").write_text(json.dumps([{"id": "COR-1", "claim": "nine is not refused",
@@ -524,8 +525,10 @@ class Spine(Fixture):
         # the sceptic reads a round that answers a review whatever its size; a fresh item not
         fix_args = json.loads((fix_pkg / "workflow-args.json").read_text(encoding="utf-8"))
         self.assertTrue(fix_args["answers_review"])
+        self.assertEqual(fix_args["item_base"], "base-of-the-item")
         first = json.loads((package / "workflow-args.json").read_text(encoding="utf-8"))
         self.assertFalse(first["answers_review"])
+        self.assertIsNone(first["item_base"])
         current = subprocess.run(("git", "branch", "--show-current"), cwd=self.repo,
                                  capture_output=True, text=True).stdout.strip()
         self.assertEqual(current, branch)
@@ -1316,3 +1319,15 @@ class TestTheScepticReadsAProofThatIsTheSubject(unittest.TestCase):
         self.assertIn("const sceptical = (size, written)", self.source)
         self.assertEqual(self.source.count("sceptical("), 2)   # the deliver and the write stage
         self.assertNotIn("=== 'small' || written.blocked ? null", self.source)
+
+
+class TestARoundThatClosesACauseTrimsTheEarlierOnes(unittest.TestCase):
+    """2026-11-18: the round that closed the cause left four earlier rounds of patches
+    behind, unreached, until a person asked for the delivery to be trimmed."""
+
+    def test_the_writer_reads_every_round_from_the_item_base(self):
+        source = (pathlib.Path(__file__).resolve().parent.parent.parent
+                  / "workflows" / "deliver.js").read_text(encoding="utf-8")
+        self.assertIn("input.answers_review && input.item_base", source)
+        self.assertIn("git diff ${input.item_base}...HEAD", source)
+        self.assertIn("remove what your fix leaves with no caller and no criterion", source)
