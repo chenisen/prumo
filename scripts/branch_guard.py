@@ -236,6 +236,7 @@ def live_deliveries(directory: pathlib.Path) -> list[dict]:
             continue
         if m.get("worktree"):
             m["worktree"] = os.path.realpath(m["worktree"])
+            m["_marker"] = str(f)
             out.append(m)
     return out
 
@@ -329,7 +330,36 @@ def judge_delivery_git(tokens: list[str], cwd: pathlib.Path, deliveries: list[di
     return None
 
 
+def held_by(markers: list[pathlib.Path]) -> str:
+    """Which marker holds the guard, from which package, how old, and how it is let go.
+
+    A marker leaked by a crash, or left by another session, held a commit on 2026-11-18
+    with only "a review does not alter the target repository's history" to go on: nobody
+    could tell a live run from a leftover without opening `.claude/` by hand."""
+    import time
+    parts = []
+    for f in markers:
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            minutes = int((time.time() - f.stat().st_mtime) // 60)
+        except Exception:
+            continue
+        package = data.get("package") or "?"
+        release = ("review.py release" if f.name == ".task-review-ativo"
+                   else f"deliver.py release --package {package}")
+        parts.append(t("guard.held_by", marker=f, package=package, minutes=minutes, release=release))
+    return (" — " + "; ".join(parts)) if parts else ""
+
+
 def judge_delivery(directory: pathlib.Path, tool: str, path: str, command: str, pwd: str) -> str | None:
+    reason = _judge_delivery(directory, tool, path, command, pwd)
+    if not reason:
+        return None
+    live = {pathlib.Path(d["_marker"]) for d in live_deliveries(directory) if d.get("_marker")}
+    return reason + held_by(sorted(live))
+
+
+def _judge_delivery(directory: pathlib.Path, tool: str, path: str, command: str, pwd: str) -> str | None:
     deliveries = live_deliveries(directory)
     if not deliveries:
         return None
@@ -371,9 +401,14 @@ def main() -> int:
                    help="the command merges a proposal: exit 0 only when the installation delegated it")
     p.add_argument("--delivery", metavar="MARKERS_DIR",
                    help="judge the call against the deliveries running now; prints the reason")
+    p.add_argument("--held-by", metavar="MARKER",
+                   help="print which run a marker belongs to, its age and how it is released")
     p.add_argument("--tool", default="")
     p.add_argument("--path", default="")
     a = p.parse_args()
+    if a.held_by:
+        print(held_by([pathlib.Path(a.held_by)]))
+        return 0
     if a.delivery:
         reason = judge_delivery(pathlib.Path(a.delivery), a.tool, a.path, a.command, a.pwd)
         if reason:

@@ -63,6 +63,13 @@ fresh() {
   [ "$age" -lt "$VALIDITY_SECONDS" ]
 }
 
+# Which run the review marker belongs to, how old it is, and how it is let go — said
+# with every block it causes, so a leftover is told apart from a live run.
+review_held_by() {
+  SCRIPTS="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}/scripts"
+  python3 "$SCRIPTS/branch_guard.py" --pwd "$PWD" --command "" --held-by "$MARKER" 2>/dev/null
+}
+
 block() {
   echo "Blocked by the prumo's guard: $1" >&2
   echo "Approving is the ceiling. Merge, push and moving the item are a person's acts." >&2
@@ -74,7 +81,7 @@ if [ -n "$cmd" ]; then
   if printf '%s' "$cmd" | grep -Eqi '(^|[[:space:]])(glab|gh)[[:space:]]+(mr|pr)[[:space:]]+merge|merge_requests?/[0-9]+/merge|/pulls?/[0-9]+/merge'; then
     # Never while a review runs, delegated or not. A delivery does not stop it: merging
     # another proposal touches no delivery's worktree.
-    fresh "$MARKER" && block "merging a proposal while a review runs"
+    fresh "$MARKER" && block "merging a proposal while a review runs$(review_held_by)"
     # Otherwise only when the installation delegated it. The script answers, from the
     # project's directory so that a `prumo.yml` found by walking up is found; anything
     # but a clean 0 — no configuration, a crash — blocks.
@@ -103,7 +110,7 @@ moves_the_item() {
 if fresh "$MARKER"; then
   # The tracker is configurable, so this matches the ACTION a tool name describes, not
   # one provider's spelling: `move_card_batch` on one board, `transition_issue` on another.
-  moves_the_item && block "moving the item during a review"
+  moves_the_item && block "moving the item during a review$(review_held_by)"
   # Only in a repository under `paths.repositories`: a review alters no history of the
   # repository it reads, and a commit in the prumo's own checkout, or anywhere else, is
   # not that. The same script that scopes the protected-branch rule answers here.
@@ -112,9 +119,9 @@ if fresh "$MARKER"; then
     inside=$(python3 "$SCRIPTS/branch_guard.py" --pwd "$PWD" --command "$cmd" --inside-repositories 2>/dev/null || echo yes)
     if [ "$inside" != "no" ]; then
       printf '%s' "$cmd" | grep -Eq '(^|[[:space:]])git[[:space:]]+push([[:space:]]|$)' \
-        && block "git push during a review"
+        && block "git push during a review$(review_held_by)"
       printf '%s' "$cmd" | grep -Eq '(^|[[:space:]])git[[:space:]]+(commit|reset[[:space:]]+--hard|checkout[[:space:]]+-B|rebase|cherry-pick|revert)' \
-        && block "a review does not alter the target repository's history"
+        && block "a review does not alter the target repository's history$(review_held_by)"
     fi
   fi
 fi

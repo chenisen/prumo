@@ -339,6 +339,7 @@ preflight:
   warn_owner_presumed: 'ninguém assina no ambiente nem no prumo.yml: presumido {name}, de {source}'
   warning: 'aviso: {text}'
 guard:
+  held_by: 'segurado por {marker}, de {package}, há {minutes} min. Se essa execução acabou, `{release}` o libera'
   push_protected: 'push para `{branch}` em {repo} — nada do prumo sobe direto numa branch protegida; entregue uma proposta'
   write_protected: '`git {action}` em `{branch}` em {repo} — nada do prumo escreve direto numa branch protegida'
   merge_not_delegated: 'mesclar uma proposta é ato de uma pessoa — a menos que o dono desta instalação o tenha delegado com `forge.delegated_merge: true` no prumo.yml'

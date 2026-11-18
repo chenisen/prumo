@@ -338,6 +338,7 @@ preflight:
   warn_owner_presumed: 'nobody signs in the environment or in prumo.yml: presumed {name}, from {source}'
   warning: 'warning: {text}'
 guard:
+  held_by: 'held by {marker}, of {package}, {minutes} min old. If that run has ended, `{release}` lets it go'
   push_protected: 'pushing to `{branch}` in {repo} — nothing of the prumo lands directly on a protected branch; hand over a proposal'
   write_protected: '`git {action}` on `{branch}` in {repo} — nothing of the prumo writes directly on a protected branch'
   merge_not_delegated: 'merging a proposal is a person''s act — unless the owner of this installation delegated it with `forge.delegated_merge: true` in prumo.yml'
