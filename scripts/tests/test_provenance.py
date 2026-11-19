@@ -88,6 +88,14 @@ class TestItSpeaksOnlyAboutThisReview(unittest.TestCase):
         self.assertEqual([{"kind": "item", "value": "42"}],
                          foreign_references("ver #42 para o contexto", short))
 
+    def test_a_sha_the_item_itself_names_is_not_foreign(self):
+        """2026-11-17: an item comment named a commit of its own branch, the planner
+        quoted it, and the conclude stopped as if it were another review's."""
+        quoted = package(item=ITEM + "\nCorrigido em 7e5f20fd2 na branch.\n")
+        self.assertEqual([], foreign_references("como diz o item, 7e5f20fd2 corrige", quoted))
+        self.assertEqual([{"kind": "sha", "value": "9d76107c7"}],
+                         foreign_references("o commit 9d76107c7 de outra revisão", quoted))
+
     def test_beside_a_long_id_a_round_quantity_is_not_an_item(self):
         """2026-11-06: a manual plan's ">10000 linhas" (100 pages of 100) stopped a
         conclude as 'another item'. Running the agent again would have written the same

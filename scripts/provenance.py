@@ -106,8 +106,15 @@ def foreign_references(text: str, package: pathlib.Path) -> list[dict]:
     delivery = _delivery_hex(package)
     out: list[dict] = []
 
+    # What the item itself, or the proposal's own description, says is never foreign: the
+    # same asymmetry as for an item id. On 2026-11-17 an item that named a commit of its
+    # own branch in a comment stopped the conclude twice, because the manual planner
+    # quoted the item; the remedy was to keep commits out of the item, which is a rule
+    # about how a team writes its cards, not about this review.
+    said = " ".join((package / name).read_text(encoding="utf-8", errors="ignore")
+                    for name in ("item.md", "proposal.md") if (package / name).exists())
     for sha in dict.fromkeys(RE_SHA.findall(text)):
-        if not _is_own(sha, own) and sha not in delivery:
+        if not _is_own(sha, own) and sha not in delivery and sha not in said:
             out.append({"kind": "sha", "value": sha})
 
     origin = manifest.get("origin") or ""
