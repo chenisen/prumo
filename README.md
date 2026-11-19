@@ -434,7 +434,7 @@ are no criteria" and "I could not read them" is the whole point.
 > 1. the code follows the project's standards and good practice;
 > 2. it breaks no business rule;
 > 3. it covers what the item asked for, with the necessary evidence;
-> 4. no manual verification is left to do;
+> 4. what only QA can verify is handed to QA, with a script;
 > 5. and the four above were actually **measured**.
 
 Any closed gate is INTERVENTION REQUIRED. The report opens with that five-line table and
@@ -451,6 +451,11 @@ condition failed*.
   summary and does not hold the proposal;
 - a **route** with `origin: project` — an unconfirmed profile, a class with no anchor, a
   missing tool — is declared with an owner, and stays outside the verdict.
+
+What only the running system can show — a fired §B class, a criterion marked
+`decided_by: qa` — is `origin: qa`: the input of QA, the stage after an APPROVED, with the
+manual script in section 9d of the report. It closes no gate; gate 4 asks only that the
+review handed QA its script.
 
 Without this, a repository whose profile nobody finished would never approve any delivery,
 and the verdict would stop discriminating good work from bad.

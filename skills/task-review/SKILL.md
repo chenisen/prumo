@@ -212,8 +212,8 @@ almost all of them long `checked` strings the model did not escape.
 `render.py` out of the package, identical on every run — verdict, proposal, the two SHAs,
 **The rule** (the five gates, with what closed any that is shut), a **Measured** block
 (suite, risk classes, acceptance criteria, size, findings), **Open routes** when the
-verdict is INTERVENTION, the **acceptance criteria each with its record**, the
-**project's pending items** with owners, and the line saying that approving does not
+verdict is INTERVENTION, the **acceptance criteria each with its record**, what goes
+**to QA** after the approval, the **project's pending items** with owners, and the line saying that approving does not
 merge.
 
 **No id travels alone, in the comment OR in the report.** `A4, A7, A9` is the harness
@@ -378,7 +378,7 @@ Binary, and there is only one rule:
 > 1. the code follows the project's **standards and good practice**;
 > 2. it breaks no **business rule**;
 > 3. it **covers what the item asked for**, with the necessary evidence;
-> 4. no **manual verification** is left to do;
+> 4. what only **QA** can verify is handed to QA, with a script;
 > 5. and the four above were actually **measured**.
 
 Any gate closed means INTERVENTION REQUIRED. The report opens with that five-line table, and
@@ -386,6 +386,16 @@ only then with the routes — the route says *who does what*, the gate says *whi
 failed*. Two routes serve more than one gate (`author_fix` takes both a finding and an unmet
 criterion), so the gate is declared in `judge.py` at the point of use, never deduced from
 the route's type.
+
+**What only the running system can show is QA's, not the review's.** A fired §B class,
+or a criterion a reviewer marks `decided_by: qa` (an environment, an external system, a
+journey through the screens), is routed with `origin: qa`: declared in `qa_pending`, in
+section 9d of the report with the manual script the review wrote for it, and in the item
+comment without the script — and it closes no gate. The order is review → APPROVED → QA →
+proposal. What the review still owes QA is the script: gate 4 closes only when there is
+something for QA and the planner handed nothing. Until 2026-11-19 gate 4 read "no manual
+verification is left to do", and a review with no finding about the code came out
+INTERVENTION on every delivery that touched an integration.
 
 **The fifth gate measures the REVIEW, not the repository.** "Not assessed" still does not
 mean "no risk" — but whose debt it is decides whether it holds the proposal. Missing
@@ -395,7 +405,7 @@ cause them. They come out declared in `project_pending` and in the *PROJECT pend
 section of the report, with owners. Decided on 2026-11-03.
 
 **This skill asks a single question: is what the item asked for delivered in this
-proposal?** Every route carries `origin` — `delivery` or `project` — and only one of
+proposal?** Every route carries `origin` — `delivery`, `project` or `qa` — and only one of
 origin `delivery` closes a gate and becomes INTERVENTION. It is the same principle that already
 governs `attributable` on a finding and `red_not_attributable` on the suite, now applied to
 the route: a repository whose profile nobody finished would never approve any delivery at

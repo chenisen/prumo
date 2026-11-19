@@ -77,6 +77,7 @@ comment:
   ran: rodou
   section_criteria: Critérios de aceite
   section_project_pending: Pendências do PROJETO — declaradas, fora do veredito
+  section_qa: Para o QA, depois da aprovação — fora do veredito
   size_value: '{lines} linhas, faixa <code>{band}</code>'
   the_rule: A regra
   title: 'Revisão de entrega: {verdict}'
@@ -288,7 +289,7 @@ gate_name:
   standards: padrões e boas práticas
   business_rules: regra de negócio
   item_covered: cobre o que o item pediu
-  no_manual: verificação manual
+  qa_handed: entregue ao QA
   measured: foi efetivamente medido
 item_meaning:
   review: a revisão como um todo
@@ -435,6 +436,17 @@ report:
   project_pending_note: Não seguram {proposal_with_article} — a entrega não as causou. Seguem
     abertas para quem mantém o repositório.
   project_pending_title: Pendências do PROJETO — declaradas, fora do veredito
+  qa_pending_none: '_Nada: nada nesta entrega precisa do sistema rodando para ser mostrado._'
+  qa_scripts_title: Os roteiros que o QA executa — o resultado esperado foi escrito antes de executar
+  qa_script_trigger: Por quê
+  qa_script_environment: Ambiente
+  qa_script_data: Dados
+  qa_script_steps: Passos
+  qa_script_expected: Resultado esperado
+  qa_script_evidence: Evidência a coletar
+  qa_script_acceptance: Aceito quando
+  qa_pending_note: 'O que só o sistema entregue, rodando, consegue mostrar. Não segura {proposal_with_article}:
+    o QA executa depois da aprovação, pelo roteiro abaixo, e {proposal_with_article} vem depois do QA.'
   proof_does_not_resolve: '**NÃO RESOLVE**: {reason}'
   proof_registry_line: Tipo `{type}`, raiz `{root}` — {state}.
   proof_resolves: resolve
@@ -701,6 +713,8 @@ verdict:
   detail_beyond_item: '{ids}: a mudança alcançou um consumidor que {item_with_article} não nomeia. Fecha devolvendo esse consumidor ao que a base faz, nunca adaptando-o'
   detail_criterion_unmet: critério d{item_with_article} que a entrega não atendeu
   detail_criterion_unrecorded: critério que o diff não decide e que ninguém registrou
+  detail_criterion_for_qa: critério que só o sistema rodando decide — o QA registra, depois da aprovação
+  detail_qa_without_script: 'há o que só o QA verifica ({items}) e a revisão não entregou roteiro nenhum'
   detail_delivery_untested: comportamento que esta entrega escreveu e nenhum teste cobre
   detail_mandatory_reading: 'leitura obrigatória vazia: sem insumo não há veredito'
   detail_out_of_scope: arquivo fora do escopo que {item_with_article} declarou
@@ -711,10 +725,11 @@ verdict:
     business_rules: não fere regra de negócio
     item_covered: contempla o que o item pediu, com a evidência necessária
     measured: os quatro portões acima foram efetivamente medidos
-    no_manual: não sobra verificação manual a fazer
+    qa_handed: o que só o QA verifica foi entregue a ele, com roteiro
     standards: o código segue os padrões e boas práticas do projeto
   intervention: INTERVENÇÃO NECESSÁRIA
   project_pending: '— pendências do PROJETO (declaradas, não seguram {proposal_with_article}):'
+  qa_pending: '— para o QA, depois da aprovação (declaradas, não seguram {proposal_with_article}):'
   routes:
     review_incomplete: quem conduz a revisão
     author_fix: autor d{proposal_with_article}

@@ -73,6 +73,7 @@ comment:
   ran: ran
   section_criteria: Acceptance criteria
   section_project_pending: PROJECT pending items — declared, outside the verdict
+  section_qa: For QA, after the approval — outside the verdict
   size_value: '{lines} lines, band <code>{band}</code>'
   the_rule: The rule
   title: 'Delivery review: {verdict}'
@@ -286,7 +287,7 @@ gate_name:
   standards: standards and good practice
   business_rules: business rule
   item_covered: covers what the item asked for
-  no_manual: manual verification
+  qa_handed: handed to QA
   measured: actually measured
 item_meaning:
   review: the review as a whole
@@ -434,6 +435,17 @@ report:
   project_pending_note: They do not hold this {proposal} — the delivery did not cause them. They
     remain open for whoever maintains the repository.
   project_pending_title: PROJECT pending items — declared, outside the verdict
+  qa_pending_none: '_None: nothing in this delivery needs the running system to be shown._'
+  qa_scripts_title: The scripts QA runs — the expected result was written before executing
+  qa_script_trigger: Why
+  qa_script_environment: Environment
+  qa_script_data: Data
+  qa_script_steps: Steps
+  qa_script_expected: Expected result
+  qa_script_evidence: Evidence to collect
+  qa_script_acceptance: Accepted when
+  qa_pending_note: 'What only running the delivered system can show. It does not hold this {proposal}:
+    QA runs it after the approval, with the script below, and the {proposal} follows QA.'
   proof_does_not_resolve: '**DOES NOT RESOLVE**: {reason}'
   proof_registry_line: Type `{type}`, root `{root}` — {state}.
   proof_resolves: resolves
@@ -699,6 +711,8 @@ verdict:
   detail_beyond_item: '{ids}: the change reached a consumer the {item} does not name. It closes by returning that consumer to what the base does, never by adapting it'
   detail_criterion_unmet: criterion of the {item} that the delivery did not meet
   detail_criterion_unrecorded: criterion the diff does not decide and that nobody recorded
+  detail_criterion_for_qa: criterion only the running system decides — QA records it, after the approval
+  detail_qa_without_script: 'there is something only QA can verify ({items}) and the review handed it no script'
   detail_delivery_untested: behaviour this delivery wrote that no test covers
   detail_mandatory_reading: 'mandatory reading empty: with no input there is no verdict'
   detail_out_of_scope: file outside the scope the {item} declared
@@ -709,10 +723,11 @@ verdict:
     business_rules: it does not break a business rule
     item_covered: it covers what the item asked for, with the necessary evidence
     measured: the four gates above were actually measured
-    no_manual: no manual verification is left to do
+    qa_handed: what only QA can verify is handed to QA, with a script
     standards: the code follows the project's standards and good practice
   intervention: INTERVENTION REQUIRED
   project_pending: '— PROJECT pending items (declared, they do not hold the {proposal}):'
+  qa_pending: '— for QA, after the approval (declared, they do not hold the {proposal}):'
   routes:
     review_incomplete: whoever is conducting the review
     author_fix: author of the {proposal}

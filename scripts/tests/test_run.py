@@ -536,6 +536,13 @@ class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
         # a person's record already there is never overwritten by a reviewer's reason
         self.assertEqual((merged[2]["record"], merged[2]["note"]), ("qa, 2026-11-10", "pint not shown"))
         self.assertEqual(unmatched, ["AC-9", "c4-format"])
+        # only the running system decides it: the reviewer says so, and a person's word wins
+        qa, _ = review.merge_criteria(
+            [{"id": "AC-1", "state": "not_verifiable", "record": None},
+             {"id": "AC-2", "state": "not_verifiable", "record": None, "decided_by": "suite"}],
+            [{"id": "AC-1", "state": "not_verifiable", "record": "needs the vendor", "decided_by": "qa"},
+             {"id": "AC-2", "state": "not_verifiable", "record": None, "decided_by": "qa"}])
+        self.assertEqual([c.get("decided_by") for c in qa], ["qa", "suite"])
         import judge
         v = judge.judge_delivery({"status": "confirmed", "anchors": {}}, [], [], merged,
                                  {"suite": "green"}, {}, {})

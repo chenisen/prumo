@@ -58,6 +58,10 @@
 
 {section_project_pending}
 
+## 9d. For QA — after the approval, outside the verdict
+
+{section_qa}
+
 ## 10. This environment's capabilities
 
 {section_capabilities}

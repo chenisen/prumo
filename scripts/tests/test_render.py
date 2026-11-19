@@ -293,3 +293,44 @@ class TestRefutedFindingInTheReport(TestResolvedFindingInTheReport):
         from i18n import t
         report = build_report(self.package(findings=[self.nit("COR-3", "confirmed")]))
         self.assertNotIn(t("report.finding_refuted_mark"), report)
+
+
+class TestTheReportHandsQaItsScript(unittest.TestCase):
+    """Since 2026-11-19 what only the running system shows is QA's, after the approval —
+    and QA's input is the manual script the review wrote. Until then the script stayed in
+    the package's `scripts_manual.json`, on the disk of whoever ran the review, and a
+    stage whose input lives on someone else's disk has no input."""
+
+    QA_ROUTE = {"type": "manual_check", "origin": "qa", "owner": "QA or a named developer",
+                "items": ["B2"], "closes_when": "the evidence recorded on the item", "details": []}
+    SCRIPT = {"trigger": "B2 fired on the legacy integration", "goal": "the order reaches the vendor",
+              "environment": "homologation", "data": ["a customer with two plans"],
+              "steps": ["open the order", "send it"], "expected_result": "201 and both plans recorded",
+              "evidence_to_collect": "the vendor's response", "acceptance": "both lines synchronised",
+              "cases": []}
+
+    def report(self, scripts):
+        helper = TestReportShowsTheEffort()
+        verdict = {"verdict": "APPROVED", "routes": [self.QA_ROUTE],
+                   "gates": [{"number": 1, "name": "standards", "condition": "c",
+                              "passed": True, "items": []}],
+                   "summary": {"profile_coverage": "18/18", "classes_not_assessable": [],
+                               "qa_pending": ["B2"]}}
+        return build_report(helper.package(verdict=verdict, scripts_manual=scripts))
+
+    def test_the_qa_section_lists_what_qa_verifies(self):
+        report = self.report([self.SCRIPT])
+        qa = report.split("## 9d.")[1].split("## 10.")[0]
+        self.assertIn("B2", qa)
+        self.assertIn("QA or a named developer", qa)
+
+    def test_the_script_travels_in_the_report_with_its_expected_result(self):
+        qa = self.report([self.SCRIPT]).split("## 9d.")[1].split("## 10.")[0]
+        for part in ("the order reaches the vendor", "1. open the order", "2. send it",
+                     "201 and both plans recorded", "both lines synchronised"):
+            self.assertIn(part, qa)
+
+    def test_the_qa_route_is_not_counted_among_the_open_routes(self):
+        report = self.report([self.SCRIPT])
+        routes = report.split("## 2.")[1].split("## 3.")[0]
+        self.assertNotIn("B2", routes)

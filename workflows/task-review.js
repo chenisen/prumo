@@ -137,7 +137,10 @@ const FINDINGS_SCHEMA = {
       items: {
         type: 'object', required: ['id', 'state', 'record'], additionalProperties: false,
         properties: { id: { type: 'string' }, state: { enum: ['met', 'not_met', 'not_verifiable'] },
-                      record: { type: ['string', 'null'] } },
+                      record: { type: ['string', 'null'] },
+                      // `qa` when only running the delivered system decides the criterion:
+                      // it goes to QA, after the approval, and holds nothing here.
+                      decided_by: { type: ['string', 'null'], enum: ['qa', 'suite', null] } },
       },
     },
     // Silence does not count as "nothing found": every reviewer says what it looked at.
@@ -390,7 +393,10 @@ const context = (slice) => [
   embed('criteria.json', 'Criteria from the item'),
   inlined['criteria.json']
     ? 'Answer `criteria` with the ids of that list, VERBATIM (`AC-1`, `AC-2`, …), one '
-      + 'reading per id you could decide. A reading under any other id is dropped.'
+      + 'reading per id you could decide. A reading under any other id is dropped. A '
+      + 'criterion that only running the delivered system can decide — an environment, an '
+      + 'external system, a journey through the screens — is `not_verifiable` with '
+      + '`decided_by: "qa"`: QA verifies it after the approval, and it does not hold this review.'
     : '',
   embed('item.md', 'Normalised item (description + comments)'),
   embed('proposal.md', "The proposal's own description, as its author wrote it"),
@@ -736,6 +742,14 @@ for (const [cause, members] of grouped) {
 if (manualCandidates.length !== needsScript.length) {
   log(`${manualCandidates.length} classes need manual work, collapsed into ${needsScript.length} ` +
       `script(s): classes sharing a cause are answered by one act, not one each`)
+}
+// A criterion only the running system decides goes to QA after the approval, and QA's
+// input is a script (rule of 2026-11-19). With no §B class fired, the planner would not
+// run at all and the judge would close gate 4 for a script nobody was asked to write.
+for (const c of criteriaVerdicts) {
+  if (c.state === 'not_verifiable' && c.decided_by === 'qa') {
+    needsScript.push({ id: c.id, reason: `acceptance criterion only the running system decides: ${c.id}` })
+  }
 }
 
 // WHICH delivery these scripts are for comes first, and it is not optional. Without it

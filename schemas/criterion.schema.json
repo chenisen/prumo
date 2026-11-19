@@ -46,7 +46,7 @@
         "string",
         "null"
       ],
-      "description": "`suite` when only the suite decides the criterion: it then follows the suite's state, never the absence of a record"
+      "description": "`suite` when only the suite decides the criterion: it then follows the suite's state, never the absence of a record. `qa` when only running the delivered system decides it: unrecorded, it goes to QA after the approval and closes no gate"
     }
   }
 }

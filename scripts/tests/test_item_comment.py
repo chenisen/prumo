@@ -187,6 +187,20 @@ class TestWhatGoesIn(unittest.TestCase):
         self.assertIn("the suite is green", h)
         self.assertIn("168 tests, 357 assertions", h)
 
+    def test_carries_what_goes_to_qa_without_its_script(self):
+        """The item comment names what QA verifies after the approval (rule of
+        2026-11-19), each class with its question — and never the script: an instruction
+        for later belongs to the report."""
+        h = approved(verdict={
+            "verdict": "APPROVED",
+            "routes": [{"type": "manual_check", "origin": "qa", "owner": "QA",
+                        "items": ["B2"], "closes_when": "evidence on the item", "details": []}],
+            "summary": {"profile_coverage": "18/18", "classes_not_assessable": []}},
+            scripts_manual=[{"goal": "a script nobody should see here", "steps": ["x"]}])
+        self.assertIn(heading(t("comment.section_qa")), h)
+        self.assertIn("B2", h)
+        self.assertNotIn("a script nobody should see here", h)
+
     def test_carries_the_project_pending_items_with_their_owner(self):
         h = approved(verdict={
             "verdict": "APPROVED",

@@ -173,17 +173,50 @@ def routes_header(gate: bool = True) -> str:
             "\n|---|---|" + ("---|" if gate else "") + "---|---|\n")
 
 
-def project_pending_table(verdict: dict, meaning=None) -> str:
-    """Debt of the repository and of the harness: always declared, always charged to
-    whoever created it.
+def aside_table(verdict: dict, origin: str, meaning=None) -> str:
+    """A route outside the verdict, in a table of its own, so that nobody reads it as a
+    pending item of THIS delivery — the same reason `attributable` exists on a finding.
 
-    It sits in a table of its own so that nobody reads it as a pending item of THIS
-    delivery — the same reason `attributable` exists on a finding."""
-    if not any(r.get("origin") == "project" for r in verdict["routes"]):
-        return t("report.project_pending_none")
-    return (t("report.project_pending_note", **vocabulary()) + "\n\n"
+    `project` is the repository's and the harness's debt, charged to whoever created it.
+    `qa` is not debt at all: it is the input of the stage after an APPROVED — what only
+    running the delivered system can show (decided on 2026-11-19)."""
+    key = "project_pending" if origin == "project" else "qa_pending"
+    if not any(r.get("origin") == origin for r in verdict["routes"]):
+        return t(f"report.{key}_none")
+    return (t(f"report.{key}_note", **vocabulary()) + "\n\n"
             + routes_header(gate=False)
-            + routes_table(verdict, origin="project", meaning=meaning))
+            + routes_table(verdict, origin=origin, meaning=meaning))
+
+
+def project_pending_table(verdict: dict, meaning=None) -> str:
+    return aside_table(verdict, "project", meaning)
+
+
+def qa_scripts(scripts: list[dict]) -> str:
+    """The manual scripts the review wrote, in the report, because they are QA's input.
+    Until 2026-11-19 they stayed in the package's `scripts_manual.json`, which nobody
+    outside this machine can open — a stage whose input lives on someone else's disk has
+    no input. Never in the item comment: a script is an instruction for later, and the
+    comment is a record (see `build_item_comment`)."""
+    if not scripts:
+        return ""
+    def field(label, value):
+        if not value:
+            return ""
+        if isinstance(value, list):
+            return f"- **{t(label)}:**\n" + "".join(f"  {n}. {v}\n" for n, v in enumerate(value, 1))
+        return f"- **{t(label)}:** {value}\n"
+    out = [f"### {t('report.qa_scripts_title')}"]
+    for n, sc in enumerate(scripts, 1):
+        out.append(f"#### {n}. {sc.get('goal') or sc.get('trigger') or '—'}\n\n"
+                   + field("report.qa_script_trigger", sc.get("trigger"))
+                   + field("report.qa_script_environment", sc.get("environment"))
+                   + field("report.qa_script_data", sc.get("data"))
+                   + field("report.qa_script_steps", sc.get("steps"))
+                   + field("report.qa_script_expected", sc.get("expected_result"))
+                   + field("report.qa_script_evidence", sc.get("evidence_to_collect"))
+                   + field("report.qa_script_acceptance", sc.get("acceptance")))
+    return "\n\n".join(out)
 
 
 def class_list(classes: list[dict], section: str, state: str,
@@ -407,6 +440,9 @@ def build_report(package: pathlib.Path) -> str:
         section_capabilities=sec_capabilities(), section_reviewers=sec_reviewers(),
         verdict=t(READABLE[verd["verdict"]]),
         section_project_pending=project_pending_table(verd, meaning=meaning),
+        section_qa="\n\n".join(x for x in (aside_table(verd, "qa", meaning=meaning),
+                                              qa_scripts(optional("scripts_manual.json", [])))
+                                 if x),
         verdict_detail=(t("report.verdict_clean") if verd["verdict"] == "APPROVED"
                         else t("report.verdict_routes",
                                n=len([r for r in verd["routes"]
@@ -636,6 +672,7 @@ def build_item_comment(package: pathlib.Path) -> str:
     body = rule() + body
     body += section("comment.open_routes", route_items("delivery"))
     body += section("comment.section_criteria", criteria_items())
+    body += section("comment.section_qa", route_items("qa"))
     body += section("comment.section_project_pending", route_items("project"))
 
     template = (DIR_TEMPLATES / "item-comment.html").read_text(encoding="utf-8")

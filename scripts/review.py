@@ -433,6 +433,10 @@ def merge_criteria(current: list[dict], readings: list[dict]) -> tuple[list[dict
             c["state"] = "not_verifiable"
             if v.get("record"):
                 c["note"] = v["record"]
+            # Only the running system decides it: QA's, after the approval (2026-11-19).
+            # A `decided_by` a person already wrote on the list is never overwritten.
+            if v.get("decided_by") == "qa" and not c.get("decided_by"):
+                c["decided_by"] = "qa"
         elif v.get("record"):
             c["state"], c["record"] = v["state"], v["record"]
     return current, sorted(set(verdicts) - known)

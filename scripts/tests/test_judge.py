@@ -22,10 +22,10 @@ SUITE_GREEN = {"suite": "green"}
 
 
 def judge(profile=PROFILE_OK, cl=None, findings=(), criteria=(), evidence=None,
-          scope=None, resolutions=(), today="2026-10-28"):
+          scope=None, resolutions=(), today="2026-10-28", qa_scripts=None):
     return judge_delivery(profile, cl if cl is not None else classes(), list(findings),
                           list(criteria), evidence or SUITE_GREEN, scope or {},
-                          list(resolutions), today)
+                          list(resolutions), today, qa_scripts=qa_scripts)
 
 
 def route_types(v):
@@ -334,18 +334,20 @@ class TestPurity(unittest.TestCase):
         self.assertEqual(len(v["routes"]), 7)
         for r in v["routes"]:
             self.assertTrue(r["owner"] and r["closes_when"], r)
-            self.assertIn(r["origin"], ("delivery", "project"), r)
+            self.assertIn(r["origin"], ("delivery", "project", "qa"), r)
 
-    def test_manual_check_separates_the_delivery_from_the_project(self):
-        """Same kind of route, different request: the §B class belongs to the delivery,
-        the suite this environment could not run belongs to the project. Two blocks, two
-        owners — on purpose."""
-        v = judge(cl=classes(B4="fired"), evidence={"suite": "not_run"})
-        manual = [r for r in v["routes"] if r["type"] == "manual_check"]
-        self.assertEqual({r["origin"] for r in manual}, {"delivery", "project"})
-        from_delivery = [r for r in manual if r["origin"] == "delivery"][0]
-        self.assertEqual(from_delivery["items"], ["B4"])
-        self.assertEqual(v["verdict"], INTERVENTION)  # by the §B class, not by the suite
+    def test_manual_check_separates_the_delivery_the_project_and_qa(self):
+        """Same kind of route, three requests: an unrecorded criterion belongs to the
+        delivery, the suite this environment could not run to the project, and the §B
+        class to QA — the stage after an APPROVED (rule changed on 2026-11-19). Three
+        blocks, three owners, and only the delivery's holds the proposal."""
+        v = judge(cl=classes(B4="fired"), evidence={"suite": "not_run"},
+                  criteria=[{"id": "C1", "state": "not_verifiable", "record": None}])
+        manual = {r["origin"]: r for r in v["routes"] if r["type"] == "manual_check"}
+        self.assertEqual(set(manual), {"delivery", "project", "qa"})
+        self.assertEqual(manual["qa"]["items"], ["B4"])
+        self.assertEqual(manual["delivery"]["items"], ["C1"])
+        self.assertEqual(v["verdict"], INTERVENTION)  # by the criterion, not the class
 
 
 if __name__ == "__main__":
@@ -410,10 +412,42 @@ class TestTheRule(unittest.TestCase):
         v = judge(scope={"out_of_scope_touched": ["app/Other.php"]})
         self.assertEqual(self.gate(v, 3)["items"], ["app/Other.php"])
 
-    def test_a_section_B_class_closes_the_manual_test_gate(self):
-        v = judge(cl=classes(B4="fired"))
+    def test_a_section_B_class_goes_to_qa_and_closes_no_gate(self):
+        """Until 2026-11-19 a fired §B class closed gate 4 ("no manual verification is
+        left to do"). Decided then: the review judges scope and code; what only the
+        running system shows is QA's, after the approval. A review with no finding about
+        the code came out INTERVENTION on every delivery that touched an integration."""
+        v = judge(cl=classes(B4="fired"), qa_scripts=1)
+        self.assertEqual(v["verdict"], APPROVED)
+        self.assertTrue(all(g["passed"] for g in v["gates"]))
+        self.assertEqual(v["summary"]["qa_pending"], ["B4"])
+
+    def test_something_for_qa_and_no_script_closes_gate_4(self):
+        """What the review still owes QA is the script it will run."""
+        v = judge(cl=classes(B4="fired"), qa_scripts=0)
+        self.assertEqual(v["verdict"], INTERVENTION)
         self.assertFalse(self.gate(v, 4)["passed"])
-        self.assertEqual(self.gate(v, 4)["items"], ["B4"])
+        self.assertEqual(self.gate(v, 4)["items"], ["qa_script"])
+
+    def test_an_unknown_script_count_charges_nothing(self):
+        """A replay of a package from before the rule passes no count: the judge does not
+        invent an absence it never measured."""
+        self.assertEqual(judge(cl=classes(B4="fired"))["verdict"], APPROVED)
+
+    def test_nothing_for_qa_needs_no_script(self):
+        self.assertTrue(self.gate(judge(qa_scripts=0), 4)["passed"])
+
+    def test_a_criterion_only_the_running_system_decides_goes_to_qa(self):
+        v = judge(criteria=[{"id": "C1", "state": "not_verifiable", "record": None,
+                             "decided_by": "qa"}], qa_scripts=1)
+        self.assertEqual(v["verdict"], APPROVED)
+        self.assertEqual(v["summary"]["qa_pending"], ["C1"])
+        self.assertTrue(self.gate(v, 3)["passed"])
+
+    def test_any_other_unrecorded_criterion_still_closes_the_item_gate(self):
+        v = judge(criteria=[{"id": "C1", "state": "not_verifiable", "record": None}])
+        self.assertFalse(self.gate(v, 3)["passed"])
+        self.assertEqual(v["summary"]["qa_pending"], [])
 
     def test_not_assessable_closes_no_gate_but_is_declared(self):
         """Not assessed still is NOT "no risk": it stays said, in `project_pending`.
@@ -450,7 +484,7 @@ class TestTheRule(unittest.TestCase):
         for kw in ({"findings": [{"id": "X", "severity": "critical", "status": "confirmed"}]},
                    {"cl": classes(A3="fired")},
                    {"criteria": [{"id": "C1", "state": "not_met"}]},
-                   {"cl": classes(B4="fired")}):
+                   {"cl": classes(B4="fired"), "qa_scripts": 0}):
             with self.subTest(**kw):
                 v = judge(**kw)
                 self.assertEqual(v["verdict"], INTERVENTION)

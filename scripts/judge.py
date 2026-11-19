@@ -69,10 +69,20 @@ SUITE_BLOCKING = {"red_attributable", "broken"}
 #   APPROVED  ⟺  1. the code follows the project's standards and good practice
 #                2. it does not break a business rule
 #                3. it covers what the item asked for, with the necessary evidence
-#                4. no manual verification is left to do
+#                4. what only QA can verify is handed to QA, with a script
 #                5. and the four above were actually MEASURED
 #
-# Any gate that fails is INTERVENTION REQUIRED. The fifth gate exists because "not
+# Any gate that fails is INTERVENTION REQUIRED.
+#
+# Gate 4 read "no manual verification is left to do" until 2026-11-19. Decided then: the
+# review judges the item's scope and the code that delivers it; what only running the
+# delivered system can show — a §B class, a criterion that needs an environment, a
+# journey against a vendor — is the NEXT stage, QA, which comes after an APPROVED and
+# before the proposal. Charging it here made a review with no finding about the code come
+# out INTERVENTION on every delivery that touched an integration (measured on the fifth
+# review of one item), and the verdict stopped saying whether the code was ready. What the
+# review still owes QA is the script it will run; gate 4 closes when there is something
+# for QA and the review handed it nothing. The fifth gate exists because "not
 # assessed" is not "no risk": an APPROVED over ground nobody measured is the one output
 # of this method that is worth less than no review at all.
 #
@@ -83,7 +93,7 @@ GATES = {
     1: "standards",
     2: "business_rules",
     3: "item_covered",
-    4: "no_manual",
+    4: "qa_handed",
     5: "measured",
 }
 
@@ -113,11 +123,15 @@ ROUTE_GATE = {
 #   * an attributable, blocking finding                     (gate 1)
 #   * a §A class fired over what the diff changed           (gate 2)
 #   * a criterion of the item unmet, or with no record      (gate 3)
-#   * a §B class fired                                      (gate 4)
 #   * mandatory reading empty — with no item there is       (gate 5)
 #     nothing to judge
 ORIGIN_DELIVERY = "delivery"
 ORIGIN_PROJECT = "project"
+# What only QA can verify: declared beside the verdict, outside it, as the input of the
+# stage that follows an APPROVED. Decided on 2026-11-19 (see gate 4 above).
+ORIGIN_QA = "qa"
+# A criterion whose `decided_by` says only running the delivered system decides it.
+DECIDED_BY_QA = "qa"
 
 ROUTE_ORIGIN = {
     "missing_profile":    ORIGIN_PROJECT,
@@ -175,7 +189,8 @@ def read_down(finding: dict) -> bool:
 def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
                    criteria: list[dict], evidence: dict, scope: dict,
                    resolutions: list[dict], today: str | None = None,
-                   package_files: set[str] | None = None) -> dict:
+                   package_files: set[str] | None = None,
+                   qa_scripts: int | None = None) -> dict:
     """Verdict and routes. Deterministic: it reads no package, and depends on no clock
     beyond the `today` it is handed, which only serves to measure whether a waiver has
     expired. The catalogue and the installation's vocabulary are read for the WORDS of a
@@ -187,6 +202,7 @@ def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
 
     by_gate: dict[int, list[str]] = {n: [] for n in GATES}
     project_pending: list[str] = []
+    qa_pending: list[str] = []
 
     def route(kind: str, items: list[str], detail: dict | None = None,
               gate: int | None = None, origin: str | None = None):
@@ -199,9 +215,9 @@ def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
         from the kind of route.
 
         `origin` says whose debt it is. `project` is declared and closes no gate; one
-        kind of route serves both origins — `manual_check` takes both a §B class
-        (delivery) and a suite the profile cannot run (project) — so the origin is also
-        declared by the caller whenever it departs from the kind's default.
+        kind of route serves every origin — `manual_check` takes an unrecorded criterion
+        (delivery), a suite the profile cannot run (project) and a §B class (qa) — so the
+        origin is also declared by the caller whenever it departs from the kind's default.
         """
         items = [i for i in items if i not in resolved]
         if not items:
@@ -209,6 +225,8 @@ def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
         origin = origin or ROUTE_ORIGIN.get(kind, ORIGIN_DELIVERY)
         if origin == ORIGIN_DELIVERY:
             by_gate[gate if gate is not None else ROUTE_GATE[kind]] += items
+        elif origin == ORIGIN_QA:
+            qa_pending.extend(items)
         else:
             project_pending.extend(items)
         existing = next((r for r in routes
@@ -237,7 +255,8 @@ def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
            if c["section"] == "A" and c["state"] == "fired" and live(c)])
     route("manual_check",
           [c["id"] for c in classes
-           if c["section"] == "B" and c["state"] == "fired" and live(c)])
+           if c["section"] == "B" and c["state"] == "fired" and live(c)],
+          origin=ORIGIN_QA)
     route("missing_capability",
           [c["id"] for c in classes if c["state"] == "not_assessable" and live(c)])
 
@@ -285,11 +304,18 @@ def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
     # double charge the suite rule already refuses. It is the criterion's own `decided_by`
     # that says so, because only whoever read the item knows what the criterion asks of.
     suite_blocks = evidence.get("suite") in SUITE_BLOCKING
+    unrecorded = [c for c in criteria
+                  if c.get("state") == "not_verifiable" and not c.get("record")
+                  and not (c.get("decided_by") == "suite" and not suite_blocks)]
+    # A criterion only the running system decides is QA's, not a hole in this review: the
+    # reviewer that read it says so with `decided_by: qa`. Every other unrecorded
+    # criterion is still the item not shown covered.
     route("manual_check",
-          [c["id"] for c in criteria
-           if c.get("state") == "not_verifiable" and not c.get("record")
-           and not (c.get("decided_by") == "suite" and not suite_blocks)],
+          [c["id"] for c in unrecorded if c.get("decided_by") != DECIDED_BY_QA],
           {"detail": t("verdict.detail_criterion_unrecorded", **_words())}, gate=3)
+    route("manual_check",
+          [c["id"] for c in unrecorded if c.get("decided_by") == DECIDED_BY_QA],
+          {"detail": t("verdict.detail_criterion_for_qa", **_words())}, origin=ORIGIN_QA)
 
     # --- what the delivery proves about itself
     #
@@ -343,6 +369,13 @@ def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
 
     route("author_fix", list(scope.get("out_of_scope_touched") or []),
           {"detail": t("verdict.detail_out_of_scope", **_words())}, gate=3)
+
+    # What the review owes QA. `None` is a caller that does not know (a replay of an old
+    # package): it charges nothing rather than invent an absence.
+    if qa_pending and qa_scripts == 0:
+        route("review_incomplete", ["qa_script"],
+              {"detail": t("verdict.detail_qa_without_script",
+                           items=", ".join(sorted(set(qa_pending))), **_words())}, gate=4)
 
     gates = [{"number": n, "name": GATES[n],
               "condition": t(f"verdict.gates.{GATES[n]}", **_words()),
@@ -402,6 +435,9 @@ def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
             # Declared, never deleted: what this environment could not measure is still
             # said, it just is not charged to whoever wrote the delivery.
             "project_pending": sorted(set(project_pending)),
+            # Outside the verdict too, but not debt: the input of QA, the stage after an
+            # APPROVED, with the manual script the review wrote for each.
+            "qa_pending": sorted(set(qa_pending)),
         },
     }
 
@@ -427,6 +463,7 @@ def main() -> int:
         scope=optional("scope.json", {}),
         resolutions=optional("resolutions.json", []),
         package_files={p.name for p in package.rglob("*") if p.is_file()},
+        qa_scripts=len(optional("scripts_manual.json", [])),
     )
     write_json(output / "verdict.json", verdict)
     print(verdict["verdict"])
@@ -434,11 +471,13 @@ def main() -> int:
         if r["origin"] != ORIGIN_DELIVERY:
             continue
         print(f"  {r['type']:20} {', '.join(r['items'])}  → {r['owner']}")
-    project_routes = [r for r in verdict["routes"] if r["origin"] == ORIGIN_PROJECT]
-    if project_routes:
-        print("  " + t("verdict.project_pending", **_words()))
-        for r in project_routes:
-            print(f"  {r['type']:20} {', '.join(r['items'])}  → {r['owner']}")
+    for origin, heading in ((ORIGIN_PROJECT, "verdict.project_pending"),
+                            (ORIGIN_QA, "verdict.qa_pending")):
+        aside = [r for r in verdict["routes"] if r["origin"] == origin]
+        if aside:
+            print("  " + t(heading, **_words()))
+            for r in aside:
+                print(f"  {r['type']:20} {', '.join(r['items'])}  → {r['owner']}")
     return 0
 
 
