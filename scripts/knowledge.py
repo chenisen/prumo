@@ -240,9 +240,14 @@ def merge(ledger: dict, found: dict[str, list[dict]], manifest: dict,
             entry["last_seen"] = when
             entry["reviews"] += 1
             for where in item.get("where") or []:
-                w, _ = sanitise(str(where), manifest)
-                w = portable_where(w, manifest.get("repo"))
-                if w and w not in entry["where"]:
+                # Made relative BEFORE redaction: a checkout under a directory with a hex
+                # name (a temp dir, a hash-named volume) would lose its prefix to the SHA
+                # rule and never fold onto the repository's path.
+                w = portable_where(str(where), manifest.get("repo"))
+                if not w:
+                    continue
+                w, _ = sanitise(w, manifest)
+                if w not in entry["where"]:
                     entry["where"].append(w)
             for extra in ("owner", "severity", "weight"):
                 if item.get(extra) is not None:
