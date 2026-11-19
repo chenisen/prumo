@@ -93,6 +93,11 @@ def validate(profile: dict, schema: dict | None = None) -> tuple[list[str], list
             elif not waiver_in_force(waiver):
                 warnings.append(t("validate.waiver_expired", role=role,
                                   date=waiver.get("expires")))
+        # A check read by its exit code alone: anything that wraps the process can return
+        # 0 whatever happened inside. Seventeen secrets scans in a row were green that way.
+        if c.get("command") and not any(c.get(k) for k in
+                                        ("failure_pattern", "success_pattern", "progress_pattern")):
+            warnings.append(t("validate.check_exit_code_only", role=role))
 
     # --- a delivery reads the suite's progress: with no pattern for it, every delivery
     # stops on "nobody counted the suite", after the whole write stage has been paid for

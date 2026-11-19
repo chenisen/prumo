@@ -131,3 +131,21 @@ class TestWarnings(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestACheckReadByItsExitCodeAlone(unittest.TestCase):
+    """2026-11-19: seventeen secrets scans in a row were green — a container wrapper
+    returned 0 whether the scan failed to mount the repository or found four leaks."""
+
+    def test_a_command_with_no_output_pattern_is_warned(self):
+        p = minimal_profile()
+        p["checks"]["secrets"] = {"command": "scanner --repo {workdir}", "required": True}
+        _, warnings = validate(p)
+        self.assertIn(t("validate.check_exit_code_only", role="secrets"), warnings)
+
+    def test_any_output_pattern_is_enough(self):
+        for key in ("failure_pattern", "success_pattern", "progress_pattern"):
+            p = minimal_profile()
+            p["checks"]["secrets"] = {"command": "scanner", "required": True, key: "x"}
+            _, warnings = validate(p)
+            self.assertNotIn(t("validate.check_exit_code_only", role="secrets"), warnings, key)

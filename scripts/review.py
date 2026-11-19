@@ -248,6 +248,19 @@ def run_secrets_check(package: pathlib.Path, profile: dict, repo_dir: pathlib.Pa
         return {"ran": False, "state": "not_run", "reason": result.get("reason", "")}
     pattern = check.get("failure_pattern")
     red = result["exit_code"] != 0 or bool(pattern and re.search(pattern, output))
+    # A green has to be shown by the output, when the profile says how: seventeen scans
+    # in a row came out green while the container had failed to mount the repository,
+    # because the wrapper returned 0 either way (measured on 2026-11-19).
+    proof = check.get("success_pattern")
+    if not red and proof and not re.search(proof, output):
+        classes = read_json(package / "classes.json")
+        for c in classes:
+            if c["id"] == "A9" and c["state"] != "fired":
+                c.update(state="not_assessable", cause="check_unproven",
+                         reason=t("review.secrets_unproven", run=SECRETS_RUN))
+        write_json(package / "classes.json", classes)
+        return {"ran": False, "state": "not_run",
+                "reason": t("review.secrets_unproven", run=SECRETS_RUN)}
     if red:
         classes = read_json(package / "classes.json")
         lines = [l for l in output.splitlines() if re.match(r"\S+:\d+:", l)][:SECRETS_SHOWN]
@@ -260,7 +273,8 @@ def run_secrets_check(package: pathlib.Path, profile: dict, repo_dir: pathlib.Pa
         write_json(package / "classes.json", classes)
     return {"ran": True, "state": "red" if red else "green",
             "reason": t("review.secrets_found", run=SECRETS_RUN) if red
-                      else t("review.secrets_clean", run=SECRETS_RUN)}
+                      else t("review.secrets_clean", run=SECRETS_RUN) if (pattern or proof)
+                      else t("review.secrets_clean_exit_only", run=SECRETS_RUN)}
 
 
 def item_scope(package: pathlib.Path) -> dict:

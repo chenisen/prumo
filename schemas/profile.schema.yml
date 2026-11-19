@@ -326,6 +326,15 @@ $defs:
           (container, runner, wrapper) can swallow the code, and a green resting on the
           exit code alone is a green that never looked at the result. Absent is
           legitimate: the state then says, in words, that it rests on the exit code only.
+      success_pattern:
+        type: [string, "null"]
+        description: >
+          A regular expression that, matching the OUTPUT, proves the check actually ran
+          over something. Without a match the run is `not_run`, never green — whatever
+          the exit code. Measured on 2026-11-19: seventeen secrets scans in a row came out
+          green while the container had failed to mount the repository, or had found
+          four leaks, because the wrapper returned 0 either way. `failure_pattern` wins
+          over it.
       red_name_pattern:
         type: [string, "null"]
         description: >

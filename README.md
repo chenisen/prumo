@@ -326,6 +326,15 @@ checks:
     required: true
 ```
 
+**Scan the change, and make the output prove it.** A scanner over the whole tree charges
+every delivery with the repository's old leaks; scan `{base}..{head}` (a git-history mode,
+like the carried script's). And a wrapper — a container above all — may return 0 whatever
+happened inside: declare `failure_pattern` (what a leak looks like in the output) and
+`success_pattern` (what a completed scan looks like). Without a `success_pattern` match the
+run is `not_run`, never green; with no pattern at all, `validate_profile.py` warns. Measured
+on 2026-11-19: seventeen scans in a row were green while the container had failed to mount
+the repository, or had found four leaks.
+
 ### 4. Say who you are
 
 Someone has to sign the human acts a profile records — a waiver, a `not_applicable`.

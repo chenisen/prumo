@@ -108,8 +108,40 @@ class TestTheReviewRunsIt(unittest.TestCase):
         pkg, profile = self.package_for(d)
         out = review.run_secrets_check(pkg, profile, d)
         self.assertEqual((out["state"], out["reason"]),
-                         ("green", t("review.secrets_clean", run=review.SECRETS_RUN)))
+                         ("green", t("review.secrets_clean_exit_only", run=review.SECRETS_RUN)))
         self.assertEqual(json.loads((pkg / "classes.json").read_text())[0]["state"], "did_not_fire")
+
+    def test_a_green_the_output_proves_says_so(self):
+        import review
+        d = repo_with("", "key = ''\n")
+        pkg, profile = self.package_for(d)
+        profile["checks"]["secrets"]["success_pattern"] = "no secret found"
+        out = review.run_secrets_check(pkg, profile, d)
+        self.assertEqual((out["state"], out["reason"]),
+                         ("green", t("review.secrets_clean", run=review.SECRETS_RUN)))
+
+    def test_exit_zero_with_output_that_proves_nothing_is_not_green(self):
+        """2026-11-19: seventeen scans green while the container had failed to mount the
+        repository — the wrapper returned 0 either way."""
+        import review
+        d = repo_with("", "key = ''\n")
+        pkg, profile = self.package_for(d)
+        # exits 0 and prints nothing that shows a scan, as the container did
+        profile["checks"]["secrets"]["command"] = f"{sys.executable} -c print(0)"
+        profile["checks"]["secrets"]["success_pattern"] = r"INF scanned ~"
+        out = review.run_secrets_check(pkg, profile, d)
+        self.assertEqual((out["ran"], out["state"]), (False, "not_run"))
+        a9 = json.loads((pkg / "classes.json").read_text())[0]
+        self.assertEqual((a9["state"], a9["cause"]), ("not_assessable", "check_unproven"))
+
+    def test_the_failure_pattern_wins_over_the_success_pattern(self):
+        import review
+        d = repo_with("", "key = ''\n")
+        pkg, profile = self.package_for(d)
+        # exits 0, and its output matches both: the leak is what counts
+        profile["checks"]["secrets"]["command"] = f"{sys.executable} -c print(41+1)"
+        profile["checks"]["secrets"].update(success_pattern="4", failure_pattern=r"42")
+        self.assertEqual(review.run_secrets_check(pkg, profile, d)["state"], "red")
 
     def test_no_command_no_run(self):
         import review

@@ -553,6 +553,8 @@ review:
   stop: 'stop: {reason}'
   secrets_found: 'the secrets scan found something. Its lines are in `{run}`, and A9 fired.'
   secrets_clean: 'the secrets scan found nothing in this change. Its output is in `{run}`.'
+  secrets_clean_exit_only: 'the secrets scan exited 0, and that is all that says it found nothing: the profile declares no pattern to read its output. Its output is in `{run}`.'
+  secrets_unproven: 'the secrets scan did not show it ran — its output does not match the profile''s `success_pattern`. A9 was not assessed. Its output is in `{run}`.'
   secrets_line: 'secrets: {state} — {reason}'
   suite_not_run: the suite was not run in this round
   telemetry_at: 'telemetry: {path}'
@@ -673,6 +675,7 @@ validate:
     the write stage, because nothing counts the suite.'
   check_without_tool: 'checks.{role}: required and with no tool — every review will open `capacidade_ausente`
     until there is a command or a waiver'
+  check_exit_code_only: '`checks.{role}` is judged by its exit code alone — a container or wrapper that returns 0 whatever happened makes every run green; declare `failure_pattern` and `success_pattern`'
   confirmation_requires: '{field}: required when status is `confirmado` — confirming a profile
     is a human act, and the person is named'
   confirmed_at_date: 'confirmed_at: date must be YYYY-MM-DD'

@@ -554,6 +554,8 @@ review:
   step_failed: o passo `{path}` terminou com código {n} — a revisão para aqui
   stop: 'parada: {reason}'
   secrets_found: 'a varredura de segredos achou algo. As linhas estão em `{run}`, e A9 disparou.'
+  secrets_clean_exit_only: 'a varredura de segredos saiu com 0, e só isso diz que nada foi achado: o perfil não declara padrão para ler a saída. A saída está em `{run}`.'
+  secrets_unproven: 'a varredura de segredos não mostrou que rodou — a saída não casa o `success_pattern` do perfil. A9 não foi avaliada. A saída está em `{run}`.'
   secrets_clean: 'a varredura de segredos não achou nada nesta mudança. A saída está em `{run}`.'
   secrets_line: 'segredos: {state} — {reason}'
   suite_not_run: a suíte não foi executada nesta rodada
@@ -675,6 +677,7 @@ validate:
     da escrita, porque nada conta a suíte.'
   check_without_tool: 'checks.{role}: obrigatória e sem ferramenta — toda revisão abrirá `capacidade_ausente`
     até haver comando ou dispensa'
+  check_exit_code_only: '`checks.{role}` é julgada só pelo código de saída — um container ou invólucro que devolve 0 aconteça o que acontecer torna toda execução verde; declare `failure_pattern` e `success_pattern`'
   confirmation_requires: '{field}: obrigatório quando status é `confirmado` — confirmar um perfil
     é ato de pessoa, e a pessoa é nomeada'
   confirmed_at_date: 'confirmed_at: data deve ser AAAA-MM-DD'
