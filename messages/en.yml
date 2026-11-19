@@ -533,6 +533,7 @@ review:
   preflight_wrote_nothing: 'the preflight wrote no {path}: its own message above says why, and the review does not start without it'
   impediment_open: the review does not start with an open impediment
   head_tree_failed: 'the reviewed head could not be checked out on its own ({reason}): the agents read the repository''s checkout, which may not be the head'
+  knowledge_handed: 'what earlier reviews learned: {lines} entries ({kb} KB) handed to the reviewers'
   invoke_workflow: 'Invoke the workflow with:'
   marker_removed: 'marker removed: {path}'
   never: Merge and the {item}'s column NEVER — not even with authorisation.

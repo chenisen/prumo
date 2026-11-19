@@ -684,6 +684,16 @@ def prepare(args) -> int:
             f"profile: {args.repo}\nstatus: ausente\nanchors: {{}}\nconventions: []\n",
             encoding="utf-8")
 
+    # What earlier reviews of this repository saw twice, capped (since 2026-11-19). The
+    # reviewers read it as a shortcut; the sceptics are not handed it, so a refutation
+    # stays a reading of the code alone.
+    from knowledge import reading_for_reviewers
+    learned = reading_for_reviewers(args.repo)
+    if learned:
+        (package / KNOWLEDGE_FILE).write_text(learned, encoding="utf-8")
+        print(t("review.knowledge_handed", lines=learned.count("\n- ["),
+                kb=round(len(learned.encode("utf-8")) / 1024, 1)))
+
     # An empty diff is not a clean review: it is the absence of an object. Spawning a
     # reviewer to read nothing would produce an APPROVED with no content, which is worse
     # than no answer at all.
@@ -819,6 +829,7 @@ def stale_numbers(patch: str, own_commits: list[str]) -> list[dict]:
 # differs per slice, and putting it in the prompt would pay for it in every agent that
 # does not need it, which is the opposite of what the slices are for.
 INLINE_CEILING = 24_000   # bytes, per file: above this, pointing at it is cheaper
+KNOWLEDGE_FILE = "knowledge.md"
 
 # `proposal.md` belongs here for the same reason `item.md` does, and its absence was a
 # silent hole: the description was demanded at the gate, copied into the package, and
@@ -834,7 +845,7 @@ INLINE_CEILING = 24_000   # bytes, per file: above this, pointing at it is cheap
 # a file too big to share is already pointed at, not carried.
 INLINE_FILES = ("manifest.json", "capabilities.json", "profile.yml", "classes.json",
                 "criteria.json", "item.md", "proposal.md", "out-of-scope.json",
-                "delivery-record.json", DIGEST_FILE, CANDIDATES_FILE)
+                "delivery-record.json", DIGEST_FILE, CANDIDATES_FILE, KNOWLEDGE_FILE)
 
 
 def inline_payload(package: pathlib.Path) -> dict:

@@ -344,6 +344,61 @@ def distil(ledger: dict) -> str:
 
 # ----------------------------------------------------------------- entry point
 
+# What the reviewers are handed, at most. Decided on 2026-11-19, when the ledgers had
+# mass (251 entries over 25 reviews in one repository, a 26 KB reading): the whole
+# reading in every reviewer's context costs more than the rediscovery it saves on a
+# small delivery, so they get the most corroborated part, and the rest stays on disk.
+REVIEWER_BYTES = 6_000
+# The turn in which each kind is taken: the shape of the code, what is already broken (so
+# it is not raised as this delivery's), the repository's own debt, where the reviews keep
+# having to look.
+REVIEWER_ORDER = ("convention", "preexisting", "project_debt", "hot_file")
+
+
+def reading_for_reviewers(repo: str, root: pathlib.Path | None = None,
+                          limit: int = REVIEWER_BYTES) -> str | None:
+    """The part of the ledger a reviewer reads before the change. Only what two reviews
+    saw; a hot file that is a package path is never in it; most corroborated first;
+    capped, and the cap is said, never silent. `None` when there is nothing to hand —
+    a repository nobody reviewed twice gets no section at all."""
+    path = (root or dir_knowledge()) / f"{repo}.json"
+    if not path.exists():
+        return None
+    ledger = read_json(path)
+    entries = [e for e in ledger.get("entries") or []
+               if e.get("reviews", 0) >= CORROBORATED and e.get("kind") in REVIEWER_ORDER
+               and (e["kind"] != "hot_file" or portable_where(e["statement"], repo))]
+    if not entries:
+        return None
+    # Taken in turns across the kinds, each kind most corroborated first. Kind by kind,
+    # one repository's 32 conventions filled the cap and its pre-existing defects — the
+    # entries that keep a reviewer from charging this delivery for them — never arrived.
+    by_kind = {k: sorted((e for e in entries if e["kind"] == k), key=lambda e: -e.get("reviews", 0))
+               for k in REVIEWER_ORDER}
+    entries = []
+    while any(by_kind.values()):
+        for k in REVIEWER_ORDER:
+            if by_kind[k]:
+                entries.append(by_kind[k].pop(0))
+    head = (f"What {ledger.get('reviews', 0)} earlier review(s) of this repository saw at "
+            "least twice. A shortcut for reading, never an authority: confirm against the "
+            "code before relying on it. Nothing here is a finding, nothing here decides, "
+            "and a defect listed as pre-existing is not this delivery's.\n")
+    lines, size, held = [], len(head.encode("utf-8")), 0
+    for e in entries:
+        places = list(dict.fromkeys(filter(None, (portable_where(w, repo) for w in e.get("where") or []))))
+        line = (f"- [{e['kind']}] {e['statement']}"
+                + (f" — {', '.join(places[:2])}" if places else "") + "\n")
+        if size + len(line.encode("utf-8")) > limit:
+            held += 1
+            continue
+        lines.append(line)
+        size += len(line.encode("utf-8"))
+    tail = (f"- ({held} more held back by size; the whole reading is outside this package)\n"
+            if held else "")
+    return head + "".join(lines) + tail
+
+
 def accrue(package: pathlib.Path, conventions_file: str | None,
            output: pathlib.Path | None = None) -> dict:
     manifest = read_json(package / "manifest.json")

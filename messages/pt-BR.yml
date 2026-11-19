@@ -533,6 +533,7 @@ review:
   preflight_wrote_nothing: 'o preflight não escreveu {path}: a mensagem dele acima diz por quê, e a revisão não começa sem isso'
   impediment_open: a revisão não começa com impedimento aberto
   head_tree_failed: 'não foi possível montar a cabeça revisada à parte ({reason}): os agentes leem o checkout do repositório, que pode não ser a cabeça'
+  knowledge_handed: 'o que revisões anteriores aprenderam: {lines} entradas ({kb} KB) entregues aos revisores'
   invoke_workflow: 'Invoque o workflow com:'
   marker_removed: 'marcador removido: {path}'
   never: Merge e a coluna d{item_with_article} NUNCA — nem com autorização.

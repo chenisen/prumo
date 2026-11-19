@@ -332,6 +332,13 @@ opening, the debt the repository has declared, and the defects no delivery cause
 the **profile's unconfirmed sibling** — the profile is what a person signed, this is what
 the machine noticed.
 
+**Since 2026-11-19 the reviewers read it.** `prepare` hands them `knowledge.md`, built by
+`reading_for_reviewers()`: only what two reviews saw, the kinds taken in turns (a pile of
+conventions once crowded out every pre-existing defect), most corroborated first, capped
+at 6 KB with the cap stated — the whole reading of one repository had reached 26 KB per
+reviewer. No address inside a review package survives into it. The sceptics are not
+handed it: a refutation stays a reading of the code alone.
+
 Four rules, and each one closes a hole the method has already paid for:
 
 - **Nothing here closes a gate.** The fifth gate measures whether the review actually

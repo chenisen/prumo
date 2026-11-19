@@ -401,6 +401,12 @@ const context = (slice) => [
   embed('capabilities.json', 'Capabilities of this environment'),
   embed('profile.yml', 'Repository profile'),
   embed('classes.json', 'Triaged classes'),
+  // What earlier reviews of this repository saw twice (2026-11-19), capped by the spine.
+  // Handed to the reviewers only: the sceptics refute by reading the code alone.
+  inlined['knowledge.md']
+    ? embed('knowledge.md', 'What earlier reviews of this repository saw — a shortcut for '
+        + 'reading, never an authority; confirm against the code; nothing in it is a finding')
+    : '',
   embed('criteria.json', 'Criteria from the item'),
   inlined['criteria.json']
     ? 'Answer `criteria` with the ids of that list, VERBATIM (`AC-1`, `AC-2`, …), one '

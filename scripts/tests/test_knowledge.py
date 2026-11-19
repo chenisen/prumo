@@ -221,3 +221,66 @@ class TestAccrual(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestTheReviewersReading(unittest.TestCase):
+    """Since 2026-11-19 the reviewers are handed what earlier reviews saw twice — capped,
+    because the whole reading of one repository was 26 KB per reviewer."""
+
+    def ledger(self, entries, reviews=5):
+        root = pathlib.Path(tempfile.mkdtemp())
+        (root / "repo-x.json").write_text(json.dumps(
+            {"repo": "repo-x", "reviews": reviews, "entries": entries}), encoding="utf-8")
+        return root
+
+    def entry(self, kind, statement, reviews=2, where=()):
+        return {"kind": kind, "key": f"{kind}:{statement}", "statement": statement,
+                "reviews": reviews, "where": list(where)}
+
+    def test_a_repository_nobody_reviewed_twice_gets_nothing(self):
+        self.assertIsNone(knowledge.reading_for_reviewers("repo-x", pathlib.Path(tempfile.mkdtemp())))
+        root = self.ledger([self.entry("convention", "Seen once", reviews=1)])
+        self.assertIsNone(knowledge.reading_for_reviewers("repo-x", root))
+
+    def test_only_what_two_reviews_saw_taken_in_turns_across_kinds(self):
+        root = self.ledger([self.entry("hot_file", "app/Hot.php", reviews=9),
+                            self.entry("convention", "Guards return early", reviews=3),
+                            self.entry("convention", "Seen once", reviews=1),
+                            self.entry("preexisting", "Masking misses phones", reviews=2)])
+        reading = knowledge.reading_for_reviewers("repo-x", root)
+        self.assertNotIn("Seen once", reading)
+        self.assertLess(reading.index("Guards return early"), reading.index("Masking misses phones"))
+        self.assertLess(reading.index("Masking misses phones"), reading.index("app/Hot.php"))
+        self.assertIn("never an authority", reading)
+
+    def test_many_conventions_do_not_crowd_out_a_pre_existing_defect(self):
+        """Measured on a real ledger: 32 conventions filled the cap kind by kind."""
+        root = self.ledger([self.entry("convention", f"Convention {n} " + "x" * 300) for n in range(40)]
+                           + [self.entry("preexisting", "Masking misses phones")])
+        self.assertIn("Masking misses phones",
+                      knowledge.reading_for_reviewers("repo-x", root, limit=2000))
+
+    def test_the_cap_holds_and_says_what_it_held_back(self):
+        root = self.ledger([self.entry("convention", f"Convention number {n} " + "x" * 200)
+                            for n in range(100)])
+        reading = knowledge.reading_for_reviewers("repo-x", root, limit=2000)
+        self.assertLessEqual(len(reading.encode("utf-8")), 2000 + 200)
+        self.assertRegex(reading, r"\(\d+ more held back by size")
+
+    def test_no_package_path_reaches_a_reviewer(self):
+        import common
+        root = self.ledger([
+            self.entry("hot_file", f"{common.dir_packages()}/repo-x-deliver-9/approval.json"),
+            self.entry("convention", "S", where=[f"{common.dir_packages()}/r-1/slices/complete.patch", "app/X.php"])])
+        reading = knowledge.reading_for_reviewers("repo-x", root)
+        self.assertNotIn("approval.json", reading)
+        self.assertNotIn("slices", reading)
+        self.assertIn("- [convention] S — app/X.php", reading)
+
+    def test_the_reading_travels_inline_to_the_reviewers_only(self):
+        import review
+        self.assertIn("knowledge.md", review.INLINE_FILES)
+        src = (ROOT.parent / "workflows" / "task-review.js").read_text(encoding="utf-8")
+        context = src[src.index("const context = (slice)"):src.index("const review = async")]
+        self.assertIn("embed('knowledge.md'", context)
+        self.assertEqual(src.count("knowledge.md'"), 2)  # the guard and the embed, nowhere else
