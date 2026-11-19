@@ -60,6 +60,37 @@ def fetch_proposal_ref(repo_dir: pathlib.Path, iid: int) -> str | None:
     return git(repo_dir, "rev-parse", "--verify", "-q", f"refs/prumo/proposta-{iid}") or None
 
 
+# Long enough for a large repository over a slow link; short enough that a hung remote
+# does not hold the review. Past it the base is measured as it is, and the report says so.
+FETCH_TIMEOUT_SECONDS = 120
+
+
+def refresh_remote_branch(repo_dir: pathlib.Path, name: str) -> tuple[bool | None, str | None]:
+    """Brings `origin/<name>` up to the remote before anything is measured against it.
+
+    Until 2026-11-19 nothing here fetched: a base 35 commits behind put the deliveries
+    already merged into the package (92 files and 4,955 lines against the 10 files and
+    432 lines of the proposal), and a reviewer reading a stale checkout raised a
+    `required` finding about a method the head had. The remedy was a fetch by hand before
+    every prepare, which is exactly the kind of step that is forgotten.
+
+    Returns `(True, None)` refreshed, `(False, reason)` tried and failed — no network, no
+    such branch on the remote — and `(None, None)` when there is no remote to ask. A
+    failure never stops the review: it measures what it has and SAYS it is not fresh."""
+    if not git(repo_dir, "remote", "get-url", "origin"):
+        return None, None
+    try:
+        r = subprocess.run(("git", "fetch", "-q", "origin",
+                            f"+refs/heads/{name}:refs/remotes/origin/{name}"),
+                           cwd=repo_dir, capture_output=True, text=True,
+                           timeout=FETCH_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        return False, f"git fetch > {FETCH_TIMEOUT_SECONDS}s"
+    if r.returncode != 0:
+        return False, ((r.stderr or "").strip().splitlines() or ["git fetch failed"])[-1][:200]
+    return True, None
+
+
 def resolve(repo: str, mr: int | None, branch: str | None, item: str | None,
             base: str | None = None) -> dict:
     repo_dir = dir_repositories() / repo
@@ -80,6 +111,7 @@ def resolve(repo: str, mr: int | None, branch: str | None, item: str | None,
     base_name = (profile.get("base") or {}).get("branch") or "main"
     base_ref = f"origin/{base_name}"
     base_local = False
+    fetched, fetch_reason = (None, None) if base else refresh_remote_branch(repo_dir, base_name)
     # A base a person names for THIS review — a ref or a commit — when the branch has more
     # than one common ancestor with the profile's: a branch cut from another line and
     # merged with the work it needs measures against what it was built on. Twice on
@@ -106,6 +138,9 @@ def resolve(repo: str, mr: int | None, branch: str | None, item: str | None,
                                proposal=forge().proposal,
                                proposal_with_article=forge().with_article()))
     elif branch:
+        # A branch that lives only here (a delivery not pushed yet) fails the fetch and is
+        # read locally below; that failure says nothing about the review, so it is not kept.
+        refresh_remote_branch(repo_dir, branch)
         # `--verify -q` is not fussiness: without it, `rev-parse` ECHOES its argument when
         # the ref does not exist, and a branch name walks on pretending to be a SHA. The
         # manifest comes out with `head_sha: "origin/my-branch"`, the diff comes back
@@ -129,17 +164,20 @@ def resolve(repo: str, mr: int | None, branch: str | None, item: str | None,
     commit_format = (profile.get("delivery") or {}).get("commit_format")
     derived = next((found for found in (item_of_subject(s, commit_format) for s in subjects) if found), None)
 
+    source = (t("resolver.base_given") if base
+              else (t("resolver.base_local") if base_local
+                    else t("resolver.base_from_profile"))
+              if base_name == (profile.get("base") or {}).get("branch")
+              else t("resolver.base_from_head"))
+    if fetched is False and not base_local:
+        source = t("resolver.base_not_refreshed", source=source, reason=fetch_reason)
     return {
         "repo": repo,
         "origin": origin,
         "origin_kind": origin_kind,
         "base": {"name": base_name, "ref": base_ref, "sha": base_sha,
-                 "local": base_local,
-                 "source": t("resolver.base_given") if base
-                          else (t("resolver.base_local") if base_local
-                                else t("resolver.base_from_profile"))
-                          if base_name == (profile.get("base") or {}).get("branch")
-                          else t("resolver.base_from_head")},
+                 "local": base_local, "fetched": fetched,
+                 "source": source},
         "head_sha": head,
         "merge_base": merge_base,
         "commits_behind_base": int(behind or 0),

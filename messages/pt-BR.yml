@@ -473,6 +473,7 @@ resolver:
   base_from_head: origin/HEAD (a base do perfil não resolveu)
   base_from_profile: perfil
   base_local: ramo LOCAL, sem remoto — pode estar atrás
+  base_not_refreshed: '{source} — NÃO atualizada do remoto ({reason}): pode estar atrás dele'
   base_unresolved: 'a base não resolve: tentei `origin/{base}`, `origin/HEAD` e o ramo local `{base}`.
     Declare a base em `base.branch` no perfil de `{repo}`, ou busque o remoto (`git fetch origin`).'
   branch_unresolved: a branch `{branch}` não resolve, nem local nem em `origin`
@@ -531,6 +532,7 @@ review:
   impediment: 'IMPEDIMENTO: {reason}'
   preflight_wrote_nothing: 'o preflight não escreveu {path}: a mensagem dele acima diz por quê, e a revisão não começa sem isso'
   impediment_open: a revisão não começa com impedimento aberto
+  head_tree_failed: 'não foi possível montar a cabeça revisada à parte ({reason}): os agentes leem o checkout do repositório, que pode não ser a cabeça'
   invoke_workflow: 'Invoque o workflow com:'
   marker_removed: 'marcador removido: {path}'
   never: Merge e a coluna d{item_with_article} NUNCA — nem com autorização.

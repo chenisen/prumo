@@ -61,6 +61,16 @@ for (const field of ['package', 'plan', 'classes']) {
   }
 }
 const { package: bundle, plan, profile, classes } = input
+// The code at the REVIEWED HEAD, checked out on its own by `review.py prepare`. Without
+// it the agents read the repository's checkout, which may be on another branch or behind:
+// a `required` finding about a method "that does not exist" was once confirmed by the
+// verifier — the head had it, only the checkout did not.
+const HEAD_TREE = input.head_tree
+  ? `The repository AT THE REVIEWED HEAD is checked out at ${input.head_tree}. Read every ` +
+    'repository file there — never in the repository\'s own checkout, which may be on another ' +
+    'branch or behind. Only dependencies (vendor, node_modules) are not there; for those, ' +
+    'the checkout.'
+  : ''
 
 // The agents TRAVEL WITH THE METHOD: they are files of this very repository, registered
 // by the plugin, not something whoever installs has to copy into `.claude/agents/`. The
@@ -386,6 +396,7 @@ if (inlined['criteria.json']) {
 
 const context = (slice) => [
   `Package: ${bundle}`,
+  HEAD_TREE,
   embed('manifest.json', 'Manifest'),
   embed('capabilities.json', 'Capabilities of this environment'),
   embed('profile.yml', 'Repository profile'),
@@ -603,6 +614,7 @@ const belowBlocking = findings.filter((f) => !['critical', 'required'].includes(
                                           && f.attributable !== false)
 const lightReading = () => (belowBlocking.length
   ? agent([
+      HEAD_TREE,
       `Try to REFUTE each of these ${belowBlocking.length} findings. You have not seen the ` +
       'reasoning of whoever raised them. They are below the blocking severities, so read ' +
       'each one quickly, but read it: open the line its evidence points at and say whether ' +
@@ -635,6 +647,7 @@ const lightReading = () => (belowBlocking.length
 const verifyBlocking = () => pipeline(blocking, (f) =>
   agent([
     'Try to REFUTE this finding. You have not seen the reasoning of whoever raised it.',
+    HEAD_TREE,
     `Claim: ${f.claim}`,
     `Alleged consequence: ${f.consequence}`,
     `Evidence pointed at: ${JSON.stringify(f.evidence)}`,
@@ -785,6 +798,7 @@ const scripts = templatable
       'item, the origin and the two SHAs. Every script must verify THAT delivery. Any',
       'report, package or item you find elsewhere on disk belongs to a different review:',
       'do not read it, and never take its item id, its SHAs or its findings as yours.',
+      HEAD_TREE,
       `Classes: ${JSON.stringify(needsScript.map((c) => ({ id: c.id, reason: c.reason })))}`,
       // The anchors come inline and without `cards`: an anchor's cards are the items that
       // taught the profile the class, and a planner once wrote one into its script as the

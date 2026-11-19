@@ -97,3 +97,70 @@ class ABaseNamedForTheReview(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheBaseIsRefreshedFromTheRemote(unittest.TestCase):
+    """Until 2026-11-19 nothing fetched the base: a base 35 commits behind put deliveries
+    already merged into the package, and the remedy was a fetch by hand before every
+    prepare. The resolver brings `origin/<base>` up first — and when it cannot, it
+    measures what it has and says the base is not fresh, never stops."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = pathlib.Path(self.tmp.name).resolve()
+        self.remote = root / "remote"
+        self.remote.mkdir()
+        git(self.remote, "init", "-q", "-b", "main")
+        git(self.remote, "config", "user.email", "t@t")
+        git(self.remote, "config", "user.name", "t")
+        commit(self.remote, "root")
+        git(self.remote, "checkout", "-qb", "item")
+        commit(self.remote, "the-item")
+        git(self.remote, "checkout", "-q", "main")
+        (root / "repositories").mkdir()
+        self.repo = root / "repositories" / "repo-x"
+        git(root / "repositories", "clone", "-q", str(self.remote), "repo-x")
+        # the team moves on after this clone
+        self.moved = commit(self.remote, "merged-by-somebody-else")
+        (root / "profiles").mkdir()
+        (root / "profiles" / "repo-x.yml").write_text("profile: repo-x\nbase:\n  branch: main\n",
+                                                      encoding="utf-8")
+        (root / "prumo.yml").write_text(textwrap.dedent('''\
+            prumo: 1
+            language: en
+            paths:
+              repositories: ./repositories
+              profiles: ./profiles
+              reports: ./reports
+              packages: ./packages
+            tracker:
+              type: businessmap
+              url: "https://example.invalid/cards/{id}"
+            forge:
+              type: gitlab
+            '''), encoding="utf-8")
+        self.env = dict(os.environ)
+        os.environ["PRUMO_CONFIG"] = str(root / "prumo.yml")
+        common.cfg.cache_clear()
+
+    def tearDown(self):
+        os.environ.clear()
+        os.environ.update(self.env)
+        common.cfg.cache_clear()
+        self.tmp.cleanup()
+
+    def test_the_base_is_the_remote_s_not_the_clone_s(self):
+        r = resolver.resolve("repo-x", None, "item", "1")
+        self.assertEqual(r["base"]["sha"], self.moved)
+        self.assertIs(r["base"]["fetched"], True)
+
+    def test_an_unreachable_remote_measures_what_is_here_and_says_so(self):
+        git(self.repo, "remote", "set-url", "origin", str(self.remote.parent / "nowhere"))
+        r = resolver.resolve("repo-x", None, "item", "1")
+        self.assertNotEqual(r["base"]["sha"], self.moved)
+        self.assertIs(r["base"]["fetched"], False)
+        self.assertIn("NOT refreshed", r["base"]["source"])
+
+    def test_a_named_base_is_not_fetched(self):
+        r = resolver.resolve("repo-x", None, "item", "1", base="origin/main")
+        self.assertIsNone(r["base"]["fetched"])

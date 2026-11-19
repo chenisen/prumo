@@ -472,6 +472,7 @@ resolver:
   base_from_head: origin/HEAD (the profile's base did not resolve)
   base_from_profile: profile
   base_local: LOCAL branch, no remote — may be behind
+  base_not_refreshed: '{source} — NOT refreshed from the remote ({reason}): it may be behind it'
   base_unresolved: 'the base does not resolve: tried `origin/{base}`, `origin/HEAD` and the local
     branch `{base}`. Declare the base in `base.branch` in the profile for `{repo}`, or fetch the
     remote (`git fetch origin`).'
@@ -531,6 +532,7 @@ review:
   impediment: 'IMPEDIMENT: {reason}'
   preflight_wrote_nothing: 'the preflight wrote no {path}: its own message above says why, and the review does not start without it'
   impediment_open: the review does not start with an open impediment
+  head_tree_failed: 'the reviewed head could not be checked out on its own ({reason}): the agents read the repository''s checkout, which may not be the head'
   invoke_workflow: 'Invoke the workflow with:'
   marker_removed: 'marker removed: {path}'
   never: Merge and the {item}'s column NEVER — not even with authorisation.

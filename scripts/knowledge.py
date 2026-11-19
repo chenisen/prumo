@@ -101,6 +101,19 @@ def _key(kind: str, text: str) -> str:
     return f"{kind}:{re.sub(r'\s+', ' ', text).strip().lower()[:160]}"
 
 
+def head_tree_folder(package: pathlib.Path):
+    """Since 2026-11-19 the agents read the reviewed head in a worktree of its own, whose
+    path changes with every review. A path read there is folded back onto the
+    repository's, or the same file would count once per review under forty different
+    names and never be "hot"."""
+    tree_file = package / "head-tree.json"
+    if not tree_file.exists():
+        return lambda path: path
+    tree = json.loads(tree_file.read_text(encoding="utf-8"))
+    return lambda path: (tree["repo"] + path[len(tree["path"]):]
+                         if path.startswith(tree["path"] + "/") else path)
+
+
 def hot_files(package: str) -> list[dict]:
     """Which repository files the reviewers of this run actually opened.
 
@@ -119,6 +132,8 @@ def hot_files(package: str) -> list[dict]:
     if not agents_dir.is_dir():
         return []
 
+    fold = head_tree_folder(pathlib.Path(package))
+
     counts: collections.Counter = collections.Counter()
     for transcript in agents_dir.glob("agent-*.jsonl"):
         seen_here = set()
@@ -136,7 +151,7 @@ def hot_files(package: str) -> list[dict]:
                 path = (block.get("input") or {}).get("file_path")
                 if not path or package in str(path):
                     continue
-                seen_here.add(str(path))
+                seen_here.add(fold(str(path)))
         # One count per agent, not per read: an agent that reread a file three times says
         # nothing more about the repository than one that read it once.
         counts.update(seen_here)

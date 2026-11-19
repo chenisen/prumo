@@ -111,6 +111,49 @@ def unmark() -> None:
     marker().unlink(missing_ok=True)
 
 
+# The code the agents read is the reviewed HEAD, checked out on its own. Measured on
+# 2026-11-10: the reviewers read the repository's checkout, which was behind, an
+# architecture reviewer said a handler called a method that did not exist, and the
+# verifier CONFIRMED it — the method was there in the base and in the head; only the
+# checkout lacked it. A `required` false positive that closes gate 1 on its own, and the
+# sceptic cannot catch it because it reads the same wrong tree.
+HEAD_TREE_FILE = "head-tree.json"
+
+
+def add_head_tree(repo_dir: pathlib.Path, head: str, package: pathlib.Path) -> pathlib.Path | None:
+    """A detached worktree at the reviewed head, under the repository's `.worktrees/`
+    (kept out of git status by `.git/info/exclude`, as a delivery's is). Detached on
+    purpose: no branch is created or moved, so nothing here is a write the guard has to
+    judge. `None` when git refuses — the review goes on, and the workflow says the agents
+    read the checkout."""
+    path = repo_dir / ".worktrees" / f"prumo-review-{package.name}"
+    exclude = repo_dir / ".git" / "info" / "exclude"
+    if exclude.parent.is_dir():
+        text = exclude.read_text(encoding="utf-8") if exclude.exists() else ""
+        if ".worktrees/" not in text:
+            exclude.write_text(text.rstrip("\n") + "\n.worktrees/\n", encoding="utf-8")
+    if not path.exists():
+        r = subprocess.run(("git", "-C", str(repo_dir), "worktree", "add", "--detach", "-q",
+                            str(path), head), capture_output=True, text=True)
+        if r.returncode != 0:
+            print("  " + t("review.head_tree_failed", reason=(r.stderr or "").strip()[:200]))
+            return None
+    write_json(package / HEAD_TREE_FILE, {"path": str(path), "repo": str(repo_dir), "sha": head})
+    return path
+
+
+def remove_head_tree(package: pathlib.Path | None) -> None:
+    """The head's worktree goes when the review ends. Only the one this package recorded:
+    a path written anywhere else is never removed from here."""
+    record = package / HEAD_TREE_FILE if package else None
+    if not record or not record.exists():
+        return
+    tree = read_json(record)
+    if pathlib.Path(tree["path"]).exists():
+        subprocess.run(("git", "-C", tree["repo"], "worktree", "remove", "--force", tree["path"]),
+                       capture_output=True, text=True)
+
+
 def _py(script: str, *args: str, check: bool = True) -> None:
     """Runs one step of the spine. A failed step is a stop, not a warning.
 
@@ -676,8 +719,11 @@ def prepare(args) -> int:
         sha = (read_json(package / "delivery-record.json").get("branch") or {}).get("sha") or "?"
         print("  " + t("review.delivery_record_set_aside", sha=sha[:12],
                        head=read_json(package / "manifest.json")["head_sha"][:12]))
+    head_tree = add_head_tree(dir_repositories() / args.repo,
+                              read_json(package / "manifest.json")["head_sha"], package)
     workflow_args = {
         "package": str(package),
+        "head_tree": str(head_tree) if head_tree else None,
         "plan": plan,
         "profile": {"status": profile.get("status"),
                     "conventions": profile.get("conventions") or [],
@@ -1057,6 +1103,7 @@ def conclude(args) -> int:
     print(t("review.freshness_note", head=man["head_sha"][:12], repo=man["repo"],
             origin=man["origin"]))
     print(t("review.never", **vocab))
+    remove_head_tree(package)
     unmark()
     return 0
 
@@ -1153,6 +1200,12 @@ def main() -> int:
     hint_config(getattr(args, "package", None), getattr(args, "item_file", None),
                 getattr(args, "delivery", None), getattr(args, "workflow_result", None))
     if args.command == "release":
+        # A review let go by hand takes its head worktree with it — the marker names the package.
+        try:
+            held = json.loads(marker().read_text(encoding="utf-8")).get("package")
+        except (OSError, ValueError):
+            held = None
+        remove_head_tree(pathlib.Path(held) if held else None)
         unmark()
         print(t("review.marker_removed", path=marker()))
         return 0

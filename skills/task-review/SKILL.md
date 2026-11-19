@@ -122,6 +122,13 @@ review.py conclude --package P --workflow-result W                # F7 F9 F11 F1
 ```
 
 `prepare` prints the workflow invocation already assembled, with the activation plan.
+It first brings `origin/<base>` (and the branch, for a `--branch` origin) up from the
+remote — a base that could not be refreshed is measured as it is and the report's *Base*
+line says so — and checks the reviewed head out on its own, detached, under the
+repository's `.worktrees/`: every agent reads the code THERE, never in the checkout,
+which may be on another branch or behind. `conclude` and `release` take that worktree
+away. Both since 2026-11-19, after a stale base put deliveries already merged into one
+package and a stale checkout made a verifier confirm a method "that does not exist".
 `W` is the object the workflow returned, saved as a JSON file — or the harness's own
 output file for the task, as it came (`{summary, logs, result, …}`): `conclude` reads its
 `result` and says so. It splits the object into `findings.json`, `coverage.json`,
