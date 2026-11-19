@@ -22,7 +22,7 @@ Presets exist so the configuration can be short, not so it can be optional: you 
 field and override only that one.
 
 Usage:
-    from providers import load_config, test_config
+    from providers import load_config, config_for_tests
     cfg = load_config()                 # finds prumo.yml, validates, resolves presets
     cfg.forge.proposal_ref(820)         # 'refs/merge-requests/820/head'
 """
@@ -700,10 +700,11 @@ def load_config(start: pathlib.Path | None = None) -> Config:
         raise InvalidConfiguration(f"{path}: {e}") from e
 
 
-def test_config(**overrides) -> Config:
+def config_for_tests(**overrides) -> Config:
     """A minimal config for tests, touching no disk. Not for production: the paths point
     at /tmp on purpose, so a test that writes in the wrong place fails visibly instead of
-    littering the workspace."""
+    littering the workspace. Named `test_config` until 2026-11-19: imported at the top of
+    a test module, pytest collected it as six tests that returned a Config and warned."""
     base = {
         "prumo": CONTRACT_VERSION,
         "paths": {"repositories": "/tmp/prumo-test/repos",

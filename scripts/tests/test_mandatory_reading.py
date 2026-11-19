@@ -12,11 +12,11 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from providers import test_config
+from providers import config_for_tests
 from preflight import reading_impediments
 
 
-CFG = test_config()
+CFG = config_for_tests()
 
 
 class TestMandatoryReading(unittest.TestCase):

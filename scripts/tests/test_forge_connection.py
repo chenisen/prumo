@@ -14,7 +14,7 @@ from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from providers import FORGE_CONNECTIONS, test_config
+from providers import FORGE_CONNECTIONS, config_for_tests
 from preflight import PROPOSAL_REMEDY, reading_impediments
 from review import INLINE_FILES, copy_mandatory_reading
 
@@ -39,18 +39,18 @@ class TestTheRemedyNamesTheDeclaredRoute(unittest.TestCase):
         self.assertEqual(set(PROPOSAL_REMEDY), set(FORGE_CONNECTIONS))
 
     def test_mcp_is_told_about_the_connector_and_not_about_tokens(self):
-        cfg = test_config(forge={"type": "gitlab", "connection": "mcp"})
+        cfg = config_for_tests(forge={"type": "gitlab", "connection": "mcp"})
         remedy = missing_description(cfg)
         self.assertIn("connector", remedy)
         self.assertNotIn("GITLAB_TOKEN", remedy)
 
     def test_token_is_told_which_variables_this_forge_uses(self):
-        cfg = test_config(forge={"type": "github", "connection": "token"})
+        cfg = config_for_tests(forge={"type": "github", "connection": "token"})
         remedy = missing_description(cfg)
         self.assertIn("GITHUB_TOKEN", remedy)
 
     def test_none_is_told_to_paste_and_how_to_stop_pasting(self):
-        cfg = test_config(forge={"type": "gitlab", "connection": "none"})
+        cfg = config_for_tests(forge={"type": "gitlab", "connection": "none"})
         remedy = missing_description(cfg)
         self.assertIn("--proposal-file", remedy)
         self.assertIn("forge-connection.md", remedy)
@@ -60,14 +60,14 @@ class TestTheRemedyNamesTheDeclaredRoute(unittest.TestCase):
         no script here reaches an API, so the text is handed over as a file."""
         for connection in FORGE_CONNECTIONS:
             with self.subTest(connection=connection):
-                cfg = test_config(forge={"type": "gitlab", "connection": connection})
+                cfg = config_for_tests(forge={"type": "gitlab", "connection": connection})
                 self.assertIn("--proposal-file", missing_description(cfg))
 
     def test_an_unknown_connection_still_gets_instructions(self):
         """`providers.py` refuses one at load time, so this is only reachable through a
         hand-built config — and even there the gate must not raise instead of saying
         what to do."""
-        cfg = test_config(forge={"type": "gitlab"})
+        cfg = config_for_tests(forge={"type": "gitlab"})
         broken = dataclasses.replace(
             cfg, forge=dataclasses.replace(cfg.forge, connection="carrier-pigeon"))
         self.assertIn("--proposal-file", missing_description(broken))
@@ -142,7 +142,7 @@ class TestTheWarningSeparatesReadingFromPublishing(unittest.TestCase):
         """With the forge's tokens taken OUT of the environment, so the result does not
         depend on whose shell runs the suite."""
         from preflight import preflight
-        cfg = test_config(forge={"type": "gitlab", "connection": connection})
+        cfg = config_for_tests(forge={"type": "gitlab", "connection": connection})
         without_tokens = {name: "" for name in cfg.forge.tokens}
         with mock.patch("preflight.common_cfg", return_value=cfg), \
              mock.patch.dict("os.environ", without_tokens):
@@ -166,7 +166,7 @@ class TestTheDeclaredConnectionIsRecorded(unittest.TestCase):
 
     def test_capabilities_carries_it(self):
         from preflight import preflight
-        cfg = test_config(forge={"type": "github", "connection": "mcp"})
+        cfg = config_for_tests(forge={"type": "github", "connection": "mcp"})
         with mock.patch("preflight.common_cfg", return_value=cfg):
             cap = preflight("whatever", origin="branch", item_read=True)
         self.assertEqual(cap["forge_connection"], "mcp")

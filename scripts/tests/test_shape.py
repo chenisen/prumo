@@ -5,7 +5,7 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from shape import SHAPES, resolve, budget_for, UnknownShape, size_of, small_limits
-from providers import test_config, InvalidConfiguration
+from providers import config_for_tests, InvalidConfiguration
 
 
 class TestTheSixShapes(unittest.TestCase):
@@ -62,13 +62,13 @@ class TestTheBudgetScalesWithTheShape(unittest.TestCase):
 
 class TestTheMappingLivesInTheConfiguration(unittest.TestCase):
     def test_the_tracker_carries_its_types_mapped(self):
-        cfg = test_config(tracker={"type": "businessmap", "shapes": {"Bug": "bug", "História": "story"}})
+        cfg = config_for_tests(tracker={"type": "businessmap", "shapes": {"Bug": "bug", "História": "story"}})
         self.assertEqual(cfg.tracker.shape_of("Bug"), "bug")
         self.assertIsNone(cfg.tracker.shape_of("Melhoria"))
 
     def test_a_type_mapped_outside_the_six_is_refused_at_load(self):
         with self.assertRaises(InvalidConfiguration):
-            test_config(tracker={"type": "businessmap", "shapes": {"Bug": "chore"}})
+            config_for_tests(tracker={"type": "businessmap", "shapes": {"Bug": "chore"}})
 
 
 if __name__ == "__main__":

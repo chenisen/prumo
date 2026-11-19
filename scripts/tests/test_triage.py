@@ -261,23 +261,27 @@ class TestSliceWithoutAHeader(unittest.TestCase):
         self.assertEqual(assess("A3", p, change(["app/Foo.php"], d))["state"], "fired")
 
 
-def test_every_reviewer_slice_is_written_by_the_package():
-    """A reviewer pointing at a slice that does not exist raises no error: it reads nothing.
+class TestEveryReviewerSliceIsWritten(unittest.TestCase):
+    """Written as a bare function until 2026-11-19, which pytest collects and the
+    unittest runner the prumo uses never did: the check had never run."""
 
-    The workflow builds `<package>/slices/<slice>.patch` as text. A name `package.py` never
-    writes would have the reviewer read nothing and report "no findings" — the failure mode
-    this harness exists not to have. The two lists are coupled and nobody was checking them.
-    """
-    import package
-    import triage
+    def test_every_reviewer_slice_is_written_by_the_package(self):
+        """A reviewer pointing at a slice that does not exist raises no error: it reads nothing.
 
-    declared = {"complete", *package.SLICES}
-    used = {r["slice"] for r in triage.REVIEWERS if "slice" in r}
-    used |= {lvl["slice"] for r in triage.REVIEWERS
-             for lvl in (r.get("levels") or {}).values()}
-    assert used <= declared, (
-        f"slice with no matching file: {sorted(used - declared)} — "
-        f"package.py writes {sorted(declared)}")
+        The workflow builds `<package>/slices/<slice>.patch` as text. A name `package.py` never
+        writes would have the reviewer read nothing and report "no findings" — the failure mode
+        this harness exists not to have. The two lists are coupled and nobody was checking them.
+        """
+        import package
+        import triage
+
+        declared = {"complete", *package.SLICES}
+        used = {r["slice"] for r in triage.REVIEWERS if "slice" in r}
+        used |= {lvl["slice"] for r in triage.REVIEWERS
+                 for lvl in (r.get("levels") or {}).values()}
+        self.assertLessEqual(used, declared, (
+            f"slice with no matching file: {sorted(used - declared)} — "
+            f"package.py writes {sorted(declared)}"))
 
 
 class TestThePackageKeysTriageReads(unittest.TestCase):
@@ -519,10 +523,10 @@ class TestAgentPrefix(unittest.TestCase):
     def _with_config(self, prefix):
         """Stand `cfg()` in for one call, the way the installation would answer."""
         import unittest.mock as mock
-        from providers import test_config
+        from providers import config_for_tests
         return mock.patch.object(self.triage, "cfg",
-                                 lambda: test_config(agents={"prefix": prefix})
-                                 if prefix is not None else test_config())
+                                 lambda: config_for_tests(agents={"prefix": prefix})
+                                 if prefix is not None else config_for_tests())
 
     def test_the_configuration_decides_when_it_declares_a_prefix(self):
         with self._with_config("prumo:"):
@@ -572,3 +576,23 @@ class TestAgentPrefix(unittest.TestCase):
 
         with mock.patch.object(self.triage, "cfg", boom):
             self.assertEqual(self.triage.agent_prefix(), "")
+
+
+class TestNoTestHidesFromTheRunner(unittest.TestCase):
+    """The prumo runs its suite with unittest. A bare `def test_…` at module level is
+    collected by pytest and never by unittest, and a helper imported under a `test_` name
+    is collected by pytest as a test that returns something. Both were found on
+    2026-11-19: one check that had never run, and six phantom tests."""
+
+    def test_every_test_lives_in_a_test_case_and_no_helper_looks_like_one(self):
+        import ast
+        offenders = []
+        for path in sorted(pathlib.Path(__file__).parent.glob("test_*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in tree.body:
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test"):
+                    offenders.append(f"{path.name}: def {node.name}")
+                if isinstance(node, ast.ImportFrom):
+                    offenders += [f"{path.name}: import {a.asname or a.name}" for a in node.names
+                                  if (a.asname or a.name).startswith("test")]
+        self.assertEqual(offenders, [])

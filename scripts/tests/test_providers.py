@@ -17,7 +17,7 @@ from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from providers import (MissingConfiguration, InvalidConfiguration, FORGES, TRACKERS,
-                        CONTRACT_VERSION, load_config, test_config, build)
+                        CONTRACT_VERSION, load_config, config_for_tests, build)
 
 MINIMO = {
     "prumo": CONTRACT_VERSION,
@@ -98,71 +98,71 @@ class TestPresetsShortenWithoutDeciding(unittest.TestCase):
     def test_every_known_forge_builds_from_type_alone(self):
         for type in FORGES:
             with self.subTest(forge=type):
-                c = test_config(forge={"type": type})
+                c = config_for_tests(forge={"type": type})
                 self.assertTrue(c.forge.proposal and c.forge.tokens)
                 self.assertIn("{n}", c.forge._ref)
 
     def test_every_known_tracker_builds_from_type_alone(self):
         for type in TRACKERS:
             with self.subTest(tracker=type):
-                c = test_config(tracker={"type": type})
+                c = config_for_tests(tracker={"type": type})
                 self.assertTrue(c.tracker.item and c.tracker.heading)
 
     def test_a_loose_field_overrides_only_itself(self):
-        c = test_config(forge={"type": "github", "proposal": "Pull"})
+        c = config_for_tests(forge={"type": "github", "proposal": "Pull"})
         self.assertEqual(c.forge.proposal, "Pull")
         self.assertEqual(c.forge.prefix, "#")                 # veio do preset
         self.assertEqual(c.forge.proposal_ref(7), "refs/pull/7/head")
 
     def test_an_unknown_provider_is_refused_and_names_the_known_ones(self):
         with self.assertRaises(InvalidConfiguration) as ctx:
-            test_config(forge={"type": "gerrit"})
+            config_for_tests(forge={"type": "gerrit"})
         for known in FORGES:
             self.assertIn(known, str(ctx.exception))
 
     def test_a_ref_without_a_placeholder_is_refused(self):
         """Uma ref without `{n}` buscaria sempre a mesma proposal, em silêncio."""
         with self.assertRaises(InvalidConfiguration):
-            test_config(forge={"type": "github", "ref": "refs/pull/head"})
+            config_for_tests(forge={"type": "github", "ref": "refs/pull/head"})
 
     def test_a_comment_format_outside_the_list_is_refused(self):
         with self.assertRaises(InvalidConfiguration):
-            test_config(tracker={"type": "generic", "format": "latex"})
+            config_for_tests(tracker={"type": "generic", "format": "latex"})
 
 
 class TestSwappingTheFileSwapsEverything(unittest.TestCase):
     """O eval que de fato importa: o método não conhece fornecedor."""
 
     def test_the_ref_changes_with_the_forge(self):
-        self.assertEqual(test_config(forge={"type": "gitlab"}).forge.proposal_ref(820),
+        self.assertEqual(config_for_tests(forge={"type": "gitlab"}).forge.proposal_ref(820),
                          "refs/merge-requests/820/head")
-        self.assertEqual(test_config(forge={"type": "github"}).forge.proposal_ref(820),
+        self.assertEqual(config_for_tests(forge={"type": "github"}).forge.proposal_ref(820),
                          "refs/pull/820/head")
 
     def test_the_label_changes_with_the_forge(self):
-        self.assertEqual(test_config(forge={"type": "gitlab"}).forge.label(820), "MR !820")
-        self.assertEqual(test_config(forge={"type": "github"}).forge.label(820), "PR #820")
+        self.assertEqual(config_for_tests(forge={"type": "gitlab"}).forge.label(820), "MR !820")
+        self.assertEqual(config_for_tests(forge={"type": "github"}).forge.label(820), "PR #820")
 
     def test_the_article_agrees(self):
         """`a MR` e `o PR`. Pequeno, mas vai para text que pessoas leem."""
-        self.assertEqual(test_config(forge={"type": "gitlab"}).forge.with_article(), "a MR")
-        self.assertEqual(test_config(forge={"type": "github"}).forge.with_article(), "o PR")
+        self.assertEqual(config_for_tests(forge={"type": "gitlab"}).forge.with_article(), "a MR")
+        self.assertEqual(config_for_tests(forge={"type": "github"}).forge.with_article(), "o PR")
 
     def test_the_item_vocabulary_changes_with_the_tracker(self):
-        self.assertEqual(test_config(tracker={"type": "businessmap"}).tracker.item, "card")
-        self.assertEqual(test_config(tracker={"type": "jira"}).tracker.item, "issue")
-        self.assertEqual(test_config(tracker={"type": "acelerato"}).tracker.item, "ticket")
+        self.assertEqual(config_for_tests(tracker={"type": "businessmap"}).tracker.item, "card")
+        self.assertEqual(config_for_tests(tracker={"type": "jira"}).tracker.item, "issue")
+        self.assertEqual(config_for_tests(tracker={"type": "acelerato"}).tracker.item, "ticket")
 
     def test_the_heading_respects_the_tracker_format(self):
         self.assertIn("text-big",
-                      test_config(tracker={"type": "businessmap"}).tracker.heading_for("X"))
-        self.assertEqual(test_config(tracker={"type": "jira"}).tracker.heading_for("X"),
+                      config_for_tests(tracker={"type": "businessmap"}).tracker.heading_for("X"))
+        self.assertEqual(config_for_tests(tracker={"type": "jira"}).tracker.heading_for("X"),
                          "h3. X")
-        self.assertEqual(test_config(tracker={"type": "generic"}).tracker.heading_for("X"),
+        self.assertEqual(config_for_tests(tracker={"type": "generic"}).tracker.heading_for("X"),
                          "### X")
 
     def test_the_token_read_is_the_configured_forge_one(self):
-        c = test_config(forge={"type": "github"})
+        c = config_for_tests(forge={"type": "github"})
         with mock.patch.dict("os.environ", {"GITLAB_TOKEN": "x"}, clear=True):
             self.assertIsNone(c.forge.token_in_environment())   # token do fornecedor errado
         with mock.patch.dict("os.environ", {"GH_TOKEN": "x"}, clear=True):
@@ -199,7 +199,7 @@ class TestPaths(unittest.TestCase):
         self.assertEqual(c.paths.knowledge, pathlib.Path("/tmp/rel/_knowledge"))
 
     def test_repo_and_profile_derive_from_the_root(self):
-        c = test_config()
+        c = config_for_tests()
         self.assertEqual(c.paths.repo("x").name, "x")
         self.assertEqual(c.paths.profile("x").name, "x.yml")
 
@@ -305,7 +305,7 @@ class TestVocabularyReachesPublishedText(unittest.TestCase):
                                ("acelerato", "o ticket"), ("generic", "o item")):
             with self.subTest(tracker=type):
                 self.assertEqual(
-                    test_config(tracker={"type": type}).tracker.with_article(),
+                    config_for_tests(tracker={"type": type}).tracker.with_article(),
                     expected)
 
 
@@ -389,12 +389,12 @@ class TestToleratedRepoNames(unittest.TestCase):
     the method's rule 1 reads it as a word and nothing else changes."""
 
     def test_the_list_is_read_and_defaults_to_empty(self):
-        from providers import test_config
-        self.assertEqual(test_config().tolerated_repo_names, ())
-        cfg = test_config(agnosticism={"tolerated_repo_names": ["documentation"]})
+        from providers import config_for_tests
+        self.assertEqual(config_for_tests().tolerated_repo_names, ())
+        cfg = config_for_tests(agnosticism={"tolerated_repo_names": ["documentation"]})
         self.assertEqual(cfg.tolerated_repo_names, ("documentation",))
 
     def test_anything_but_a_list_of_names_is_refused(self):
-        from providers import test_config, InvalidConfiguration
+        from providers import config_for_tests, InvalidConfiguration
         with self.assertRaises(InvalidConfiguration):
-            test_config(agnosticism={"tolerated_repo_names": "documentation"})
+            config_for_tests(agnosticism={"tolerated_repo_names": "documentation"})

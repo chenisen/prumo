@@ -272,7 +272,7 @@ class TestALedgerAndAPrice(TestTelemetry):
 
     def test_prices_are_validated_in_prumo_yml(self):
         import providers
-        self.assertEqual(dict(providers.test_config(prices=self.PRICES).prices)["model-a"]["output"], 15)
+        self.assertEqual(dict(providers.config_for_tests(prices=self.PRICES).prices)["model-a"]["output"], 15)
         with self.assertRaises(providers.InvalidConfiguration):
-            providers.test_config(prices={"model-a": {"input": "three"}})
+            providers.config_for_tests(prices={"model-a": {"input": "three"}})
 

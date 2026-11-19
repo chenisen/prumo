@@ -55,10 +55,10 @@ class TestProofRegistry(unittest.TestCase):
     def test_a_marker_declared_by_the_installation_is_recognised(self):
         from unittest import mock
         import derive_profile
-        from providers import test_config
+        from providers import config_for_tests
         # Patch `derive_profile.cfg`, not `common.cfg`: the module imported the name, so
         # it holds its own reference, and patching the origin never reaches it.
-        cfg = test_config(detection={"proof_registries": [
+        cfg = config_for_tests(detection={"proof_registries": [
             {"type": "my-framework", "marker": "my-framework.json",
              "note": "declared by this installation"}]})
         with mock.patch.object(derive_profile, "cfg", lambda: cfg):
@@ -70,8 +70,8 @@ class TestProofRegistry(unittest.TestCase):
         """The installation knows its own repository better than the default does."""
         from unittest import mock
         import derive_profile
-        from providers import test_config
-        cfg = test_config(detection={"proof_registries": [
+        from providers import config_for_tests
+        cfg = config_for_tests(detection={"proof_registries": [
             {"type": "my-framework", "marker": ".claude/specs"}]})
         with mock.patch.object(derive_profile, "cfg", lambda: cfg):
             self.assertEqual(

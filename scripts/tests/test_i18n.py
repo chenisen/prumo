@@ -12,7 +12,7 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 import i18n
-from providers import test_config
+from providers import config_for_tests
 
 RAIZ = pathlib.Path(__file__).resolve().parent.parent.parent
 
@@ -63,15 +63,15 @@ class TestCatalogues(unittest.TestCase):
     def test_the_default_is_english(self):
         """A public clone that nobody configured answers in English."""
         self.assertEqual(i18n.DEFAULT, "en")
-        self.assertEqual(test_config().language, "en")
+        self.assertEqual(config_for_tests().language, "en")
 
     def test_the_language_is_configurable(self):
-        self.assertEqual(test_config(language="pt-BR").language, "pt-BR")
+        self.assertEqual(config_for_tests(language="pt-BR").language, "pt-BR")
 
     def test_an_unknown_language_in_the_config_is_refused(self):
         from providers import InvalidConfiguration
         with self.assertRaises(InvalidConfiguration):
-            test_config(language="klingon")
+            config_for_tests(language="klingon")
 
 
 class TestNoLiteralsInCode(unittest.TestCase):
