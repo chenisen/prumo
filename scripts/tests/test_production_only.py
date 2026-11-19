@@ -122,3 +122,24 @@ class TestAnchoredSurfaceClassesReadPatternsInProductionOnly(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAPathAnchorDoesNotFireOverProofEither(unittest.TestCase):
+    """2026-11-19: in a repository whose tests live beside the code, a path anchor on the
+    code (`src/app/api/**`) matched `route.spec.ts` and fired a production class on a
+    delivery that only added tests. The proof filter covered the patterns only."""
+
+    PROFILE = {"profile": "repo-x", "anchors": {"A4": {"paths": ["src/app/api/**"]}}}
+    SPEC = "src/app/api/clients/route.spec.ts"
+    DIFF = f"diff --git a/{SPEC} b/{SPEC}\n+++ b/{SPEC}\n+  it('answers', () => {{}})\n"
+
+    def assess(self, files, diff):
+        return assess_class("A4", CLASSES["A4"], self.PROFILE, change(files, diff), CAP)
+
+    def test_a_spec_beside_the_code_does_not_fire_a_production_class(self):
+        self.assertNotEqual(self.assess([self.SPEC], self.DIFF)["state"], "fired")
+
+    def test_the_code_beside_it_still_fires(self):
+        code = "src/app/api/clients/route.ts"
+        diff = f"diff --git a/{code} b/{code}\n+++ b/{code}\n+export const GET = handler\n"
+        self.assertEqual(self.assess([code, self.SPEC], diff + self.DIFF)["state"], "fired")

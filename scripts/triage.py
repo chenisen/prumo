@@ -207,8 +207,13 @@ def assess_class(class_id: str, meta: dict, profile: dict, change: dict,
 
     # 4. assess. The path says where; the pattern says what. `combination` decides whether
     #    one of the two is enough.
+    # A class about production does not fire on a proof file by its PATH either. Until
+    # 2026-11-19 the filter below applied to the patterns only, and in a repository whose
+    # tests live beside the code (`Foo.spec.ts` next to `Foo.ts`) a path anchor on the
+    # code fired the class on a delivery that only added tests.
+    proof_files = set(shape["proof_files"]) if meta.get("production_only") else set()
     by_path = [{"file": a, "by": t("triage.by_anchor_path")} for a in files
-               if has_anchor and casa_algum(a, anchor.get("paths"))]
+               if has_anchor and a not in proof_files and casa_algum(a, anchor.get("paths"))]
 
     patterns = list((anchor or {}).get("patterns") or []) + UNIVERSAL_PATTERNS.get(class_id, [])
     by_pattern: list[dict] = []
