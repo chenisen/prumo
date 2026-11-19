@@ -48,11 +48,11 @@ what is judgement.
 
 | | |
 |---|---|
-| **23 Python scripts** | Resolve the base, assemble the package, triage the risk, judge; cut the worktree, check what landed once, hand over. No dependency beyond `yaml` and `jsonschema`. Both judges are pure functions: same input, same answer. |
+| **Python scripts** | Resolve the base, assemble the package, triage the risk, judge; cut the worktree, check what landed once, hand over. No dependency beyond `yaml` and `jsonschema`. Both judges are pure functions: same input, same answer. |
 | **15 agents** | One question each. Ten read-only for the review — seven reviewers of one axis, a criteria extractor, a manual-verification planner, and a **sceptical verifier** that tries to *refute* every finding without having seen the reasoning behind it. Five for the delivery — a surveyor that measures, a **writer with a shell** that edits the code and runs the tests it touches, a sceptic that never saw the writer, a planner that cuts a story into tasks, and a collector that shows a finished delivery. |
 | **3 knowledge skills** | What the reviewers load to read a diff: five axes, OWASP/ASVS, personal data. Neutral of language, framework and project. |
 | **18 risk classes** | A guardrail has three states — `fired`, `did_not_fire`, `not_assessable`. |
-| **2 message catalogues** | 484 keys each. Everything a person reads, in the configured language. |
+| **2 message catalogues** | The same keys in each, compared one by one by a test. Everything a person reads, in the configured language. |
 
 Three rules govern everything, and each has a test that fails when it is broken:
 
@@ -97,10 +97,10 @@ prumo/
 │   ├── hygiene.py               fails a secret, or a rule that is not the prumo's own
 │   ├── secrets_scan.py          what a change adds that looks like a secret — a tool for `checks.secrets`
 │   ├── setup.py                 writes a prumo.yml: asks five things, measures the rest
-│   └── tests/                   571 tests
+│   └── tests/                   the suite: unittest, both discovery modes collect the same
 │
-├── agents/                      THE LEAVES — 14 prompts: 10 read-only reviewers, a surveyor,
-│                                a writer with no shell, a sceptic, a planner
+├── agents/                      THE LEAVES — 15 prompts: 10 read-only for the review; a surveyor,
+│                                a writer with a shell, a sceptic, a planner, an evidence collector
 ├── skills/
 │   ├── task-review/SKILL.md     what Claude Code loads as `/prumo:task-review`
 │   ├── deliver/SKILL.md         the delivery's twelve rules and its sequence
@@ -138,7 +138,7 @@ Four steps, and the second writes itself.
 
 ### 1. Install the plugin (Claude Code)
 
-The ten agents, the four knowledge skills, the workflow and the hook travel with the
+The fifteen agents, the skills, the two workflows and the hook travel with the
 plugin. You copy nothing into `.claude/agents/`, you edit no `settings.json`, you
 register no hook by hand:
 
@@ -156,10 +156,10 @@ What that registers:
 
 | What | How it shows up |
 |---|---|
-| the skill | `/prumo:task-review <item url>` |
-| the 10 agents | `prumo:scope-coherence-reviewer`, `prumo:finding-verifier`, … |
+| the skills | `/prumo:task-review <item url>`, `/prumo:deliver`, and `/prumo:run` / `/prumo:approve` (a person's, closed to the model) |
+| the 15 agents | `prumo:scope-coherence-reviewer`, `prumo:change-writer`, `prumo:finding-verifier`, … |
 | the knowledge skills | loaded by the reviewers, not invoked by hand |
-| the fan-out workflow | invoked by the skill |
+| the two workflows | `prumo:task-review` and `prumo:deliver`, invoked by their skills |
 | the `PreToolUse` hook | from `hooks/hooks.json` |
 
 > **If you already had the prumo as a loose skill**, remove the old copies from
@@ -607,7 +607,7 @@ And per capability:
 
 ```bash
 cd scripts
-python3 -m unittest discover -s tests          # 486 tests
+python3 -m unittest discover -s tests          # the whole suite
 python3 -m unittest discover -s tests -t .     # must collect the SAME number
 python3 i18n.py --check                        # catalogues, key by key
 python3 agnosticism_check.py                   # the four rules
