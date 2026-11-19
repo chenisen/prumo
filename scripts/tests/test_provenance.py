@@ -88,6 +88,19 @@ class TestItSpeaksOnlyAboutThisReview(unittest.TestCase):
         self.assertEqual([{"kind": "item", "value": "42"}],
                          foreign_references("ver #42 para o contexto", short))
 
+    def test_beside_a_long_id_a_round_quantity_is_not_an_item(self):
+        """2026-11-06: a manual plan's ">10000 linhas" (100 pages of 100) stopped a
+        conclude as 'another item'. Running the agent again would have written the same
+        arithmetic, so the remedy cannot be the one for a contaminated run."""
+        self.assertEqual([], foreign_references(
+            "acima de 10000 linhas; teto de 20000 registros; >70707 ms; ~80808 bytes", package()))
+
+    def test_beside_a_long_id_a_round_number_written_as_a_reference_is_still_an_item(self):
+        self.assertEqual([{"kind": "item", "value": "50000"}],
+                         foreign_references("o mesmo defeito do item 50000", package()))
+        self.assertEqual([{"kind": "item", "value": "70707"}],
+                         foreign_references("ver #70707", package()))
+
     def test_a_long_number_behind_a_colon_is_an_address(self):
         self.assertEqual([], foreign_references("gerado.sql:70707 muda o índice", package()))
 

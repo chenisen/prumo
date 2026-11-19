@@ -123,17 +123,24 @@ def foreign_references(text: str, package: pathlib.Path) -> list[dict]:
         # Only ids shaped like ours, and only those the item itself never names.
         said_by_the_item = item_path.read_text(encoding="utf-8")
         digits = len(item_id)
+        reference = re.compile(r"(?i)(?:#|\b(?:item|card|issue|ticket)\s+#?)(\d{%d})(?![\w.])" % digits)
         if digits >= LONG_ID:
-            # A number behind a colon is an address — `file.ts:12345` — never an id.
-            same_shape = re.compile(r"(?<![\w.:])\d{%d}(?![\w.])" % digits)
+            # A number behind a colon is an address — `file.ts:12345` — never an id. One
+            # behind a sign of magnitude (`>10000`, `~20000`) is a quantity, and so is a
+            # round one: on 2026-11-06 a manual plan's ">10000 lines" (100 pages of 100)
+            # stopped a conclude as "another item", and running the agent again would have
+            # written the same arithmetic. Written as a reference, either is still an id.
+            bare = re.compile(r"(?<![\w.:<>≤≥~≈×])\d{%d}(?![\w.])" % digits)
+            referenced = reference.findall(text)
+            candidates = referenced + [n for n in bare.findall(text) if not n.endswith("000")]
         else:
             # A short id has no shape of its own: beside item 15, every line number, count
             # and amount of two digits read as "another item", and no review of a tracker
             # with short ids could conclude (measured on 2026-11-12, twenty of them in one
             # findings.json). A short number is another item only when it is written as a
             # reference: `#16`, or after the word for an item.
-            same_shape = re.compile(r"(?i)(?:#|\b(?:item|card|issue|ticket)\s+#?)(\d{%d})(?![\w.])" % digits)
-        for n in dict.fromkeys(same_shape.findall(text)):
+            candidates = reference.findall(text)
+        for n in dict.fromkeys(candidates):
             if n != item_id and n not in said_by_the_item:
                 out.append({"kind": "item", "value": n})
     return out
