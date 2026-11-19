@@ -467,6 +467,16 @@ class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
                 common.capabilities_after_preflight(pathlib.Path(tmp))
             self.assertIn("capabilities.json", str(ctx.exception))
 
+    def test_two_reviews_of_one_item_on_one_day_keep_two_reports(self):
+        """A second review the same day overwrote the first while `runs.jsonl` kept a line
+        for each (2026-11-19, the review's side of what 3.6.0 fixed for deliveries)."""
+        import common, review, render
+        first, second = common.review_file_names("repo-1"), common.review_file_names("repo-2")
+        self.assertNotEqual(first[0], second[0])
+        self.assertNotEqual(first[1], second[1])
+        self.assertEqual(common.review_file_names("repo-1"), first)  # concluded again: its own
+        self.assertIs(review.review_file_names, render.review_file_names)
+
     def test_the_report_directory_does_not_repeat_the_item_the_origin_carries(self):
         import review
         self.assertEqual(review.report_dir_name("1234", "1234-debito-tecnico-criar-testes"),
@@ -478,8 +488,10 @@ class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
         # The render line once said `1234-1234-…` while the report landed elsewhere.
         import render
         printed = render.report_path({"repo": "r", "item": {"id": "1234"},
-                                      "origin": "1234-debito-tecnico-criar-testes"})
-        self.assertTrue(printed.endswith("/r/1234-debito-tecnico-criar-testes/review-" + __import__("common").today() + ".md"),
+                                      "origin": "1234-debito-tecnico-criar-testes"},
+                                     pathlib.Path("/p/r-1795"))
+        self.assertTrue(printed.endswith("/r/1234-debito-tecnico-criar-testes/review-"
+                                         + __import__("common").today() + "-r-1795.md"),
                         printed)
         self.assertNotIn("1234-1234", printed)
 

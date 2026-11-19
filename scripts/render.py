@@ -17,7 +17,7 @@ import re
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from common import (CLASSES, PRUMO_ROOT, BLOCKING_SEVERITIES, SEVERITY_ORDER, dir_reports, load_profile, forge, tracker, report_dir_name,
+from common import (CLASSES, PRUMO_ROOT, BLOCKING_SEVERITIES, SEVERITY_ORDER, dir_reports, load_profile, forge, tracker, report_dir_name, review_file_names,
                    today, read_json, slug, waiver_in_force)
 from i18n import t
 
@@ -687,13 +687,13 @@ def build_item_comment(package: pathlib.Path) -> str:
                           item_with_article=tracker().with_article())))
 
 
-def report_path(man: dict) -> str:
+def report_path(man: dict, package: pathlib.Path) -> str:
     item_id = man["item"]["id"] or "no-item"
     # Relative to the configured reports root, never a hard-coded prefix: `paths.reports`
     # is an installation fact, and printing a path that contradicts it sends the reader
     # looking in a directory that does not exist on their machine.
     return str((dir_reports() / man["repo"] /
-                report_dir_name(item_id, man["origin"]) / f"review-{today()}.md"))
+                report_dir_name(item_id, man["origin"]) / review_file_names(package.name)[0]))
 
 
 def main() -> int:
@@ -709,7 +709,7 @@ def main() -> int:
     (output / "item-comment.html").write_text(build_item_comment(package), encoding="utf-8")
     man = read_json(package / "manifest.json")
     print(t("review.rendered", path=f"{output}/report.md"))
-    print("        " + t("review.final_destination", path=report_path(man)))
+    print("        " + t("review.final_destination", path=report_path(man, package)))
     return 0
 
 

@@ -365,6 +365,17 @@ def slug(text: str, limit: int = 60) -> str:
 
 
 
+def review_file_names(package_name: str) -> tuple[str, str]:
+    """The report and the item comment a review files under its item's directory: one per
+    package and day. They were one per day, and a second review the same day overwrote
+    the first while `runs.jsonl` kept a line for each — the first line then pointed at a
+    file that was no longer its own. The delivery's report had the same defect and lost
+    it in 3.6.0; this is the review's side. A package concluded again still replaces its
+    own. Lives here for the reason `report_dir_name` does: one spelling for both scripts."""
+    return (f"review-{today()}-{package_name}.md",
+            f"item-comment-{today()}-{package_name}.html")
+
+
 def report_dir_name(item: str | None, origin: str) -> str:
     """`<item>-<origin>`, unless the origin already starts with the item — a branch the
     prumo delivered is named `<item>-<slug>` by the profile, and the report once landed

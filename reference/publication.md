@@ -45,8 +45,11 @@ accident.
 The report is written **always**, without asking for anything, at:
 
 ```
-<reports>/<repo>/<item>-<slug>/review-<date>.md
+<reports>/<repo>/<item>-<slug>/review-<date>-<package>.md
 ```
+
+One per package and day: a second review of the same item the same day keeps its own
+file (until 2026-11-19 it overwrote the first). A package concluded again replaces its own.
 
 That is the only place this skill writes. An intervention verdict stays **only** in the
 local report until someone authorises publication.

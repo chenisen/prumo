@@ -32,7 +32,7 @@ import time
 import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from common import (MissingConfiguration, dir_repositories, InvalidConfiguration, dir_packages, dir_reports, forge, tracker, UsageError, profile_path, load_profile, write_json,
+from common import (review_file_names, MissingConfiguration, dir_repositories, InvalidConfiguration, dir_packages, dir_reports, forge, tracker, UsageError, profile_path, load_profile, write_json,
                    today, read_json, slug, cfg, capabilities_after_preflight, hint_config,
                    report_dir_name)
 from i18n import t
@@ -1007,10 +1007,10 @@ def conclude(args) -> int:
     item = man["item"]["id"] or "no-item"
     destination = dir_reports() / man["repo"] / report_dir_name(man["item"]["id"], man["origin"])
     destination.mkdir(parents=True, exist_ok=True)
-    target = destination / f"review-{today()}.md"
+    report_name, comment_name = review_file_names(package.name)
+    target = destination / report_name
     shutil.copy2(package / "report.md", target)
-    shutil.copy2(package / "item-comment.html",
-                 destination / f"item-comment-{today()}.html")
+    shutil.copy2(package / "item-comment.html", destination / comment_name)
 
     # This run's cost, read from the transcripts. It feeds F11 and runs before it because
     # it is what carries `tokens` and `minutes` — the fields `metrics.py` already knew how
