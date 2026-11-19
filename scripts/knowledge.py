@@ -43,7 +43,7 @@ import re
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from common import dir_knowledge, read_json, write_json, today
+from common import dir_knowledge, dir_packages, dir_repositories, read_json, write_json, today
 from provenance import RE_SHA, _proposal_number
 
 KINDS = ("convention", "hot_file", "project_debt", "preexisting")
@@ -151,7 +151,10 @@ def hot_files(package: str) -> list[dict]:
                 path = (block.get("input") or {}).get("file_path")
                 if not path or package in str(path):
                     continue
-                seen_here.add(fold(str(path)))
+                # Another review's package is not the repository's shape either.
+                folded = portable_where(fold(str(path)), None)
+                if folded:
+                    seen_here.add(folded)
         # One count per agent, not per read: an agent that reread a file three times says
         # nothing more about the repository than one that read it once.
         counts.update(seen_here)
@@ -238,12 +241,44 @@ def merge(ledger: dict, found: dict[str, list[dict]], manifest: dict,
             entry["reviews"] += 1
             for where in item.get("where") or []:
                 w, _ = sanitise(str(where), manifest)
-                if w not in entry["where"]:
+                w = portable_where(w, manifest.get("repo"))
+                if w and w not in entry["where"]:
                     entry["where"].append(w)
             for extra in ("owner", "severity", "weight"):
                 if item.get(extra) is not None:
                     entry[extra] = item[extra]
     return ledger
+
+
+def portable_where(where: str, repo: str | None) -> str | None:
+    """Where to look, as a fact of the REPOSITORY. A path inside a review package — a
+    slice, the record — is that review's scaffolding: measured on 2026-11-19, the reading
+    of one repository pointed at `<packages>/<another review>/slices/complete.patch`, which
+    handed to a reviewer is an address into another review, the one thing a review must
+    never read. It is dropped. A path under the repository's own checkout becomes relative
+    to it, so the same file is one entry whether a reviewer wrote it whole or not."""
+    w = where.strip()
+    if not w:
+        return None
+    try:
+        packages = dir_packages()
+    except Exception:  # an installation with no packages root still has repositories
+        packages = None
+    # Whole or relative to wherever it was written from: `.prumo/packages/<run>/…` came
+    # in both shapes. The root's last two parts are matched anywhere in the path.
+    marks = [f"{packages}/", "/".join(packages.parts[-2:]) + "/"] if packages else []
+    if any(m in w for m in marks) or w.startswith("slices/") or "/slices/" in w:
+        return None
+    if repo:
+        try:
+            root = f"{dir_repositories() / repo}/"
+        except Exception:
+            root = None
+        if root and w.startswith(root):
+            w = w[len(root):]
+        # A worktree the review read the head in (3.7.0) folds the same way.
+        w = re.sub(r"^\.worktrees/[^/]+/", "", w)
+    return w
 
 
 # ----------------------------------------------------------------- distilling
@@ -272,6 +307,9 @@ def distil(ledger: dict) -> str:
            "an entry proves itself, graduate it into the repository's profile.",
            ""]
     entries = ledger.get("entries") or []
+    # A hot file accrued before 2026-11-19 may be a package path in its own statement.
+    entries = [e for e in entries
+               if e["kind"] != "hot_file" or portable_where(e["statement"], ledger.get("repo"))]
     for kind in KINDS:
         mine = [e for e in entries if e["kind"] == kind and e["reviews"] >= CORROBORATED]
         once = [e for e in entries if e["kind"] == kind and e["reviews"] < CORROBORATED]
@@ -280,7 +318,10 @@ def distil(ledger: dict) -> str:
         out.append(f"## {HEADINGS[kind]}")
         out.append("")
         for e in sorted(mine, key=lambda x: -x["reviews"]):
-            where = f" — `{'`, `'.join(e['where'][:3])}`" if e["where"] else ""
+            # Entries accrued before 2026-11-19 may still carry a package path.
+            places = list(dict.fromkeys(filter(None, (portable_where(w, ledger.get("repo"))
+                                                      for w in e["where"]))))
+            where = f" — `{'`, `'.join(places[:3])}`" if places else ""
             owner = f" (owner: {e['owner']})" if e.get("owner") else ""
             out.append(f"- {e['statement']}{where}{owner}")
         if once:

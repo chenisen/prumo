@@ -121,6 +121,46 @@ class TestAccrual(unittest.TestCase):
         self.assertIn("Guards return from the query builder", reading)
         self.assertIn("`app/Rules/Guard.php`", reading)
 
+    def test_no_address_points_into_a_review_package(self):
+        """2026-11-19: the reading of a real repository pointed at
+        `<packages>/<another review>/slices/complete.patch`. Handed to a reviewer, that is
+        an address into another review. A package path is dropped; the repository's own
+        path stays, relative to its checkout."""
+        import common
+        repo_root = f"{common.dir_repositories() / 'repo-x'}/"
+        for _ in range(2):
+            self.accrue(package(), [{"statement": "Guards return from the query builder",
+                                     "evidence": [{"file": "/w/elsewhere/repo-x-1/slices/complete.patch"},
+                                                  {"file": f"{common.dir_packages()}/repo-x-2/delivery-record.json"},
+                                                  {"file": "slices/tests.patch"},
+                                                  {"file": repo_root + "app/Rules/Guard.php"},
+                                                  {"file": repo_root + ".worktrees/prumo-review-repo-x-3/app/Rules/Guard.php"}]}])
+        reading = self.reading()
+        self.assertIn("Guards return from the query builder — `app/Rules/Guard.php`\n", reading)
+        self.assertNotIn("packages", reading)
+        self.assertNotIn("slices", reading)
+
+    def test_an_old_entry_with_a_package_path_reads_clean(self):
+        ledger = {"repo": "repo-x", "reviews": 2, "entries": [
+            {"kind": "convention", "key": "k", "statement": "S", "reviews": 2,
+             "where": ["/w/.prumo/packages/repo-x-1/slices/complete.patch", "app/X.php"]}]}
+        self.assertIn("- S — `app/X.php`", knowledge.distil(ledger))
+
+    def test_a_relative_package_path_and_a_package_hot_file_read_clean(self):
+        """The packages root is the installation's, so both shapes are built from it: the
+        whole path, and the relative one an agent wrote from the installation's root."""
+        import common
+        root = common.dir_packages()
+        relative = "/".join(root.parts[-2:])
+        ledger = {"repo": "repo-x", "reviews": 2, "entries": [
+            {"kind": "convention", "key": "k", "statement": "S", "reviews": 2,
+             "where": [f"{relative}/repo-x-1/code-and-tests.json", "app/X.php"]},
+            {"kind": "hot_file", "key": "h", "reviews": 2, "where": [],
+             "statement": f"{root}/repo-x-deliver-9/approval.json"}]}
+        reading = knowledge.distil(ledger)
+        self.assertIn("- S — `app/X.php`\n", reading)
+        self.assertNotIn("approval.json", reading)
+
     def test_the_second_sighting_does_not_create_a_second_entry(self):
         self.accrue(package(), [convention("Guards return from the query builder")])
         result = self.accrue(package(), [convention("Guards return from the query builder")])
