@@ -1,0 +1,37 @@
+# What every push must keep green, on a machine that is not an installation.
+#
+# The suite runs in BOTH discovery modes and the counts are compared: a module that
+# imports a sibling as top-level once made 41 tests vanish in one mode with nothing red,
+# and a bare test function once never ran under unittest at all. `agnosticism_check.py`
+# is not here on purpose: it reads the installation's own list of forbidden names, which
+# lives in a private prumo.yml and must never reach this public repository. It runs
+# where the prumo is installed.
+name: checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml jsonschema
+      - name: suite, both discovery modes, same count
+        run: |
+          python -m unittest discover -s tests 2> plain.log || { tail -40 plain.log; exit 1; }
+          python -m unittest discover -s tests -t . 2> rooted.log || { tail -40 rooted.log; exit 1; }
+          a=$(grep -o '^Ran [0-9]*' plain.log); b=$(grep -o '^Ran [0-9]*' rooted.log)
+          echo "plain: $a · rooted: $b"
+          test "$a" = "$b"
+      - name: catalogues, key by key
+        run: python i18n.py --check
+      - name: no secret, and no rule that is not the prumo's own
+        run: python hygiene.py

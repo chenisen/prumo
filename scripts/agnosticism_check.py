@@ -122,7 +122,10 @@ def rule_1_no_repository_name() -> list[str]:
     # them. A plain directory under the root (a harness's own folder, a notes folder) is
     # not a repository, and its name is not a coupling: until 2026-11-11 one such folder
     # made every mention of itself in the method fail this rule, in silence about why.
-    repos = sorted((d.name for d in dir_repositories().iterdir()
+    # An installation whose repositories root is not there yet (a fresh clone, a CI
+    # runner) has no repository name to leak; until 2026-11-19 it died on a traceback.
+    root = dir_repositories()
+    repos = sorted((d.name for d in (root.iterdir() if root.is_dir() else ())
                     if d.is_dir() and (d / ".git").exists()
                     and d.name not in tolerated_repo_names()), key=len, reverse=True)
     failures = []
