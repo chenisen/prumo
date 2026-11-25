@@ -5,541 +5,168 @@ description: Reviews a whole delivery as one package — the item that asked for
 
 # Delivery review
 
-Deterministic backbone, agentic leaves. **Code decides what is a rule; the LLM decides what
-is a judgement.** Scripts resolve, triage and judge; read-only agents give an opinion, each
-one on a single question; a sceptical verifier confirms before the judge decides.
+One question: **is what the item asked for delivered in this proposal?** Scripts resolve,
+triage and judge; read-only agents read, each on one ground; a sceptic reads again whatever
+would hold the approval; the judge is code.
 
-## The rule that governs this skill
+The method knows no repository. A path, a table, a tool or a convention is a fact of a
+project and lives in its profile, `<profiles>/<repo>.yml` — never in this file.
 
-**The method knows no repository.** No path, table, collection, tool, item or convention
-appears here. All of that comes from the **profile** under `<profiles>/<repo>.yml`. If you
-are about to write the name of a repository in this file, stop: the place for it is the
-profile.
+## Conducting a review
 
-And **what could not be assessed is declared.** A guardrail has three states — `fired`,
-`did_not_fire`, `not_assessable` — because silence does not count as the absence of risk.
+Three steps. Scripts are under `${CLAUDE_PLUGIN_ROOT}/scripts/`.
 
-## The three ledgers
+```
+review.py prepare --repo R [--proposal N | --branch B] --item C --item-file ITEM.md
+                  [--proposal-file DESC.md] [--delivery PACKAGE] [--base REF] [--full]
+Workflow({scriptPath: '<package>/workflow.js'})      # printed by prepare, ready to run
+review.py conclude --package P --workflow-result W
+```
 
-| Ledger | What it is | Where |
+- **Before `prepare`, have the item as a file** — description and comments. No script
+  reaches the tracker or the forge: whoever conducts fetches the text and hands it over.
+  An origin that is a proposal also needs its description (`--proposal-file`). A missing or
+  empty file is a stop, not a guess: with no item there is nothing to judge.
+- **What the request does not say and the disk does not show, ask — once, everything
+  together, then proceed.** Which repository, which proposal, which item, which base when
+  none resolves. Never search the filesystem for a repository that "looks close", and
+  never translate a URL of a forge the installation did not declare.
+- **`prepare`** refreshes the base from the remote, checks the reviewed head out on its own
+  under the repository's `.worktrees/` (the agents read the code there), triages, and
+  writes the workflow into the package with its arguments already inside. Run that file;
+  there is nothing to paste.
+- **`W`** is what the workflow returned, saved as a file — the harness's own output file
+  for the task is accepted as it comes.
+- **`--delivery PACKAGE`** when the prumo delivered the branch: the delivery's record and
+  its captured runs travel with the review. The suite it measured on this head stands as
+  the suite evidence, and the reviewers read what each mutant killed from the digest.
+- **`--base REF`** when the branch was built on another line than the profile's base.
+  Never edit the profile for one review.
+- **`--advisory`** runs everything and issues no verdict: what an author runs before
+  opening the proposal.
+
+## Rounds
+
+A review converges. The round is read from what was already concluded over the same
+origin; nobody chooses it.
+
+| Round | Who reads | What |
 |---|---|---|
-| **1. What was asked for** | acceptance criteria and what the item put out of scope | the item |
-| **2. What was specified and proven** | the proof registry the repo declares | `proof_registry` in the profile; `type: absent` is a valid answer, and it appears in the report |
-| **3. What the project has already decided about itself** | conventions, architecture, precedents | `conventions` in the profile — **pointers, read at runtime** |
+| 1 | every reviewer the triage activates | the whole delivery |
+| 2 | the reviewers the push's own shape activates | only what the push changed since the reviewed head; what round 1 left open is re-checked at the new head |
+| 3 on | no reviewer | only whether what is still open was fixed |
 
-**Mandatory reading is a gate, and it sits BEFORE everything else.** The review does not
-start without the **item** and — when the origin is a proposal — without the **proposal's
-description**. No Python script reaches the tracker or the forge's API: the harness is
-what reaches them, so the reading is *declared by whoever did it*, handing over the file:
+A finding a later round raises on code the push did not change is shown and holds
+nothing: that code was read once, and a second reading that disagrees is the harness
+varying, not the delivery changing. `--full` reads the whole delivery again at any round,
+when a person asks for it. A `prepare` over a head already reviewed stops and says so.
 
-```
-review.py prepare --repo R --proposal N --item C
-                  --item-file ITEM.md [--proposal-file DESC.md]
-```
+## What holds the approval
 
-A file that is missing, or present and empty, **does not count as read** — the difference
-between "there is no criterion" and "I could not read it" is the whole point, and a blank
-file erases it. With no way to read the description and no `--proposal-file`, the
-preflight raises an impediment and `prepare` stops, naming the remedy **for the route
-this installation declared** — `reference/forge-connection.md` has the steps per
-provider. **Ask for the connection, do not work around it.** A token in the environment
-is not a reading: it is how the harness FETCHES the text, which still arrives here as a
-file. Reviewing a diff without the item is guessing at what
-was asked for; judging the coherence of the three stories with two of them missing produces
-a report shaped like a complete one and partial in content — the worst result this method
-can give.
+> **APPROVED ⟺** (1) the code follows the project's standards and good practice;
+> (2) it breaks no business rule; (3) it covers what the item asked for, with the
+> necessary evidence; (4) what only QA can verify is handed to QA, with a script;
+> (5) the four above were actually measured.
 
-A loose branch or a stray diff has no proposal description, and demanding one there would
-be charging for something that does not exist: the description gate applies only to origin
-`mr`. The item gate applies to every origin.
+What closes a gate, and nothing else does:
 
-**Whoever is running the review declares themselves through the environment, not through
-the profile.** A profile is versioned and shared; writing a name into it would make every
-review by everybody come out signed by the first person who confirmed it. That is why the
-profile writes the token `${RESPONSAVEL}` into `confirmed_by` and into every `approver`,
-and the harness swaps it for the value of **`TASK_REVIEW_RESPONSAVEL`** — the same
-convention as `TASK_REVIEW_HOJE`. With no name in the environment or in `prumo.yml` the
-name is **presumed** — the AI client's login, else the assistant itself — and preflight
-warns who was presumed and from where: a `not_applicable` signed by a presumed name is
-declared as such, never passed off as a person's.
+- a finding that is blocking, attributable to the change, **confirmed** by the sceptic,
+  and **with a basis** — see below;
+- such a finding on a §A class: a person's decision, never a proposed fix;
+- a criterion of the item not met, or with no record;
+- a suite red by fault of the delivery, a suite that does not run at all, delivered
+  behaviour with no test over it, a real conflict with the base;
+- something for QA with no script written for it, an empty mandatory reading, a reviewer
+  the triage activated that never answered.
 
-If the item is readable but **carries no criterion at all**, say so; do not invent what it
-asked for.
+What is declared and holds nothing: a class the triage fired with no finding on it, a
+doubt the sceptic could not settle, a blocking label with no stated basis, a finding on
+code already read, a pre-existing defect, a draft profile, a class with no anchor, a tool
+this environment lacks, a red the base already carries, being behind the base. What only
+the running system shows — a §B class, a criterion marked `decided_by: qa` — goes to QA,
+after the approval, with the script the review wrote.
 
-## What you do not know, you ask
+## What the reviewers are held to
 
-The prumo refuses to assume a provider, a path or a language. The same rule governs the
-person conducting the review: **what the request does not say and the disk does not
-show, you ask — once, plainly, before starting.**
+Four rules travel in every reviewer's prompt, and the judge enforces what code can:
 
-A review built on a guess produces a report shaped like a finished one. That is the worst
-output this method has, because the reader cannot tell it apart from the real thing.
+- **A blocking finding says where its demand comes from.** A criterion of the item, a rule
+  the project wrote down — quoted, with its file; `conclude` looks the quote up, and a
+  quote that is not there is no rule — or a defect: the code doing the wrong thing on a
+  real path, as the sceptic read it. A demand with none of the three is a suggestion.
+- **A class the triage fired is a question, not a finding.** The triage matched a path. It
+  becomes a finding only when the change does, on that surface, what the item did not ask
+  for. What the item itself asks for is a decision already taken. The one class that
+  holds on its own is the one a tool measured — the secrets scan.
+- **One bar for proof**, the same the delivery's own sceptic reads by: a criterion is
+  proven when a test fails if the behaviour it states is removed. A test that could pin
+  more is a suggestion.
+- **The prose is written in the installation's language.**
 
-Ask when:
+The workflow then merges the same cause raised by more than one reviewer into one
+finding, sends only the blocking ones to the sceptic, and returns everything else as
+`unverified` — the reviewer's word, read once.
 
-| You do not know | Ask for |
-|---|---|
-| which repository the delivery lives in | the repository name, as it appears under `paths.repositories` |
-| which proposal | the proposal URL or its number |
-| which item asked for it | the item URL or id — the `--item-file` has to come from somewhere |
-| the base, when the profile does not name one and `origin/HEAD` does not resolve | the branch the delivery should be measured against |
-| whether an unknown URL is a proposal or an item | which of the two it is |
+## Telling the person
 
-Two cases deserve their own sentence:
+The report opens with one screen: what holds the approval — each with its address, where
+its demand comes from and what to do — what goes to QA, and the questions and suggestions
+that hold nothing. Everything else is the annex. Say that screen to the person, in plain
+words: never an internal id on its own, never a class or gate number as if they knew it.
 
-**The project root.** `--repo R` resolves to `<repositories>/R`, and `paths.repositories`
-comes from `prumo.yml`. If the name does not resolve, do **not** search the filesystem for
-something that looks close: say which root was configured, list what is actually there,
-and ask which one. A review of the wrong tree is indistinguishable from a review of the
-right one until somebody reads the diff.
+Publishing is not part of the review. The item comment, the proposal comment and the
+Approve are three external acts, each with its own explicit yes (`reference/publication.md`),
+and each only after `review.py freshness` says the verdict still speaks for the branch.
+A decision a person takes on a finding goes to `resolutions.json` in the package —
+`closure.py` reads the item's comments for it — and is applied by running `judge.py` and
+`render.py` again, never by running the review again.
 
-**A provider the configuration does not describe.** If the URL points at a host that is
-not the configured forge — a GitHub URL on a GitLab installation — stop. Do not translate
-it. Say what `prumo.yml` declares, say what the URL points at, and ask which is wrong.
-Reviewing it anyway means the report speaks the wrong vocabulary and the ref pattern
-fetches nothing.
+## While a review runs
 
-**Ask once, with everything you need, and then proceed.** A review that stops four times
-to ask one thing each costs more attention than it saves. Gather the gaps, ask them
-together, and carry on.
+- `prepare` writes `.claude/.task-review-ativo`; the hook uses it to hold push, commit
+  and moving the item until `conclude`. A marker left by a crash expires in four hours;
+  `review.py release` removes it by hand.
+- **A review speaks about its own item and nothing else.** `provenance.py` checks what the
+  agents returned at `conclude`: another review's commit, another proposal or an item its
+  own item never names stops the run. Do not hand-edit the ids — run that agent again.
+- An empty diff is a stop, not a clean review.
 
-## Sequence
+## The profile and what the reviews learn
 
-Scripts under `${CLAUDE_PLUGIN_ROOT}/scripts/`, all Python 3 with no dependency beyond
-`yaml` and `jsonschema`. The **ten agents travel with the method** — they are files of the
-plugin itself, registered as `prumo:<name>`, and whoever installs it copies nothing into
-`.claude/agents/`.
-
-Two commands, because the workflow sits in the middle — a script does not invoke the
-Workflow.
-
-```
-review.py prepare --repo R [--proposal N | --branch B] --item C
-                  --item-file ITEM.md [--proposal-file DESC.md]   # F0 F1 F2 F3
-                  [--base REF] [--delivery P]
-Workflow({name: 'prumo:task-review', args: {...}})                # F4 F5 F8 — the name carries the agents' prefix
-review.py conclude --package P --workflow-result W                # F7 F9 F11 F12
-```
-
-`prepare` prints the workflow invocation already assembled, with the activation plan.
-It first brings `origin/<base>` (and the branch, for a `--branch` origin) up from the
-remote — a base that could not be refreshed is measured as it is and the report's *Base*
-line says so — and checks the reviewed head out on its own, detached, under the
-repository's `.worktrees/`: every agent reads the code THERE, never in the checkout,
-which may be on another branch or behind. `conclude` and `release` take that worktree
-away. Both since 2026-11-19, after a stale base put deliveries already merged into one
-package and a stale checkout made a verifier confirm a method "that does not exist".
-`W` is the object the workflow returned, saved as a JSON file — or the harness's own
-output file for the task, as it came (`{summary, logs, result, …}`): `conclude` reads its
-`result` and says so. It splits the object into `findings.json`, `coverage.json`,
-`conventions_observed.json`, `scripts_manual.json`, the reviewers' criterion readings
-and — when the package carried no `criteria.json` — the extractor's list. The five
-separate flags (`--findings`, `--coverage`, …) still work for a file written by hand.
-
-**A branch built on another line names its base.** When the branch was cut from one line
-and merged with the work it needs, the profile's base has more than one common ancestor
-with it and the diff drags in commits that are not the item's. `--base <ref or commit>`
-measures this review against what the branch was built on; the manifest says the base was
-named. Never edit the profile's `base.branch` for one review.
-
-**A branch the prumo delivered carries its own proof.** `prepare --delivery <package>`
-takes the delivery's `delivery.json` into the review as `delivery-record.json`. When the
-record is about this very head, the suite it measured by name stands as the suite
-evidence, its lint as the lint check, and the reviewers read each criterion of the item
-against it, returning `criteria` with a record that states the fact; `conclude
---criteria <file>` writes those readings over the extractor's list. A record about
-another commit is kept for the reader and counts for nothing. The delivery's captured
-runs (`run-*.txt`) travel too, under `delivery-runs/`, and `prepare` digests every one of
-them ONCE with the profile's patterns into `delivery-digest.json` — the base run's reds by
-name, and for every other run executed × predicted, `beyond_base`, the tests it turned red
-that the base did not have, and `back_to_green` — inline for the reviewers and named to
-the verifier. The digest, never the
-record's prose nor the one `test` a mutation names, says what a mutant killed: on the
-first real review with the runs attached, both reviewers raised from the prose that a
-mutant had turned one test red while its run held seventeen beyond the base.
-
-Below the blocking severities, every finding gets ONE light reading together — one cheap
-sceptic over the whole set, on the slices the findings came from — and comes out
-`confirmed`, `refuted` or `uncertain` with `[light reading]` in its reason. A refuted one
-is shown apart in the report, struck from what anyone is asked to do; a finding that
-reading did not return comes out `unverified`, never `confirmed`: the reviewer's word,
-unrefuted and unchecked. Measured before it: 100 of 121 findings over 17 reviews went out
-unread, one of them false, and a person applying seven of them in one go opened three
-correction rounds. And a
-severe finding whose every evidence entry names a file of the review package — the record,
-the digest, the item — is about the record, not the delivery: the judge declares it and it
-closes no gate. The rule is narrow: a claim about the record pointed at a repository file
-keeps its weight, and what answers it is the digest, not this rule.
-
-Severity gets a second reading. The verifier, which already reruns every blocking finding
-in a clean context, also says what kind of consequence it read — `behaviour`, `proof`,
-`record` or `convention` — and the judge charges a `required` that stands on a consequence
-of record or convention as a nit, declaring the reading beside the reviewer's label, which
-is never rewritten. Measured need: the same delivery went INTERVENTION and APPROVED on one
-word, twice. The other direction — a nit that should have been required — still has no
-second reading, because nothing below the blocking severities is sent to the verifier.
-
-Every agent prompt ends with the same return rule: the tool input is the object itself,
-`findings` first, `checked` as short plain phrases with no quotes or backslashes. Measured
-over 42 runs: 15% of structured returns failed and were regenerated, 250k output tokens,
-almost all of them long `checked` strings the model did not escape.
-
-| Phase | Part | What it produces |
-|---|---|---|
-| **F0** preflight | `preflight.py` | `capabilities.json` — what THIS environment can do |
-| **F1** resolve | `resolver.py` | `manifest.json` — base, SHAs, item |
-| **F2** package | `package.py` | `diff.patch`, `slices/`, `change.json`, `profile.yml` |
-| **F2b** criteria | `prepare` numbers the item's list lines into `criteria-candidates.json`; the agent `criteria-extractor`, run by the workflow as its first stage when the package carries no `criteria.json`, only LABELS them (criterion, out of scope, context, summary of other lines); a summary is replaced by its parts, in code | `criteria.json`, built by `conclude` from the labels — the same labels give the same list |
-| **F3** triage | `triage.py` | `classes.json`, `size.json`, `plan.json` |
-| **F4, F5, F8** | the workflow | verified findings and manual scripts |
-| **F6** evidence | `evidence.py --role suite --run` | `evidence.json` — **one round, only the profile's allowlist** |
-| **F7** judge | `judge.py` | `verdict.json` |
-| **F9** render | `render.py` | `report.md`, `item-comment.html` |
-| **F10** publication | `reference/publication.md` | three acts, each with its own yes |
-| **F12** knowledge | `knowledge.py` | `<knowledge>/<repo>.md` and `.json` — what the reviews keep learning about the REPOSITORY |
-| **F11** record | `review.py conclude` + `telemetry.py` | the report under `<reports>/<repo>/`, `telemetry.json` in the package, and one line in `runs.jsonl` **with the measured cost** |
-
-**The review judges what the delivery DID.** Two consequences, both of them in the harness:
-
-- **A finding about code the change did not touch is not a finding of this review.** It
-  leaves the count and the verdict, and goes to the *Observations on the pre-existing*
-  section — neither erased, nor charged to the author. The reviewers already get the
-  instruction not to raise it; `conclude` separates whatever slips through, by
-  `attributable`. A gap in what the diff DELIVERED counts as this delivery's: a branch the
-  new file ought to have covered and did not is the delivery's debt, because the delivery
-  is the proof.
-- **A class that asks about production does not fire on a proof file.** `production_only`
-  marks A5, A6, B6 and B7: a delivery that only adds a test changes no business rule and
-  inverts no dependency, and matching the name of an enum inside a test was costing a human
-  decision about something that did not happen. A8 — the class that asks *about* tests — is
-  not marked, deliberately. When a class goes quiet for that reason, the report **says
-  the reason**.
-
-**The item comment is a RECORD of fixed shape, and it STANDS ON ITS OWN.** Generated by
-`render.py` out of the package, identical on every run — verdict, proposal, the two SHAs,
-**The rule** (the five gates, with what closed any that is shut), a **Measured** block
-(suite, risk classes, acceptance criteria, size, findings), **Open routes** when the
-verdict is INTERVENTION, the **acceptance criteria each with its record**, what goes
-**to QA** after the approval, the **project's pending items** with owners, and the line saying that approving does not
-merge.
-
-**No id travels alone, in the comment OR in the report.** `A4, A7, A9` is the harness
-talking to itself: the person reading has never seen the class catalogue and cannot
-look it up from there — and the same holds for `AC-3` and `SEC-01`, ids this review
-invented an hour ago. Every id goes in with what it stands for, resolved by
-`meanings_for()` in the reader's language — a class's question, a criterion's text, a
-finding's claim, and a plain sentence for the mechanical items (`suite`, `conflict`,
-`delivery_untested`, `mandatory_reading`). The questions live in the catalogues, not as
-literals in `common.py`, which is what used to print eighteen English sentences into a
-Portuguese report. **A gate is named, not only numbered**, for the same reason: the
-route table says which of the five conditions a row closed, in words. Extended to the
-report on 2026-11-04, after a verdict held by a lone `A8` — the comment had been doing
-it for a day, and the report, which is the artefact a reviewer actually opens, had not.
-Pinned in `tests/test_render.py`.
-
-**It never names a file.** Until 2026-11-04 it closed by printing the report's path, and
-a path under the reports root is unreadable to everybody except whoever ran the review:
-the person reading the item is on another machine, and naming it told them a report
-existed without letting them read a line of it. So what decides travels inside the
-comment.
-
-**No finding appears in it, of any kind.** Not the pre-existing ones, which were never
-this delivery's, and not this delivery's own. A finding is a *reading*, and a reading
-belongs in the report, where it sits beside its evidence, its consequence and its
-status. On the item, the **verdict and the criteria** are what decide; a list of nits
-and FYIs beside them reads as a list of things somebody has to answer for. What the
-reader still gets is the **count**, in `Measured`, with the blocking ones named — enough
-to know whether anything is owed without turning the item into a review thread. Asked
-for on 2026-11-04, in two steps: first the pre-existing ones, then all of them.
-
-A consequence worth knowing when you write a criterion's **record**: it must state its
-fact, never point at a finding id. A record reading "the pipeline runs no test job (see
-CI-1)" travels into the comment while `CI-1` does not, and a dangling cross-reference in
-a published comment is the same defect as the path that used to close it.
-
-What stays out for the same reason is what is an **instruction to execute later** — the
-manual scripts and this environment's capabilities. Those are work orders, not the record
-of a verdict, and they are what would drown the comment on a repository whose profile
-leaves nine classes unassessable. Narrative, prose pending work and a suggestion for the
-next step stay out too: they **decide nothing on the item** and drown what does. An empty
-section is never printed, because a heading with no body cannot be told apart from
-"nobody looked"; and a **refuted** finding appears nowhere, because the verifier knocked
-it down.
-
-The **project's pending items** are the one thing that is not this delivery's and stays,
-because they are not findings: they are the declared limit of the review's own reach,
-with owners, and they are what the `Measured` block's "nine not assessable" points at.
-Dropping them would leave that number unexplained on the comment that states the verdict.
-
-All of it is pinned in `tests/test_item_comment.py`; a new SECTION that does not fit
-belongs to the report.
-
-**An empty diff is a stop**, not a clean review: with no file there is nothing to review.
-
-## A review relates to its own item and its own proposal, and to nothing else
-
-A review done earlier must not bias a new one. The reviewers hold `Read`, `Grep` and
-`Glob` over the whole workspace, and the reports root is in that workspace — so a
-repository that already carries a sibling review carries a trap. It sprang on 2026-11-04:
-asked for a manual script per class, a planner anchored on the neighbouring report and
-returned fifteen scripts about the **previous** item, naming its SHAs and its proposal.
-Plausible line by line, and about the wrong delivery.
-
-The first attempt at a fix was a sentence in the prompt asking the agent not to do that.
-That is not a guarantee, and the method already knows it — the same rule that puts
-escaping in code puts this in code. **`provenance.py` decides it**, and `conclude` is the
-gate: before the judge reads anything, every file the agents produced is checked against
-this review's own identity, and a file that names another review's sha, another
-proposal, or an item its own item never mentions **stops the run**. It stops rather than
-warns because a report that mixes two deliveries is shaped exactly like a correct one.
-
-The three rules, and why each is shaped that way:
-
-- **a commit sha** — unambiguous, so it is the strong signal: eight to forty hex
-  characters with at least one letter, foreign unless it is a prefix of (or prefixed by)
-  this review's head, base or merge base;
-- **a proposal number** — read from the origin ref's own shape, so it follows whatever
-  forge the installation declared;
-- **an item id the review's own item never mentions** — the asymmetry is the point. An
-  item may legitimately name a sibling ("follows the test pattern of card X"), and
-  flagging that would make the check cry wolf on the item's own words.
-
-The remedy is never to hand-edit the ids: whatever read the wrong review had a reason,
-and the next run would do it again. Re-run that agent with this review's manifest named
-first.
-
-While the review runs, `review.py` creates `.claude/.task-review-ativo`, and the hook uses
-that marker to block push, commit and moving the item **only while the review is
-running** — outside it the workspace carries on as normal, and the skills that legitimately
-push or move an item keep working. Merge is blocked always. A marker leaked by a crash
-expires in 4h, and `review.py release` removes it by hand.
-
-Across loops, `delta.py` decides the mode before F2 — **re-judgement** when only evidence
-arrived (no reviewer runs), **delta** when a push arrived, **full** the first time round.
-`closure.py` reads the item's comments and produces `resolutions.json`.
-
-## What the reviews learn about the repository
-
-A review is thrown away every time, and the reviewers rediscover the same repository in
-five separate contexts on every run. Measured over eleven reviews, that rediscovery is
-the single biggest line of the bill: `cache_read` is 82% of what is spent, and output is
-1%. The cost is not what the agents write — it is **requests × accumulated context**, and
-the context is accumulated by opening files somebody already opened last week.
-
-`knowledge.py` writes the other half. Per repository, outside it, under
-`<knowledge>/<repo>.md`: the conventions the code exhibits, the files the reviewers keep
-opening, the debt the repository has declared, and the defects no delivery caused. It is
-the **profile's unconfirmed sibling** — the profile is what a person signed, this is what
-the machine noticed.
-
-**Since 2026-11-19 the reviewers read it.** `prepare` hands them `knowledge.md`, built by
-`reading_for_reviewers()`: only what two reviews saw, the kinds taken in turns (a pile of
-conventions once crowded out every pre-existing defect), most corroborated first, capped
-at 6 KB with the cap stated — the whole reading of one repository had reached 26 KB per
-reviewer. No address inside a review package survives into it. The sceptics are not
-handed it: a refutation stays a reading of the code alone.
-
-Four rules, and each one closes a hole the method has already paid for:
-
-- **Nothing here closes a gate.** The fifth gate measures whether the review actually
-  measured; a machine-accrued fact certifying itself is exactly the hole that gate exists
-  to cover. An entry's road into a verdict runs through a person — `derive_profile.py`
-  reads the file, somebody confirms it, it becomes an anchor.
-- **No sha, no proposal number, no item id — redacted in code, not asked for in a
-  prompt.** This file is read by EVERY later review, so an identifier that is
-  legitimately this review's own today is foreign tomorrow. The sanitiser is therefore
-  stricter than `provenance.check`: it redacts its own too, and counts what it redacted.
-  It redacts rather than drops, because a sentence stays useful once the sha is gone.
-- **One sighting is not a fact.** An entry is printed only once a SECOND review has seen
-  it; before that it is counted and held back, with the count stated. A single reviewer's
-  guess printed as "what this repository does" is indistinguishable from a corroborated
-  convention.
-- **Nothing is deleted because a review did not see it.** A delivery that touches another
-  corner of the repository says nothing about a convention it never went near. Staleness
-  is read from `last_seen` in the ledger, never from absence.
-
-The reviewers feed it through an OPTIONAL `conventions_observed` in their return — what
-is true of the repository rather than of this change. It never becomes a finding. A
-reviewer with nothing to say there says nothing, and the accrual is a **by-product**: it
-runs last, after the report is filed, and a failure in it never costs the review its
-report.
-
-**Written now, read later.** Nothing consumes the file yet. Handing it to the reviewers
-is the cut that attacks the ~60% spent on rediscovery, and it waits until the file has
-mass and the sanitiser has a review's worth of real text behind it — a shortcut that is
-wrong is worse than no shortcut, because the reviewer cannot tell.
-
-## Profile
-
-| Situation | What happens |
+| Profile | What happens |
 |---|---|
 | `status: confirmed` | normal operation |
-| `draft` or absent | the review **runs in full**; the judge opens `missing_profile` with origin `project` — declared in the report, **outside the verdict** |
-| advisory mode | runs with no profile, **issues no verdict**, publishes nothing |
+| `draft` or absent | the review runs in full; the gap is declared as the project's, outside the verdict |
 
-Repository with no profile: run `derive_profile.py <repo>`, hand over the draft and the list
-of what it could not fill in. **Confirming is a person's act**, once per repository.
+No profile: `derive_profile.py <repo>` drafts one; confirming it is a person's act. Whoever
+runs the review is named by the environment (`TASK_REVIEW_RESPONSAVEL`), never written
+into the profile.
 
-Confirming the profile is still worth a lot: with no anchor, half the classes come out
-`not_assessable` and the review sees less. What changed on 2026-11-03 is that this cost
-falls on whoever maintains the repository, not on whoever wrote the delivery.
-
-## The verdict — the rule
-
-Binary, and there is only one rule:
-
-> **APPROVED ⟺**
-> 1. the code follows the project's **standards and good practice**;
-> 2. it breaks no **business rule**;
-> 3. it **covers what the item asked for**, with the necessary evidence;
-> 4. what only **QA** can verify is handed to QA, with a script;
-> 5. and the four above were actually **measured**.
-
-Any gate closed means INTERVENTION REQUIRED. The report opens with that five-line table, and
-only then with the routes — the route says *who does what*, the gate says *which condition
-failed*. Two routes serve more than one gate (`author_fix` takes both a finding and an unmet
-criterion), so the gate is declared in `judge.py` at the point of use, never deduced from
-the route's type.
-
-**What only the running system can show is QA's, not the review's.** A fired §B class,
-or a criterion a reviewer marks `decided_by: qa` (an environment, an external system, a
-journey through the screens), is routed with `origin: qa`: declared in `qa_pending`, in
-section 9d of the report with the manual script the review wrote for it, and in the item
-comment without the script — and it closes no gate. The order is review → APPROVED → QA →
-proposal. What the review still owes QA is the script: gate 4 closes only when there is
-something for QA and the planner handed nothing. Until 2026-11-19 gate 4 read "no manual
-verification is left to do", and a review with no finding about the code came out
-INTERVENTION on every delivery that touched an integration.
-
-**The fifth gate measures the REVIEW, not the repository.** "Not assessed" still does not
-mean "no risk" — but whose debt it is decides whether it holds the proposal. Missing
-mandatory reading brings the verdict down, because with no item there is nothing to judge. A
-draft profile and a guardrail with no tool **do not bring it down**: the delivery did not
-cause them. They come out declared in `project_pending` and in the *PROJECT pending items*
-section of the report, with owners. Decided on 2026-11-03.
-
-**This skill asks a single question: is what the item asked for delivered in this
-proposal?** Every route carries `origin` — `delivery`, `project` or `qa` — and only one of
-origin `delivery` closes a gate and becomes INTERVENTION. It is the same principle that already
-governs `attributable` on a finding and `red_not_attributable` on the suite, now applied to
-the route: a repository whose profile nobody finished would never approve any delivery at
-all, and the verdict would stop telling a good delivery from a bad one.
-
-What still holds the proposal: an attributable, blocking finding, a §A class fired, an item
-criterion unmet or with no record, a §B class fired, empty mandatory reading, and **a
-reviewer the triage activated that never answered**.
-
-That last one is neither the delivery's debt nor the repository's — it is the REVIEW's —
-and it closes gate 5 all the same, by the same logic as empty mandatory reading: whose
-fault it was does not change that there is nothing to judge with. It exists because the
-method did the opposite for a while. Measured on 2026-11-04: `architecture-reviewer` ran
-out of its turn budget twice over the same delivery, 1.7M tokens spent reading and never
-answering — a third of that run's bill — and both reports came out claiming gate 5 had
-passed. **A reviewer that returns nothing is indistinguishable from a reviewer that found
-nothing**, which is exactly why it cannot be allowed to pass in silence. The workflow
-retries once, telling the agent to read less and answer; what survives the retry goes to
-`coverage.json`, which `conclude --coverage` folds into the evidence, and the route names
-WHICH slice nobody read.
-
-**What does NOT go into the rule:** a suite red the delivery did not cause. A pre-existing
-baseline is the repository's debt, goes into the report's summary and does not hold the
-proposal — otherwise a repo whose trunk carries reds would never approve any delivery at
-all, and the verdict would stop discriminating. Decided on 2026-10-29.
-
-**The suite holds a proposal in three cases, and annotates in every other.** Extended on
-2026-11-04, after a delivery of green tests was held by a base whose environment was not
-set up:
-
-1. **it does not run at all** (`broken`) — a repository where nothing executes proves
-   nothing about any delivery. A suite that runs *in parts* is not this: a default
-   invocation that aborts on a stale testsuite entry, while every selection runs, is
-   `red_not_attributable` plus a note;
-2. **a test over what this delivery wrote is red** (`red_attributable`);
-3. **what the delivery wrote has no test over it** (`delivery_untested`) — unless the
-   item's whole subject IS the proof, which `item_is_coverage_debt` declares: a coverage
-   or technical-debt item delivers tests over code that was already there, and charging
-   it for the absence it was opened to fix is charging it twice.
-
-Everything else — a red baseline, a runner this environment lacks, a pipeline nobody
-read — is an annotation with an owner, and **the proposal is approved if what the item
-asked for is delivered**. A criterion of the item that only the suite decides follows the
-suite's state, never the absence of a human record: whoever reads the item marks it
-`decided_by: suite`, and the judge stops charging it a second time at gate 3.
-
-The routes and their owners are in `judge.py`; the classes, in `reference/classes.md`.
-
-**No §A finding proposes a fix** — the schema refuses a non-null `form`. How to resolve it
-is a person's call.
-
-**A defect the change did not cause** goes out with `attributable: false`: it appears in the
-report and does not hold the proposal.
-
-## What this skill never does
-
-- **Merge.** The `review-guard.sh` hook blocks it, and the bot account does not have the
-  right.
-- **Move the item.** A `deny` rule in `permissions`.
-- **Write into the target repository.** Only under `<reports>/<repo>/`.
-- **Publish without authorisation.** The item comment, the proposal comment and the Approve
-  are three external acts, each with **its own** explicit yes.
-- **Publish a stale verdict.** Before any of the three acts, `review.py freshness`:
-  a branch that gained commits after the reviewed head blocks all three — the verdict
-  speaks for the head it measured and for nothing after it (`reference/publication.md`).
-- **Fix.** Whoever fixes is the author.
-- **Approve on its own when it could not assess.** See the third state.
-
-## References
-
-- `reference/classes.md` — the 18 classes, with no anchors
-- `reference/publication.md` — the three external acts and the tracker's HTML subset
-- `reference/playbooks.md` — manual verification scripts
-- `reference/ci-gitlab.md` — the job that runs this on `merge_request_event`
-- `reference/forge-connection.md` — connecting a forge so the description reads itself
-- `schemas/` — finding, triaged class, criterion, verdict, manual script
-- `schemas/profile.schema.yml` — the profile's contract
-
-Tests: `cd ${CLAUDE_PLUGIN_ROOT}/scripts && python3 -m unittest discover -s tests`.
+`knowledge.py` keeps, per repository and outside it, what two reviews saw: conventions the
+code holds to, the files reviewers keep opening, declared debt, defects no delivery caused.
+The reviewers get a capped reading of it as a shortcut; the sceptics do not; nothing in it
+closes a gate, and no commit, proposal or item id survives into it.
 
 ## Cost
 
-The cost of each review is **measured, never estimated**: `telemetry.py` reads the record
-the Workflow writes and the per-agent transcripts, and sums what the API reported in
-`usage`. `conclude` calls it by itself, and `runs.jsonl` then carries `tokens`, `minutes`,
-`lines_changed` and `cost_per_agent`. `metrics.py` aggregates: the median per run, **tokens
-per changed line** — the only number that compares reviews of different sizes — and the
-spend per agent type across the history.
+Measured, never estimated: `conclude` reads the workflow's own record and writes `tokens`,
+`minutes` and the cost per agent to `telemetry.json` and `runs.jsonl`; `metrics.py`
+aggregates. A cost that comes out `null` has a reason beside it — and is a bug to look
+into, never a zero.
 
-Two totals, on purpose. `harness_tokens` is the Workflow's `totalTokens`;
-`billable_tokens` is the sum of every `usage` component of every request. They diverge
-widely (835k against 10.8M on the first measurement), and it is the breakdown —
-`cache_read` dominates — that says where to cut.
+## What this skill never does
 
-**With no locatable transcript, `tokens` comes out `null` with a reason.** A zero would make
-an expensive review look cheap, and `metrics.py` publishes `runs_without_measurement`
-alongside the median so that the median is not read as the whole.
+Merge. Move the item. Write into the target repository. Publish without a yes for that
+act. Publish a verdict the branch has moved past. Fix what it found. Approve what it could
+not assess.
 
-**And `null` is a bug until proven otherwise.** The run is found by looking for the
-package path in the harness's record, and that path MOVED: it used to be inlined in a
-script built per review, and since the method travels as a plugin there is one generic
-script and the package arrives in `args`. The lookup kept reading `script`, went
-permanently false, and every review for weeks reported "cost not measured" — the
-measurement did not get worse, it went **silent**, which is harder to notice and quietly
-removes the ground under every efficiency decision. Fixed on 2026-11-04; both fields are
-read now. If a run comes back unmeasured, suspect the lookup before suspecting the disk.
+## References
 
-The two levers that rule the cost, measured:
+- `reference/classes.md` — the eighteen classes
+- `reference/publication.md` — the three external acts and the tracker's HTML subset
+- `reference/playbooks.md` — manual verification scripts
+- `reference/forge-connection.md` — how the proposal's description reaches the review
+- `reference/ci-gitlab.md` — running this on a merge request event
+- `schemas/` — finding, criterion, verdict, manual script, profile
 
-- **the slice**, which is the input payload of every new context. Only `scope-coherence`
-  reads `complete`; the rest read `code-and-tests` or `code-and-config`. A reviewer's slice
-  that `package.py` does not write is silent empty reading — there is a test holding that
-  coupling.
-- **the number of requests per agent**, which is what multiplies `cache_read`. On the second
-  measurement, four `finding-verifier` runs cost 10.4M of the run's 30M: verification
-  fan-out is the axis that grows most on a bad delivery.
-- **an agent's turn budget, when it is too SMALL.** The counter-intuitive one, and the
-  most expensive bug measured so far. `maxTurns: 14` on three reviewers was never
-  measured against a real change: 14 turns is enough to read a diff and not enough to
-  read it *and* answer, so the agent spent the whole budget and returned nothing. A
-  budget that is too tight does not save money — it buys the entire context and throws
-  the answer away. Raised to 24 on 2026-11-04, after the failure cost 1.7M tokens in one
-  run.
+Tests: `cd ${CLAUDE_PLUGIN_ROOT}/scripts && python3 -m unittest discover -s tests`.

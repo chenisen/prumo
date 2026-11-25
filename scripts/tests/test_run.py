@@ -98,7 +98,7 @@ class TestEveryRoutingDecisionIsReadFromDisk(unittest.TestCase):
         by one. An item nobody has to approve is measured and written in one call."""
         self.put(self.deliver, "deliver-manifest.json", {"gate": False})
         out = self.decide()["text"]
-        self.assertIn("stage: 'deliver'", out)
+        self.assertIn("/workflow-deliver.js'})", out)
         self.assertIn(f"{self.deliver}/workflow-result.json", out)
         self.put(self.deliver, "workflow-result.json", {})
         self.assertEqual(self.decide()["text"],
@@ -106,7 +106,7 @@ class TestEveryRoutingDecisionIsReadFromDisk(unittest.TestCase):
 
     def test_a_shape_with_a_gate_is_measured_planned_and_waits_for_a_person(self):
         self.put(self.deliver, "deliver-manifest.json", {"gate": True})
-        self.assertIn("stage: 'measure'", self.decide()["text"])
+        self.assertIn("/workflow-measure.js'})", self.decide()["text"])
         self.put(self.deliver, "measure-result.json", {})
         self.assertTrue(self.decide()["text"].startswith("deliver.py plan"))
         self.put(self.deliver, "measure.json", {"premises": []})
@@ -117,7 +117,7 @@ class TestEveryRoutingDecisionIsReadFromDisk(unittest.TestCase):
         self.put(self.deliver, "approval.json", {"by": "someone", "digest": "stale"})
         self.assertEqual(self.decide()["class"], "plan", "an approval of another measurement does not count")
         self.put(self.deliver, "approval.json", {"by": "someone", "digest": "d1"})
-        self.assertIn("stage: 'write'", self.decide()["text"])
+        self.assertIn("/workflow-write.js'})", self.decide()["text"])
         self.put(self.deliver, "workflow-result.json", {})
         self.assertIn(f"--result {self.deliver}/workflow-result.json", self.decide()["text"])
 
@@ -150,7 +150,7 @@ class TestEveryRoutingDecisionIsReadFromDisk(unittest.TestCase):
         self.put(self.deliver, "delivery.json", {"state": "delivered", "branch": {"name": "b"}})
         self.put(self.review, "manifest.json", {})
         import run
-        self.assertIn(f"name: '{run._wf('task-review')}'", self.decide()["text"])
+        self.assertIn("/workflow.js'", self.decide()["text"])
         self.put(self.review, "findings.json", [])
         self.assertTrue(self.decide()["text"].startswith("review.py conclude"))
 
@@ -174,7 +174,7 @@ class TestEveryRoutingDecisionIsReadFromDisk(unittest.TestCase):
         self.put(self.review, "manifest.json", {})
         self.assertNotIn("evidence", self.decide()["text"], "not before the verdict")
         self.put(self.review, "verdict.json", {"verdict": "APPROVED"})
-        self.assertIn("stage: 'evidence'", self.decide()["text"])
+        self.assertIn("/workflow-evidence.js'})", self.decide()["text"])
         self.put(self.deliver, "evidence-result.json", {})
         self.assertEqual(self.decide()["text"],
                          f"deliver.py evidence --package {self.deliver} --collected {self.deliver}/evidence-result.json")
@@ -309,7 +309,8 @@ class TestTheRouteOverRealPackages(unittest.TestCase):
 
         deliver_pkg = self.spine.prepare()
         run.bind(pkg, "deliver", str(deliver_pkg))
-        self.assertIn("stage: 'deliver'", run.next_step(pkg)["text"], "a debt asks no gate: one call")
+        self.assertIn("/workflow-deliver.js'})", run.next_step(pkg)["text"], "a debt asks no gate: one call")
+        self.assertIn('"stage": "deliver"', (deliver_pkg / "workflow-deliver.js").read_text(encoding="utf-8"))
         tree = self.spine.tree_of(deliver_pkg)
         (tree / "tests" / "test_guard.py").write_text(PROVING_TEST, encoding="utf-8")
         (deliver_pkg / "workflow-result.json").write_text(json.dumps({
@@ -335,7 +336,7 @@ class TestTheRouteOverRealPackages(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(review.prepare(args), 0)
         run.bind(pkg, "review", str(review_pkg))
-        self.assertIn("name: 'task-review'", run.next_step(pkg)["text"])
+        self.assertIn("/workflow.js'", run.next_step(pkg)["text"])
 
         (review_pkg / "findings-in.json").write_text("[]", encoding="utf-8")
         args = argparse.Namespace(package=str(review_pkg), findings=str(review_pkg / "findings-in.json"),
@@ -396,7 +397,7 @@ class TestAStoryAndAnEpicAreRouted(unittest.TestCase):
 
     def test_a_story_is_designed_then_planned_then_approved(self):
         self.put(self.d, "deliver-manifest.json", {"shape": "story", "deliverable": True})
-        self.assertIn("stage: 'design'", self.decide()["text"])
+        self.assertIn("/workflow-design.js'})", self.decide()["text"])
         self.put(self.d, "design-result.json", {})
         self.assertTrue(self.decide()["text"].startswith("deliver.py plan") and "--design" in self.decide()["text"])
         self.story(gate_ok=False)
@@ -408,7 +409,7 @@ class TestAStoryAndAnEpicAreRouted(unittest.TestCase):
         story is concluded once."""
         self.story()
         out = self.decide()["text"]
-        self.assertIn("stage: 'tasks'", out)
+        self.assertIn("/workflow-tasks.js'})", out)
         self.assertNotIn("--task", out)
         self.put(self.d, "workflow-result.json", {})
         self.assertEqual(self.decide()["text"],
@@ -435,7 +436,7 @@ class TestAStoryAndAnEpicAreRouted(unittest.TestCase):
     def test_an_epic_is_decomposed_and_stops(self):
         self.run["shape"] = "epic"
         self.put(self.d, "deliver-manifest.json", {"shape": "epic", "deliverable": False})
-        self.assertIn("stage: 'design'", self.decide()["text"])
+        self.assertIn("/workflow-design.js'})", self.decide()["text"])
         self.put(self.d, "plan.json", {"gate": True, "digest": "d1"})
         self.assertEqual(self.decide()["class"], "plan")
         self.put(self.d, "approval.json", {"by": "x", "digest": "d1"})
@@ -639,33 +640,15 @@ class TestTheReviewTakesTheDeliverysRecord(unittest.TestCase):
         self.assertIn("embed('delivery-digest.json'", workflow)
         self.assertIn("beyond_base", workflow)
 
-    def test_a_finding_nobody_verified_is_unverified_never_confirmed(self):
-        """Two nits raised from the record's prose went out as `confirmed` on a review
-        whose verifier never saw them — nits do not go to the verifier — while the run
-        file refuted both. A status is what happened: `unverified`."""
+    def test_a_finding_below_the_blocking_severities_goes_out_unverified(self):
+        """A status is what happened: a suggestion nobody read twice is `unverified`,
+        never `confirmed` — it decides no gate, so no agent is paid to read it again."""
         import json
         workflow = (PRUMO_ROOT / "workflows" / "task-review.js").read_text(encoding="utf-8")
         self.assertIn("status: 'unverified'", workflow)
-        self.assertNotIn("{ ...f, status: 'confirmed'", workflow)
-        self.assertIn("NOT_SENT_BELOW_BLOCKING", workflow)
+        self.assertNotIn("verify:below-blocking", workflow)
         schema = json.loads((PRUMO_ROOT / "schemas" / "finding.schema.json").read_text(encoding="utf-8"))
         self.assertIn("unverified", json.dumps(schema))
-
-    def test_findings_below_blocking_get_one_light_reading(self):
-        """100 of 121 findings over 17 reviews went out unread, one of them false by the
-        code it named. Below the blocking severities the workflow now sends the whole set
-        to ONE sceptic on the light tier, concurrently with the blocking verification, and
-        takes back only the ids it sent."""
-        workflow = (PRUMO_ROOT / "workflows" / "task-review.js").read_text(encoding="utf-8")
-        self.assertIn("const belowBlocking = findings.filter", workflow)
-        self.assertIn("label: 'verify:below-blocking'", workflow)
-        self.assertIn("schema: LIGHT_VERIFICATION_SCHEMA", workflow)
-        light = workflow[workflow.index("const lightReading"):workflow.index("const verifyBlocking")]
-        self.assertIn("...tiered('light')", light)
-        self.assertNotIn("tiered('heavy')", light)
-        self.assertIn("await parallel([verifyBlocking, lightReading])", workflow)
-        self.assertIn(".filter((v) => belowBlocking.some((f) => f.id === v.id))", workflow)
-        self.assertIn("never `confirmed`", light)
 
     def test_conclude_reads_the_workflows_object_out_of_the_harness_envelope(self):
         """The task's output file wraps the object in `{summary, logs, result, …}`. The
@@ -809,7 +792,7 @@ class TestASmallDeliverysSuiteIsNamedForWhatItWas(unittest.TestCase):
 class TestTheVerifierReadsTheSeverityASecondTime(unittest.TestCase):
     def test_the_workflow_asks_for_and_carries_the_consequence_kind(self):
         workflow = (PRUMO_ROOT / "workflows" / "task-review.js").read_text(encoding="utf-8")
-        self.assertIn("consequence_kind: { enum: ['behaviour', 'proof', 'record', 'convention'] }", workflow)
+        self.assertIn("consequence_kind: { enum: ['behaviour', 'proof', 'proof_extra', 'record', 'convention'] }", workflow)
         self.assertIn("'attributable', 'consequence_kind']", workflow)
         self.assertIn("consequence_kind: v ? v.consequence_kind : null", workflow)
         self.assertIn("in `consequence_kind`", workflow)
@@ -827,11 +810,11 @@ class TestEveryAgentIsToldHowToReturn(unittest.TestCase):
     wrapped the JSON as a string under `input`. The rule travels with every prompt."""
 
     def test_the_rule_reaches_reviewers_extractor_verifier_and_planner(self):
-        # six: labeller, extractor, reviewers, the blocking verifier, the light reading,
-        # the manual planner
+        # seven: labeller, extractor, reviewers, the blocking verifier, the two re-checks
+        # of a later round, the manual planner
         workflow = (PRUMO_ROOT / "workflows" / "task-review.js").read_text(encoding="utf-8")
         self.assertIn("const RETURN_RULE", workflow)
-        self.assertEqual(workflow.count("RETURN_RULE,"), 6)
+        self.assertEqual(workflow.count("RETURN_RULE,"), 7)
         self.assertIn("never wrapped under `input`", workflow)
 
     def test_no_reviewer_still_asks_for_the_single_finding_schema(self):

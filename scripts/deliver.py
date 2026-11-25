@@ -12,7 +12,7 @@ what landed once, hand the branch to task-review, and illustrate it at the very 
 
     deliver.py conclude --package P [--result R.json] [--measure M] [--written W]
                         [--refutation F]
-        F6 check, ONCE per item: the scope and the budget over the diff, the proof over
+        F6 check, ONCE per item: scope and budget over the diff, as warnings; the proof over
         the test files the change touched, the suite its size asks for — those files, or
         the whole of it — and the lint · F8 judge, a pure function · F9 record, report,
         the next command. Removes the marker.
@@ -42,7 +42,7 @@ import time
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from common import (MissingConfiguration, InvalidConfiguration, UsageError, cfg,
                     dir_packages, dir_repositories, dir_reports, load_profile,
-                    profile_path, read_json, slug, today, waiver_in_force, write_json,
+                    profile_path, read_json, slug, today, write_json, write_workflow_script,
                     casa_algum, capabilities_after_preflight, hint_config, models_map)
 from i18n import t
 from shape import (SHAPES, resolve as resolve_shape, budget_for, UnknownShape, size_of,
@@ -75,7 +75,7 @@ def delivery_block(profile: dict, repo: str | None = None) -> dict:
     return block
 
 
-def deliver_judge(record: dict, profile: dict, reference: str | None = None) -> dict:
+def deliver_judge(record: dict, profile: dict) -> dict:
     block = delivery_block(profile, record.get("repo"))
     repo = record.get("repo") or profile.get("profile") or "?"
     out = {"state": DELIVERED, "reason": t("deliver.state.delivered"), "owner": None,
@@ -109,20 +109,6 @@ def deliver_judge(record: dict, profile: dict, reference: str | None = None) -> 
     waiting = [k for k, v in (record.get("tasks") or {}).items() if v != DELIVERED]
     if waiting:
         return stop(BLOCKED, t("deliver.blocked.tasks_pending", tasks=", ".join(waiting)), "author")
-
-    # The diff's own stops come before every stop a run could give: nothing ran after them.
-    diff = record["diff"]
-    stopped_by_diff = diff_stop(diff, record.get("waiver"), reference)
-    if stopped_by_diff == "outside_scope":
-        return stop(BLOCKED, t("deliver.blocked.outside_scope",
-                               paths=", ".join(diff["outside_scope"])), "author")
-    if stopped_by_diff == "budget":
-        budget = plan.get("budget") or block.get("budget") or {}
-        return stop(BLOCKED, t("deliver.blocked.budget_exceeded",
-                               files=len(diff.get("files") or []),
-                               lines=diff.get("added", 0) + diff.get("removed", 0),
-                               max_files=budget.get("max_files", "?"),
-                               max_lines=budget.get("max_lines", "?")), "person")
 
     # A refactor with nothing standing guard has no proof to preserve, and the suite
     # never ran for it: the stop is the person's, before "the suite did not run".
@@ -191,17 +177,19 @@ def deliver_judge(record: dict, profile: dict, reference: str | None = None) -> 
     return out
 
 
-def diff_stop(diff: dict, waiver: dict | None, reference: str | None = None) -> str | None:
-    """What the diff alone decides, before anything is run: `outside_scope`, `budget`, or
-    None. A line outside the scope, or a budget exceeded with no waiver in force, blocks
-    whatever the tests say — so the judge reads it first and `conclude` runs nothing after
-    it. The first real delivery on 3.0 paid three mutants and two whole suites, six and a
-    half minutes, for a stop its diff had already decided."""
+def diff_warnings(diff: dict, budget: dict | None) -> list[str]:
+    """What the diff says that a person should read and that stops nothing: files outside
+    the scope, and a size over the budget the repository declared."""
+    out = []
     if diff.get("outside_scope"):
-        return "outside_scope"
-    if not diff.get("within_budget") and not waiver_in_force(waiver, reference):
-        return "budget"
-    return None
+        out.append(t("deliver.warning.outside_scope", paths=", ".join(diff["outside_scope"])))
+    if budget and not diff.get("within_budget", True):
+        out.append(t("deliver.warning.budget_exceeded",
+                     files=len(diff.get("files") or []),
+                     lines=diff.get("added", 0) + diff.get("removed", 0),
+                     max_files=budget.get("max_files", "?"),
+                     max_lines=budget.get("max_lines", "?")))
+    return out
 
 
 # --- the marker ------------------------------------------------------------------------
@@ -234,16 +222,11 @@ def _installation_root() -> str | None:
     return str(source.parent) if source else None
 
 
-def mark(package: pathlib.Path, worktree: pathlib.Path, allowed: list[str],
-         branch: str | None = None, roots: list[str] | None = None) -> None:
-    """`roots` is where this delivery's kind may write before a measurement names its
-    files: an item with no gate is measured and written in one workflow call, and the
-    guard holds the writer to the roots until `conclude` holds the diff to the scope."""
+def mark(package: pathlib.Path, worktree: pathlib.Path, branch: str | None = None) -> None:
     target = marker(package)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps({"package": str(package), "worktree": str(worktree),
-                                  "branch": branch, "allowed": allowed, "roots": roots or [],
-                                  "started_at": today()}) + "\n",
+                                  "branch": branch, "started_at": today()}) + "\n",
                       encoding="utf-8")
 
 
@@ -389,8 +372,12 @@ def apply_mutation(workdir: pathlib.Path, m: dict) -> str | None:
     return None
 
 
-def revert(workdir: pathlib.Path, file: str) -> None:
-    git(workdir, "checkout", "--", file)
+def revert(workdir: pathlib.Path, file: str, original: bytes) -> bool:
+    """Put the mutated file back as it was before the mutant — the delivery's own
+    uncommitted change to it included. True when the file reads as it did."""
+    path = workdir / file
+    path.write_bytes(original)
+    return path.read_bytes() == original
 
 
 # --- F0 F1 F3 F4: prepare ----------------------------------------------------------------
@@ -669,7 +656,7 @@ def agent_commands(profile: dict, workdir: pathlib.Path) -> dict:
 
 
 def scope_roots(block: dict, kind: str) -> list[str]:
-    """Where a delivery of this kind may write. Documentation the change makes stale
+    """Where a delivery of this kind is expected to write. Documentation the change makes stale
     travels with it, where the profile says where documentation lives — except in a
     coverage gap, which only adds tests."""
     generated = list(block.get("generated") or [])
@@ -884,7 +871,7 @@ def prepare(args) -> int:
     }
     write_json(package / "deliver-manifest.json", manifest)
 
-    mark(package, workdir, [], branch=name, roots=scope_roots(block, kind))
+    mark(package, workdir, branch=name)
     from common import glob_to_regex
     write_json(package / "workflow-args.json", {
         **common_args, "item": manifest["item"], "workdir": str(workdir),
@@ -918,9 +905,15 @@ def prepare(args) -> int:
     return 0
 
 
+def stage_script(package: pathlib.Path, stage: str) -> pathlib.Path:
+    """`workflow-<stage>.js` in the package: the deliver workflow with the package's
+    arguments, as they stand, and the stage already inside."""
+    args = read_json(package / "workflow-args.json")
+    return write_workflow_script(package, "deliver", {**args, "stage": stage}, suffix=f"-{stage}")
+
+
 def _invocation(package: pathlib.Path, stage: str) -> str:
-    return ("Workflow({name: '" + _workflow_name("deliver") + "', args: <the object in "
-            + str(package / "workflow-args.json") + f"> + stage: '{stage}'}})")
+    return f"Workflow({{scriptPath: '{stage_script(package, stage)}'}})"
 
 
 # --- the plan and its gate ---------------------------------------------------------------
@@ -1047,20 +1040,22 @@ def plan(args) -> int:
     record = {"shape": man["shape"], "depth": man["plan_depth"], "gate": rules["gate"],
               "digest": digest(subject), "rendered_at": today()}
     write_json(package / "plan.json", record)
-    # The next stage reads what was planned from workflow-args.json: the conductor
-    # pastes that object and a stage name, and composes nothing.
+    # The next stage reads what was planned from workflow-args.json.
     carry(package, **({"design": subject} if getattr(args, "design", None) else {"measure": subject}))
     (package / "plan.md").write_text(text, encoding="utf-8")
     print((package / "plan.md").read_text(encoding="utf-8"))
     print(t("deliver.cli.plan_at", path=package / "plan.md", shape=man["shape"],
             depth=man["plan_depth"],
             gate=t("deliver.cli.plan_gate") if rules["gate"] else t("deliver.cli.plan_no_gate")))
+    if rules["deliverable"]:
+        print(t("deliver.cli.then_stage",
+                invocation=_invocation(package, "tasks" if man["shape"] == "story" else "write")))
     return 0
 
 
 def carry(package: pathlib.Path, **fields) -> None:
     """Put `fields` into the package's workflow-args.json — what the next workflow stage
-    needs and a person would otherwise have to paste by hand. None removes a field."""
+    needs — and into every stage script already written from it. None removes a field."""
     path = package / "workflow-args.json"
     if not path.exists():
         return
@@ -1071,6 +1066,8 @@ def carry(package: pathlib.Path, **fields) -> None:
         else:
             data[key] = value
     write_json(path, data)
+    for script in package.glob("workflow-*.js"):
+        stage_script(package, script.stem.removeprefix("workflow-"))
 
 
 def red_excerpt(output: str, names: list[str], each: int = 1500, total: int = 6000) -> str:
@@ -1111,11 +1108,6 @@ def _agent_prefix() -> str:
     return agent_prefix()
 
 
-def _workflow_name(name: str) -> str:
-    from triage import workflow_name
-    return workflow_name(name)
-
-
 # --- F6 F8 F9: conclude ------------------------------------------------------------------
 
 def changed_files(workdir: pathlib.Path, base_sha: str,
@@ -1141,10 +1133,35 @@ def changed_files(workdir: pathlib.Path, base_sha: str,
 
 def scope_guard(files: list[str], allowed: list[str], roots: list[str]) -> list[str]:
     """A file outside what the measurement named, or outside the roots the kind allows,
-    is outside the scope. The hook holds this while the writer works; this holds it
-    over what actually landed."""
+    is outside the scope: declared in the record and the report, and it stops nothing."""
     patterns = [p for r in roots for p in (r.rstrip("/"), r.rstrip("/") + "/**")]
     return [f for f in files if f not in allowed or not casa_algum(f, patterns)]
+
+
+WRITES_FILE = "writes.json"
+
+
+def remember_write(package: pathlib.Path, written: dict) -> list[dict]:
+    """Every write this package received that named its commit, in order. A second write
+    answers a block and describes only its own pass; the commit is not only that pass."""
+    path = package / WRITES_FILE
+    writes = read_json(path) if path.exists() else []
+    entry = {"files": list(written.get("files") or []),
+             "commit_message": (written.get("commit_message") or "").strip()}
+    if entry["commit_message"] and entry not in writes:
+        writes.append(entry)
+        write_json(path, writes)
+    return writes
+
+
+def commit_subject(writes: list[dict], committed: list[str], block: dict) -> str | None:
+    """The message of the write that changed the production files being committed; with
+    no production in the commit, the first write's. None when no write named one."""
+    production = set(production_files(committed, block))
+    for w in writes:
+        if production & set(w["files"]):
+            return w["commit_message"]
+    return writes[0]["commit_message"] if writes else None
 
 
 def measure_of_design(design: dict) -> dict:
@@ -1291,13 +1308,12 @@ def conclude(args) -> int:
     # writer's list is kept, and every file the measurement named that differs from the
     # base joins it; anything else stays outside the scope below.
     declared = list(written.get("files") or [])
+    writes = remember_write(package, written)
     named = set(measure.get("files") or [])
     written = dict(written, files=declared + [f for f in files if f in named and f not in declared])
     write_json(package / "written.json", written)
-    # The budget is the profile's AS IT STANDS, like the waiver beside it: a person who
-    # raises it, or removes it, after a `blocked` concludes the same package again and is
-    # heard. The manifest keeps the one the plan was rendered with. No budget declared,
-    # no stop: the size of a change is a repository's decision, never the method's.
+    # The budget is the profile's as it stands; the manifest keeps the one the plan was
+    # rendered with. Over it is a warning in the record, never a stop.
     budget = budget_for(block, shape) or {}
     # The plan is rendered here too when nobody did, so the record always holds one;
     # the gate reads the approval against the measurement as it stands.
@@ -1343,8 +1359,7 @@ def conclude(args) -> int:
     lint = {"state": "not_run", "reason": t("review.suite_not_run"), "run": None}
     gate_shut = plan_record["gate"] and not plan_record["approved_by"]
     stopped_early = bool(written.get("blocked")) or (story and any(s != DELIVERED for s in task_states.values()))
-    stopped_by_diff = diff_stop(diff, block.get("waiver"))
-    if not central_failed and files and not gate_shut and not stopped_early and not stopped_by_diff:
+    if not central_failed and files and not gate_shut and not stopped_early:
         # The mutation by hand: wrong at the named line, the tests, the named test red,
         # the line put back. One run per DISTINCT mutation, over the test files the
         # change touched when the profile can run files — a mutant is judged by the
@@ -1353,6 +1368,7 @@ def conclude(args) -> int:
         for m in measure.get("mutations") or []:
             groups.setdefault((m["file"], m["line"], m["from"], m["to"]), []).append(m)
         for n, ((file, line, src, dst), wanted) in enumerate(groups.items(), 1):
+            before = (workdir / file).read_bytes() if (workdir / file).is_file() else None
             why = apply_mutation(workdir, {"file": file, "line": line, "from": src, "to": dst})
             reds, ran, reverted, run_file = [], False, False, None
             if why is None:
@@ -1365,8 +1381,7 @@ def conclude(args) -> int:
                 ran = bool(r.get("ran")) and finished
                 run_file = f"run-suite-mutation-{n}.txt" if r.get("ran") else None
                 reds = red_names(r.get("output", ""), check.get("red_name_pattern")) or []
-                revert(workdir, file)
-                reverted = not git(workdir, "diff", "--name-only", "--", file)
+                reverted = revert(workdir, file, before)
             for m in wanted:
                 entry = {"file": file, "line": line, "from": src, "to": dst, "test": m["test"],
                          "result": "not_run", "reverted": reverted,
@@ -1463,7 +1478,7 @@ def conclude(args) -> int:
                      "base": base_file, "suite": suite_file,
                      "lint": lint.get("run"),
                      "mutations": [m["run"] for m in mutations if m.get("run")]},
-        "waiver": block.get("waiver"),
+        "warnings": diff_warnings(diff, plan_record["budget"]),
     }
     if story:
         record["tasks"] = task_states
@@ -1477,10 +1492,10 @@ def conclude(args) -> int:
     # tree stays as it is, for a person to read.
     if record["state"] == DELIVERED and files and git(workdir, "status", "--porcelain", "--", *files):
         git(workdir, "add", "--", *files)
-        # The message is the writer's, written in the repository's own convention (it read
-        # the conventions); without one, the item's title verbatim — a slug drops the
-        # accents and cuts the sentence. Either way the item's id is not said twice.
-        message = (written.get("commit_message") or "").strip() or item_title(
+        # The message is a writer's, in the repository's own convention; without one, the
+        # item's title verbatim. Either way the item's id is not said twice.
+        staged = [f for f in git(workdir, "diff", "--cached", "--name-only").splitlines() if f]
+        message = commit_subject(writes, staged, block) or item_title(
             (package / "item.md").read_text(encoding="utf-8"), man["item"]["id"])
         git(workdir, "commit", "-q", "-m",
             block["commit_format"].format(item=man["item"]["id"], message=message))
@@ -1496,6 +1511,11 @@ def conclude(args) -> int:
                         "hint": ""})
     else:
         carry(package, previous=None)
+    again = None
+    if record["state"] == BLOCKED and record.get("owner") == "author":
+        again = _invocation(package, "tasks" if story else "write")
+    elif record["state"] == DELIVERED and block.get("evidence"):
+        stage_script(package, "evidence")
     report = render(record, mutations)
     (package / "report.md").write_text(report, encoding="utf-8")
     destination = dir_reports() / man["repo"] / f"{man['item']['id']}-deliver"
@@ -1504,6 +1524,8 @@ def conclude(args) -> int:
     unmark(package)
     print(report)
     print(t("review.report_at", path=destination / report_name(package)))
+    if again:
+        print(t("deliver.cli.then_stage", invocation=again))
     if man.get("in_worktree"):
         print(t("deliver.cli.release_hint", path=package))
 
@@ -1672,7 +1694,9 @@ def render(record: dict, mutations: list[dict]) -> str:
                  + (f" base={len(b['base_reds'])} ({b['base']})" if b.get("base") not in (None, "not_needed") else ""))
     d = record["diff"]
     lines += ["", f"{L('diff'):9}{len(d['files'])} files · +{d['added']} −{d['removed']}"
-                  + (f" · outside: {', '.join(d['outside_scope'])}" if d["outside_scope"] else "")]
+]
+    for w in record.get("warnings") or []:
+        lines.append(f"{'':9}{SYMBOL['not_assessable']} {w}")
     measured = record.get("measured") or {}
     runs = [r for r in (measured.get("base"), measured.get("suite"), measured.get("lint"),
                         *(measured.get("mutations") or [])) if r]

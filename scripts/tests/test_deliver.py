@@ -41,7 +41,6 @@ def record(**override):
                  "outside_scope": [], "within_budget": True},
         "skipped": [],
         "measured": {"note": "n", "base": None, "suite": None, "lint": None, "mutations": []},
-        "waiver": None,
     }
     base.update(override)
     return base
@@ -52,9 +51,9 @@ PROFILE = {"profile": "repo-x",
                         "budget": {"max_files": 4, "max_lines": 120}}}
 
 
-def judge(rec=None, profile=PROFILE, today="2026-11-11"):
+def judge(rec=None, profile=PROFILE):
     from deliver import deliver_judge
-    return deliver_judge(rec or record(), profile, today)
+    return deliver_judge(rec or record(), profile)
 
 
 class TestTheRecord(unittest.TestCase):
@@ -173,15 +172,13 @@ class TestStops(unittest.TestCase):
                 "budget": {"max_files": 2, "max_lines": 60}}
         self.assertEqual(judge(record(plan=plan))["state"], "delivered")
 
-    def test_the_budget_the_shape_scaled_is_the_one_the_reason_names(self):
-        plan = {"shape": "hotfix", "depth": "reproduce", "gate": True, "approved_by": "someone",
-                "budget": {"max_files": 2, "max_lines": 60}}
-        rec = record(plan=plan, diff={"files": ["a", "b", "c"], "added": 10, "removed": 0,
-                                       "outside_scope": [], "within_budget": False})
-        out = judge(rec)
-        self.assertEqual(out["state"], "blocked")
-        self.assertEqual(out["reason"], t("deliver.blocked.budget_exceeded", files=3, lines=10,
-                                          max_files=2, max_lines=60))
+    def test_the_budget_the_shape_scaled_is_the_one_the_warning_names(self):
+        from deliver import diff_warnings
+        diff = {"files": ["a", "b", "c"], "added": 10, "removed": 0,
+                "outside_scope": [], "within_budget": False}
+        self.assertEqual(diff_warnings(diff, {"max_files": 2, "max_lines": 60}),
+                         [t("deliver.warning.budget_exceeded", files=3, lines=10,
+                            max_files=2, max_lines=60)])
 
     def test_a_red_lint_blocks(self):
         """The profile's lint check runs over the tree the writer left; a red there
@@ -277,31 +274,26 @@ class TestStops(unittest.TestCase):
         profile = {"profile": "repo-x", "delivery": {"kinds": ["refactor"], "budget": {"max_files": 8, "max_lines": 240}}}
         self.assertEqual(judge(rec, profile=profile)["state"], "delivered")
 
-    def test_a_line_outside_the_scope_blocks(self):
-        rec = record(diff={"files": ["tests/test_a.py", "src/z.py"], "added": 31,
-                           "removed": 0, "outside_scope": ["src/z.py"], "within_budget": True})
-        self.assert_blocked(rec, "deliver.blocked.outside_scope", "author", paths="src/z.py")
+    def test_a_file_outside_the_scope_is_a_warning_and_stops_nothing(self):
+        from deliver import diff_warnings
+        diff = {"files": ["tests/test_a.py", "src/z.py"], "added": 31,
+                "removed": 0, "outside_scope": ["src/z.py"], "within_budget": True}
+        self.assertEqual(judge(record(diff=diff))["state"], "delivered")
+        self.assertEqual(diff_warnings(diff, None),
+                         [t("deliver.warning.outside_scope", paths="src/z.py")])
 
-    def test_over_budget_with_no_waiver_blocks(self):
-        rec = record(diff={"files": ["a", "b", "c", "d", "e"], "added": 200, "removed": 0,
-                           "outside_scope": [], "within_budget": False})
-        self.assert_blocked(rec, "deliver.blocked.budget_exceeded", "person",
-                            files=5, lines=200, max_files=4, max_lines=120)
+    def test_over_budget_is_a_warning_and_stops_nothing(self):
+        from deliver import diff_warnings
+        diff = {"files": ["a", "b", "c", "d", "e"], "added": 200, "removed": 0,
+                "outside_scope": [], "within_budget": False}
+        self.assertEqual(judge(record(diff=diff))["state"], "delivered")
+        self.assertEqual(diff_warnings(diff, {"max_files": 4, "max_lines": 120}),
+                         [t("deliver.warning.budget_exceeded", files=5, lines=200,
+                            max_files=4, max_lines=120)])
 
-    def test_over_budget_with_a_waiver_in_force_is_delivered(self):
-        """The waiver is the profile's — a name and an expiry — never the run's."""
-        rec = record(diff={"files": ["a", "b", "c", "d", "e"], "added": 200, "removed": 0,
-                           "outside_scope": [], "within_budget": False},
-                     waiver={"reason": "agreed split", "approver": "someone",
-                             "expires": "2027-01-01"})
-        self.assertEqual(judge(rec)["state"], "delivered")
-
-    def test_an_expired_waiver_does_not_lift_the_budget(self):
-        rec = record(diff={"files": ["a", "b", "c", "d", "e"], "added": 200, "removed": 0,
-                           "outside_scope": [], "within_budget": False},
-                     waiver={"reason": "agreed split", "approver": "someone",
-                             "expires": "2026-01-01"})
-        self.assertEqual(judge(rec)["state"], "blocked")
+    def test_a_diff_inside_the_scope_and_the_budget_warns_of_nothing(self):
+        from deliver import diff_warnings
+        self.assertEqual(diff_warnings(record()["diff"], {"max_files": 4, "max_lines": 120}), [])
 
     def test_a_kind_the_profile_does_not_list_is_unsupported(self):
         rec = record(item={"id": "ITEM-1", "kind": "dead-code", "source": "tracker"})

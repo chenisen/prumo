@@ -13,7 +13,6 @@
     "baseline",
     "diff",
     "skipped",
-    "waiver",
     "measured"
   ],
   "properties": {
@@ -342,10 +341,12 @@
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "description": "files the measurement did not name, or outside the roots the kind writes — declared, never a stop"
         },
         "within_budget": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "false when the diff is over the budget the profile declares — declared, never a stop"
         }
       }
     },
@@ -355,36 +356,6 @@
       "items": {
         "type": "string"
       }
-    },
-    "waiver": {
-      "description": "only ever copied from the profile; a run never writes one",
-      "oneOf": [
-        {
-          "type": "null"
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "reason",
-            "approver",
-            "expires"
-          ],
-          "properties": {
-            "reason": {
-              "type": "string",
-              "minLength": 1
-            },
-            "approver": {
-              "type": "string",
-              "minLength": 1
-            },
-            "expires": {
-              "type": "string"
-            }
-          }
-        }
-      ]
     },
     "state": {
       "enum": [
@@ -577,6 +548,13 @@
         "null"
       ],
       "description": "The writer's own reason for not delivering — a premise the code denies, a test it could not turn green. Null when it wrote."
+    },
+    "warnings": {
+      "type": "array",
+      "description": "what the diff says that a person should read and that stops nothing: files outside the scope, a size over the declared budget",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "$defs": {

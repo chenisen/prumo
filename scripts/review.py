@@ -34,8 +34,10 @@ import yaml
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from common import (review_file_names, MissingConfiguration, dir_repositories, InvalidConfiguration, dir_packages, dir_reports, forge, tracker, UsageError, profile_path, load_profile, write_json,
                    today, read_json, slug, cfg, capabilities_after_preflight, hint_config,
-                   report_dir_name)
+                   report_dir_name, write_workflow_script)
 from i18n import t
+import basis
+import delta
 from preflight import proof_registry_at_head
 from evidence import red_names, progress, authorise, resolve, run_command, time_limit
 
@@ -427,7 +429,37 @@ def build_criteria(candidates: list[dict], labels: list[dict]) -> tuple[list[dic
 
 
 WORKFLOW_FILES = (("findings", "findings.json"), ("scripts_manual", "scripts_manual.json"),
-                  ("conventions_observed", "conventions_observed.json"), ("coverage", "coverage.json"))
+                  ("conventions_observed", "conventions_observed.json"), ("coverage", "coverage.json"),
+                  ("closed_findings", "closed_findings.json"))
+
+
+def ground_findings(package: pathlib.Path) -> None:
+    """Before anything is judged: each finding's criterion and rule are looked up, and on
+    a later round a finding on code the push did not change is flagged as such."""
+    path = package / "findings.json"
+    if not path.exists():
+        return
+    findings = read_json(path) or []
+    man = read_json(package / "manifest.json")
+    criteria = read_json(package / "criteria.json") if (package / "criteria.json").exists() else []
+    if isinstance(criteria, dict):
+        criteria = criteria.get("criteria") or []
+    roots = [package, dir_repositories() / man["repo"], profile_path(man["repo"]).parent]
+    tree = package / HEAD_TREE_FILE
+    if tree.exists():
+        roots.insert(0, pathlib.Path(read_json(tree)["path"]))
+    if cfg().source:
+        roots.append(cfg().source.parent)
+    found = basis.ground(findings, {c["id"] for c in criteria}, roots)
+    for key in ("unknown_criteria", "rules_not_found"):
+        if found[key]:
+            print(t("review.basis_" + key, n=len(found[key]), which="; ".join(found[key])))
+    if (man.get("round") or {}).get("mode") == delta.DELTA and (package / "diff.patch").exists():
+        flagged = delta.mark_already_reviewed(
+            findings, (package / "diff.patch").read_text(encoding="utf-8", errors="replace"))
+        if flagged:
+            print(t("review.round_already_reviewed", n=len(flagged), ids=", ".join(flagged)))
+    write_json(path, findings)
 
 
 def workflow_result_from(path: pathlib.Path) -> dict:
@@ -664,7 +696,18 @@ def prepare(args) -> int:
     if getattr(args, "base", None):
         target += ["--base", args.base]
     _py("resolver.py", *target, "--package", str(package))
+    man = read_json(package / "manifest.json")
+    round_ = delta.plan_round(dir_repositories() / args.repo, args.repo, man["origin"],
+                              man["head_sha"], full=getattr(args, "full", False))
+    if round_.pop("same_head", False):
+        raise UsageError(t("review.round_same_head", head=man["head_sha"][:12]))
+    man["round"] = round_
+    write_json(package / "manifest.json", man)
+    print(t("review.round_line", n=round_["n"], mode=t("review.round_" + round_["mode"]),
+            detail=round_.get("reason") or (round_.get("since") or "")[:12]))
     _py("package.py", "--package", str(package))
+    later = round_["mode"] != delta.FULL
+    carried = delta.carry(package, round_) if later else None
     cap = read_json(package / "capabilities.json")
     registry = proof_registry_at_head(cap["proof_registry"], dir_repositories() / args.repo,
                                       read_json(package / "manifest.json")["head_sha"])
@@ -675,6 +718,8 @@ def prepare(args) -> int:
     own = subprocess.run(("git", "-C", str(dir_repositories() / args.repo), "rev-list",
                           f"{reviewed.get('merge_base')}..{reviewed.get('head_sha')}"),
                          capture_output=True, text=True).stdout.split()
+    reviewed["own_commits"] = own
+    write_json(package / "manifest.json", reviewed)
     stale = stale_numbers((package / "diff.patch").read_text(encoding="utf-8")
                           if (package / "diff.patch").exists() else "", own)
     if stale:
@@ -713,6 +758,8 @@ def prepare(args) -> int:
     # than no answer at all.
     change = read_json(package / "change.json")
     if not change["files"]:
+        if later:
+            raise UsageError(t("review.round_nothing_changed", since=round_["since"][:12]))
         raise UsageError(t("review.empty_diff_at", ref=short_range(package),
                            **_vocabulary()))
 
@@ -726,6 +773,12 @@ def prepare(args) -> int:
     write_json(package / "evidence.json", evidence)
 
     plan = read_json(package / "plan.json")
+    if round_["mode"] == delta.RECHECK:
+        plan["skipped"] = (plan.get("skipped") or []) + [
+            {"agent": r["agent"], "reason": t("review.round_no_reviewer", n=round_["n"])}
+            for r in plan.get("reviewers") or []]
+        plan["reviewers"] = []
+        write_json(package / "plan.json", plan)
     profile = load_profile(args.repo)
     print("\n" + t("review.package_ready", path=package))
     print(t("review.profile_status", status=profile.get("status"),
@@ -754,14 +807,19 @@ def prepare(args) -> int:
                     "anchors": anchors_without_history(profile)},
         "classes": read_json(package / "classes.json"),
         "inline": inline_payload(package),
+        "language": cfg().language,
     }
+    if later:
+        workflow_args["round"] = {"n": round_["n"], "mode": round_["mode"],
+                                  "since": round_["since"][:12],
+                                  "previous_package": pathlib.Path(round_["previous_package"]).name,
+                                  **carried}
+        print(t("review.round_carried", open=len(carried["open"]),
+                criteria=len(carried["open_criteria"])))
     write_json(package / "workflow-args.json", workflow_args)
+    script = write_workflow_script(package, "task-review", workflow_args)
 
-    inline_kb = sum(len(v.encode("utf-8")) for v in workflow_args["inline"].values()) // 1024
-    print(t("review.workflow_args_at", path=package / "workflow-args.json",
-            files=len(workflow_args["inline"]), kb=inline_kb))
-    from triage import workflow_name
-    print("\nWorkflow({name: '" + workflow_name("task-review") + "', args: <the object in that file>})")
+    print("\nWorkflow({scriptPath: '" + str(script) + "'})")
     print("\n" + t("review.then_conclude", path=package))
     return 0
 
@@ -950,6 +1008,8 @@ def conclude(args) -> int:
             print(t("review.criteria_unmatched", n=len(unmatched), ids=", ".join(unmatched)))
         write_json(path, current)
 
+    ground_findings(package)
+
     # A review relates to its own item and its own proposal, and to nothing else. The
     # agents can read the whole workspace, the reports root is in it, and one of them
     # really did anchor on a sibling review and return fifteen scripts about another
@@ -1078,6 +1138,9 @@ def conclude(args) -> int:
     line = {
         "date": today(), "repo": man["repo"], "origin": man["origin"], "item": item,
         "head_sha": man["head_sha"], "verdict": ver["verdict"],
+        # What the next round over this origin builds on.
+        "package": str(package), "round": (man.get("round") or {}).get("n"),
+        "round_mode": (man.get("round") or {}).get("mode"),
         "routes": [r["type"] for r in ver["routes"]],
         "perfil_status": profile.get("status"), "perfil_versao": profile.get("version", 0),
         "profile_coverage": 18 - len(ver["summary"]["classes_not_assessable"]),
@@ -1204,6 +1267,7 @@ def main() -> int:
     a.add_argument("--advisory", action="store_true")
     a.add_argument("--delivery", help=t("review.help_delivery"))
     a.add_argument("--base", help=t("review.help_base"))
+    a.add_argument("--full", action="store_true", help=t("review.help_full"))
 
     b = sub.add_parser("conclude")
     b.add_argument("--package", required=True)

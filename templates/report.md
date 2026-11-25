@@ -1,76 +1,93 @@
-# Delivery review — {repo} · {item} {item_id}
+# {h_title} — {repo} · {item} {item_id}
 
-> Two-valued verdict in the last section. Approving is the ceiling: this review never
-> merges and never moves the {item}.
+**{verdict}** · {round_line} · `{sha_initial}`..`{sha_final}` · {date}
+
+## {h_holds}
+
+{section_holds}
+
+## {h_qa_short}
+
+{section_qa_short}
+
+## {h_questions}
+
+{section_questions}
+
+---
+
+# {h_annex}
+
+> {annex_note}
 
 | | |
 |---|---|
-| **Repository** | `{repo}` |
-| **Profile** | `{profile_status}` v{profile_version} · anchors {anchors} · classes assessed in this review {coverage} |
-| **Origin** | {origin} |
-| **Base** | `{base_ref}` @ `{base_sha_short}` ({base_source}) |
-| **Commits reviewed** | `{sha_initial}`..`{sha_final}` |
-| **Size** | {lines} lines, band `{band}` |
-| **Effort** | {effort_line} |
-| **Generated on** | {date} · harness {version} |
+| **{l_repository}** | `{repo}` |
+| **{l_profile}** | {profile_line} |
+| **{l_origin}** | {origin} |
+| **{l_base}** | `{base_ref}` @ `{base_sha_short}` ({base_source}) |
+| **{l_commits}** | `{sha_initial}`..`{sha_final}` |
+| **{l_size}** | {size_line} |
+| **{l_effort}** | {effort_line} |
+| **{l_generated}** | {date} · harness {version} |
 
-## 1. The rule
+## 1. {h_rule}
 
 {section_gates}
 
-## 2. What needs you
+## 2. {h_routes}
 
 {section_routes}
 
-## 3. Ledger 1 — what the {item} asked for
+## 3. {h_ledger1}
 
 {section_criteria}
 
-## 4. Ledger 2 — what was specified and proven
+## 4. {h_ledger2}
 
 {section_proof}
 
-## 5. Ledger 3 — what the project already decided about itself
+## 5. {h_ledger3}
 
 {section_conventions}
 
-## 6. §A — human-decision classes
+## 6. {h_section_a}
 
 {section_a}
 
-## 7. §B — manual-verification classes
+## 7. {h_section_b}
 
 {section_b}
 
-## 8. Classes that could not be assessed
+## 8. {h_not_assessable}
 
 {section_not_assessable}
 
-## 9. Findings
+## 9. {h_findings}
 
 {section_findings}
 
-## 9b. Observations on the pre-existing
+## 9b. {h_observations}
 
 {section_observations}
 
-## 9c. PROJECT pending items — declared, outside the verdict
+## 9c. {h_project_pending}
 
 {section_project_pending}
 
-## 9d. For QA — after the approval, outside the verdict
+## 9d. {h_qa_full}
 
 {section_qa}
 
-## 10. This environment's capabilities
+## 10. {h_capabilities}
 
 {section_capabilities}
 
-## 10b. Who read this delivery — and who did not
+## 10b. {h_reviewers}
 
 {section_reviewers}
 
-## 11. Verdict
+## 11. {h_verdict}
 
 **{verdict}**
 

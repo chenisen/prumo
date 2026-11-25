@@ -51,7 +51,9 @@ RE_SHA = re.compile(r"\b(?=[0-9a-f]*[a-f])[0-9a-f]{8,40}\b")
 
 def _own_shas(manifest: dict) -> set[str]:
     return {s for s in (manifest.get("head_sha"), manifest.get("merge_base"),
-                        (manifest.get("base") or {}).get("sha")) if s}
+                        (manifest.get("base") or {}).get("sha"),
+                        (manifest.get("round") or {}).get("since"),
+                        *(manifest.get("own_commits") or [])) if s}
 
 
 def _is_own(sha: str, own: set[str]) -> bool:

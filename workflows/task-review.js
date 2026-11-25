@@ -5,7 +5,7 @@ export const meta = {
   phases: [
     { title: 'Criteria', detail: "the item's acceptance criteria, extracted once with stable ids, when the package carries none" },
     { title: 'Review', detail: 'the reviewers triage activated, each over its own slice' },
-    { title: 'Verification', detail: 'one sceptic per blocking finding, in a clean context, and one light reading of the rest' },
+    { title: 'Verification', detail: 'the same cause raised twice becomes one finding; one sceptic per blocking finding, in a clean context; the findings still open from an earlier round are re-checked at the head' },
     { title: 'Manual plan', detail: 'a script for what no test reaches' },
   ],
 }
@@ -72,6 +72,52 @@ const HEAD_TREE = input.head_tree
     'the checkout.'
   : ''
 
+// Which round this is. `full` reads the whole delivery; `delta` reads only what the push
+// changed since the head the round before reviewed, and re-checks what that round left
+// open; `recheck` runs no reviewer at all — from the third round on the only question is
+// whether what is open was fixed, so the review converges instead of finding anew.
+const ROUND = input.round ?? { mode: 'full', n: 1, open: [] }
+const OPEN = ROUND.open ?? []
+// The prose a person reads is written in the installation's language; identifiers,
+// paths and code stay as they are in the code.
+const LANGUAGE = input.language
+  ? `Write every sentence a person will read — \`claim\`, \`consequence\`, \`form\`, ` +
+    `\`record\`, \`reason\`, a script's fields — in the language \`${input.language}\`. ` +
+    'Identifiers, paths and code stay exactly as they are in the code.'
+  : ''
+
+// One bar for proof, the same one the delivery's own sceptic reads by. Two readers with
+// two bars made every delivery pay a round: the sceptic said "proves" and the review
+// then asked for more.
+const PROOF_BAR =
+  'THE PROOF BAR: a criterion is proven when at least one test fails if the behaviour the ' +
+  'criterion states is removed. That is all a `required` finding may ask of a test. A test ' +
+  'that could pin more — an argument, the value of a constant, a timeout, one more branch — ' +
+  'is a `nit`, unless the criterion states that detail in its own words. A mutant the ' +
+  "delivery's digest shows killed is proven: never ask for it again."
+
+// Where a blocking demand comes from. A reviewer that charges a rule nobody wrote down
+// is the one failure a person cannot check from the report.
+const BASIS_RULE =
+  'A `required` or `critical` finding says where its demand comes from, one of three: ' +
+  '`criterion` — the id of the criterion of the item it breaks; `rule` — `{file, quote}`, ' +
+  "the project's own sentence copied VERBATIM from the profile, the repository's " +
+  'instructions or a convention file (the harness looks the quote up in that file, and a ' +
+  'quote it does not find is no rule); or a DEFECT — the code doing the wrong thing on a ' +
+  'real path, with the input and the wrong result stated in `consequence`. A demand with ' +
+  'none of the three — "should also", "would be safer", "is not asserted" — is a `nit` at ' +
+  'most. Never charge a rule the project did not write, and never treat as missing what ' +
+  'the item did not ask for.'
+
+// A class the triage fired matched a path. Whether the change went beyond the item is a
+// reading, and it is the reviewer's.
+const CLASS_RULE =
+  'A §A class marked `fired` in the triaged classes is a QUESTION put to you, not a ' +
+  'finding: the triage matched a path or a pattern, nothing more. Answer it by reading. ' +
+  'Raise a finding with that `class` (and `form: null`) only when, on that surface, the ' +
+  'change does something the item did not ask for, or settles something only a person ' +
+  'can settle. A change the item itself asks for is a decision already taken: raise nothing.'
+
 // The agents TRAVEL WITH THE METHOD: they are files of this very repository, registered
 // by the plugin, not something whoever installs has to copy into `.claude/agents/`. The
 // harness exposes them with the plugin's name in front, so the prefix is part of the
@@ -133,6 +179,10 @@ const FINDINGS_SCHEMA = {
           status: { enum: ['proposed'] },
           owasp_category: { type: ['string', 'null'] },
           criterion: { type: ['string', 'null'] },
+          rule: {
+            type: ['object', 'null'], required: ['file', 'quote'], additionalProperties: false,
+            properties: { file: { type: 'string' }, quote: { type: 'string' } },
+          },
           // The consequence lands on a consumer the item does not name — a caller, a route,
           // another command — reached because the change widened something it shares.
           beyond_item: { type: ['boolean', 'null'] },
@@ -193,35 +243,19 @@ const VERIFICATION_SCHEMA = {
     attributable: { type: 'boolean' },
     // The second reading of severity. `judge.py` charges a blocking label whose
     // consequence is `record` or `convention` as a nit — see SEVERITY_READ_DOWN there.
-    consequence_kind: { enum: ['behaviour', 'proof', 'record', 'convention'] },
+    consequence_kind: { enum: ['behaviour', 'proof', 'proof_extra', 'record', 'convention'] },
   },
 }
 
-// The light reading of the findings below the blocking severities: one call for all of
-// them, a verdict and a sentence each. No `attributable` and no `consequence_kind` — a
-// finding that decides no gate has no severity to read down and no proposal to hold.
-const LIGHT_VERIFICATION_SCHEMA = {
+// The same cause raised by more than one reviewer: groups of finding ids, nothing else.
+const GROUPS_SCHEMA = {
   type: 'object',
-  required: ['verdicts'],
+  required: ['groups'],
   additionalProperties: false,
   properties: {
-    verdicts: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['id', 'verdict', 'reason'],
-        additionalProperties: false,
-        properties: {
-          id: { type: 'string' },
-          verdict: { enum: ['confirmed', 'refuted', 'uncertain'] },
-          reason: { type: 'string' },
-        },
-      },
-    },
+    groups: { type: 'array', items: { type: 'array', items: { type: 'string' } } },
   },
 }
-// Prefixed to the reason a light reading gave, so the report says which sceptic read it.
-const LIGHT_MARK = '[light reading]'
 
 const SCRIPT_SCHEMA = {
   type: 'object',
@@ -443,6 +477,19 @@ const context = (slice) => [
     ? 'The conventions list is EMPTY: say so in your return and judge only what is universal.'
     : '',
   'Everything above is already here: do not read those files again.',
+  CLASS_RULE,
+  BASIS_RULE,
+  PROOF_BAR,
+  ROUND.mode === 'delta'
+    ? `THIS IS ROUND ${ROUND.n}. An earlier round reviewed this delivery up to ${ROUND.since}; ` +
+      'your slice is ONLY what the push changed since. Judge what the push changed. Code the ' +
+      'push did not touch was already read: a finding on it is shown and holds nothing. The ' +
+      'criteria list carries the earlier reading — re-read against the head each criterion ' +
+      'that is not `met`, and any the push touches. These findings are still open from the ' +
+      'earlier round and are being re-checked apart; do not raise them again:\n' +
+      (OPEN.map((f) => `- ${f.id}: ${f.claim}`).join('\n') || '- none')
+    : '',
+  LANGUAGE,
   // 2026-11-18, eleven reviews of one item: the change widened a domain class the item's
   // worker shares with an HTTP route the item never names. Three findings in a row were
   // about that route, each answered by adapting the route — mixed lines, plan count,
@@ -513,6 +560,10 @@ const review = async (r) => {
   return agent(`${context(r.slice)}\n\n${RAN_OUT}`, { ...opts, label: `${r.agent} (retry)` })
 }
 
+if (ROUND.mode === 'recheck') {
+  log(`round ${ROUND.n}: no reviewer runs — only the ${OPEN.length} finding(s) still open are re-checked`)
+  plan.reviewers = []
+}
 const reviews = await parallel(plan.reviewers.map((r) => () => review(r)))
 
 // WHICH reviewer went silent, not just how many. The judge closes gate 5 on this, and
@@ -551,9 +602,14 @@ const tags = (() => {
     return n === 1 ? base : `${base}${n}`
   })
 })()
-const findings = plan.reviewers.flatMap((r, i) =>
-  (reviews[i]?.findings || []).map((f, n) => ({ ...f, reviewer: r.agent,
-                                                id: `${tags[i]}-${n + 1}` })))
+// A later round numbers after every id the round before it gave, so a carried `COR-1`,
+// a decision recorded on a `COR-2` and a new finding never share a name.
+const taken = (tag) => Math.max(0, Number((ROUND.taken ?? {})[tag] ?? 0), ...OPEN
+  .map((f) => String(f.id).match(/^([A-Z0-9]+)-(\d+)$/))
+  .filter((m) => m && m[1] === tag).map((m) => Number(m[2])))
+const raised = plan.reviewers.flatMap((r, i) =>
+  (reviews[i]?.findings || []).map((f, n) => ({ ...f, reviewer: r.agent, rule: f.rule ?? null,
+                                                id: `${tags[i]}-${taken(tags[i]) + n + 1}` })))
 const conventionsObserved = alive.flatMap((r) => r.conventions_observed || [])
 // One reading per criterion: `not_met` from anyone wins, then `met` with a record,
 // else what the extractor said. A `met` with no record is a claim and is dropped.
@@ -576,79 +632,68 @@ const coverage = {
 }
 
 phase('Verification')
-// Only what blocks comes through here. A nit or an FYI does not pay for an agent.
-// Severity AND attribution. A finding the reviewer already marked `attributable: false`
-// does not hold the proposal whatever the verifier says, so refuting it buys nothing and
-// costs a whole fresh context. Measured on one real review: three of four verifier runs
-// were spent on pre-existing defects, 135k tokens of a 524k run, and all three came back
-// "confirmed, but not caused by this change" — which is what the reviewer had already
-// written. What the verifier is FOR is the finding that would close a gate.
+// The same cause raised by several reviewers is ONE finding. Each reviewer reads in its
+// own context, so a fact that sits where two grounds meet comes back once per ground —
+// four copies of one sentence on a measured review — and a person reads four problems.
+// One light call over the claims alone, no code read; the merge itself is code.
+const SEVERITY_RANK = ['critical', 'required', 'nit', 'optional', 'fyi']
+const mergeGroups = (all, groups) => {
+  const known = new Map(all.map((f) => [f.id, f]))
+  const gone = new Set()
+  const heads = new Map()
+  for (const group of groups || []) {
+    const members = [...new Set(group)]
+      .filter((id) => known.has(id) && !gone.has(id) && !heads.has(id)).map((id) => known.get(id))
+    if (members.length < 2) continue
+    const head = members.reduce((x, y) =>
+      SEVERITY_RANK.indexOf(y.severity) < SEVERITY_RANK.indexOf(x.severity) ? y : x)
+    const rest = members.filter((m) => m !== head)
+    for (const m of rest) gone.add(m.id)
+    heads.set(head.id, { ...head,
+      also_raised_by: [...new Set(rest.map((m) => m.reviewer))].filter((r) => r !== head.reviewer),
+      criterion: head.criterion ?? rest.map((m) => m.criterion).find(Boolean) ?? null,
+      rule: head.rule ?? rest.map((m) => m.rule).find(Boolean) ?? null })
+  }
+  return all.filter((f) => !gone.has(f.id)).map((f) => heads.get(f.id) ?? f)
+}
+const grouping = raised.length > 1
+  ? await agent([
+      'Several reviewers read the same change, each in its own context. Return the groups of',
+      'finding ids that state THE SAME CAUSE — the same fact about the same code, whatever',
+      'the words or the severity. Two findings on the same lines with different causes are',
+      'not a group, and a finding alone is in no group. Read nothing: decide from this text.',
+      ...raised.map((f) => `- ${f.id} [${f.severity}] ` +
+        `${[...new Set((f.evidence || []).map((e) => e.file))].join(', ')}: ${f.claim}`),
+      'HOW TO RETURN: call StructuredOutput once, with the object itself as the tool input.',
+    ].join('\n'), { label: 'group:same-cause', phase: 'Verification', schema: GROUPS_SCHEMA,
+                    effort: 'low', ...tiered('light') })
+  : null
+const findings = mergeGroups(raised, grouping && grouping.groups)
+if (findings.length !== raised.length) {
+  log(`${raised.length} findings raised, ${findings.length} after the same cause was merged`)
+}
+
+// Only what blocks comes through here. A nit or an FYI does not pay for an agent, and a
+// finding the reviewer already marked `attributable: false` never holds the proposal, so
+// refuting it buys nothing.
 const blocking = findings.filter((f) => ['critical', 'required'].includes(f.severity)
                                      && f.attributable !== false)
 const preExistingSevere = findings.filter((f) => ['critical', 'required'].includes(f.severity)
                                              && f.attributable === false)
 log(`${blocking.length} of ${findings.length} findings block and go to the verifier`)
 if (preExistingSevere.length) {
-  // Not a silent cap: say what was not verified and why, so the report can too.
   log(`${preExistingSevere.length} severe finding(s) NOT verified — ` +
       `marked attributable:false, so they never hold the proposal: ` +
       preExistingSevere.map((f) => f.id).join(', '))
 }
 
-// The verifier's reading is proportional too. In `full` it keeps its widest mandate —
-// opus (the frontmatter's choice), the complete patch and the working repository —
-// because that is the level where a wrong finding costs the most. Below it, the sceptic
-// reads the SLICE the finding came from, on sonnet: the reviewer that raised it never
-// saw more than that slice, so neither does whoever refutes it — and three of four
-// verifier runs on one measured review were spent re-reading a repository to conclude
-// what the slice already showed. "When in doubt, `uncertain`" holds at every level.
-//
-// `pipeline` here is NOT sequential: the harness runs every item concurrently through
-// the stage, capped by its own scheduler — so `full` already verifies in parallel with
-// a concurrency limit, and a `parallel()` barrier would change nothing but the name.
+// In `full` the sceptic keeps its widest mandate — the complete patch and the working
+// repository. Below it, it reads the SLICE the finding came from: the reviewer that
+// raised it never saw more than that. `pipeline` runs every item concurrently, capped by
+// the harness's own scheduler.
 const sliceOf = new Map(plan.reviewers.map((r) => [r.agent, r.slice]))
-
-// Below the blocking severities, ONE light reading for all of them together. They decide
-// no gate, which is why they were never verified — but a person reads them, and acts on
-// them. Measured over 17 reviews (2026-11-14 to 18): 100 of 121 findings went out
-// `unverified`; one of them, a fyi saying copied lines keep their flag, was false by the
-// writer's own code in another repository; and a person's "apply all of them" over seven
-// unverified nits opened three correction rounds, the first of which introduced the bug
-// the next review confirmed. One cheap sceptic over the whole set, on the slices the
-// findings came from, costs one context and turns the reviewer's word into a reading.
-const belowBlocking = findings.filter((f) => !['critical', 'required'].includes(f.severity)
-                                          && f.attributable !== false)
-const lightReading = () => (belowBlocking.length
-  ? agent([
-      HEAD_TREE,
-      `Try to REFUTE each of these ${belowBlocking.length} findings. You have not seen the ` +
-      'reasoning of whoever raised them. They are below the blocking severities, so read ' +
-      'each one quickly, but read it: open the line its evidence points at and say whether ' +
-      'the code there is what the claim says.',
-      ...belowBlocking.map((f) =>
-        `- ${f.id} [${f.severity}] read in ${bundle}/slices/` +
-        `${sliceOf.get(f.reviewer) ?? 'complete'}.patch — claim: ${f.claim} — ` +
-        `consequence: ${f.consequence} — evidence: ${JSON.stringify(f.evidence)}`),
-      'Stay inside the slice each finding names; open the repository only when the slice ' +
-      'cannot decide, and say so. `refuted` is for a claim the code you read contradicts — ' +
-      'the line does not say that, the path cannot be reached, a guard already handles it, ' +
-      'or another file the claim relies on says otherwise. A claim about data, an ' +
-      'environment or another system you cannot read is `uncertain`, never `confirmed`.',
-      inlined['delivery-record.json']
-        ? `A claim about what the delivery's record says was executed is decided by ` +
-          `${bundle}/delivery-digest.json or the run file, never by the record's prose.`
-        : '',
-      'Return one entry per finding id above, and no other id.',
-      'When in doubt, return `uncertain` — never `confirmed`.',
-      RETURN_RULE,
-    ].filter(Boolean).join('\n'), {
-      agentType: agentFor('finding-verifier'),
-      label: 'verify:below-blocking',
-      phase: 'Verification',
-      schema: LIGHT_VERIFICATION_SCHEMA,
-      ...tiered('light'),
-    })
-  : Promise.resolve(null))
+const NO_VERIFIER =
+  "the verifier did not return — the reviewer's word stands, not read a second time"
 
 const verifyBlocking = () => pipeline(blocking, (f) =>
   agent([
@@ -670,60 +715,109 @@ const verifyBlocking = () => pipeline(blocking, (f) =>
         'never by the record\'s prose.'
       : '',
     'Also say what KIND of consequence you read, in `consequence_kind`: `behaviour` (this ' +
-    'code does the wrong thing on a real path), `proof` (a test does not prove what it ' +
-    'claims to), `record` (the claim is about what a document says — the record, the item, ' +
-    'the digest — not about what the code does), or `convention` (naming, style, ' +
-    'documentation; nothing functional). `required` means a demonstrable consequence in ' +
-    'this code: a consequence of record or convention is charged as a nit by the judge, ' +
-    'whatever the label, and your reading is shown beside it.',
+    'code does the wrong thing on a real path), `proof` (the behaviour a criterion states ' +
+    'has NO test that fails when it is removed), `proof_extra` (a test could pin more — an ' +
+    'argument, a constant, a timeout, one more branch — but that behaviour already has a ' +
+    'test that goes red without it), `record` (the claim is about what a document says — ' +
+    'the record, the item, the digest — not about what the code does), or `convention` ' +
+    '(naming, style, documentation; nothing functional). `required` means a demonstrable ' +
+    'consequence in this code: a consequence of `proof_extra`, `record` or `convention` is ' +
+    'charged as a nit by the judge, whatever the label, and your reading is shown beside it.',
+    PROOF_BAR,
     'When in doubt, return `uncertain` — never `confirmed`.',
+    LANGUAGE,
     RETURN_RULE,
   ].filter(Boolean).join('\n'), {
     agentType: agentFor('finding-verifier'),
     label: `verify:${f.id}`,
     phase: 'Verification',
     schema: VERIFICATION_SCHEMA,
-    // The finding's severity is the demand: a blocking finding decides a gate, so its
-    // verification earns the heavy tier; anything below it takes the standard one. The
-    // old rule keyed on EFFORT — but a critical finding in a minimal review deserves no
-    // lighter a second reading than in a full one.
-    ...tiered(f.severity === 'critical' || f.severity === 'required' ? 'heavy' : 'standard'),
-  }).then((v) => ({ ...f, status: v ? v.verdict : 'uncertain',
+    ...tiered('heavy'),
+  }).then((v) => ({ ...f, status: v ? v.verdict : 'confirmed',
                     attributable: v ? v.attributable : f.attributable,
                     consequence_kind: v ? v.consequence_kind : null,
-                    verifier_reason: v ? v.reason : 'the verifier did not return' })))
+                    verifier_reason: v ? v.reason : NO_VERIFIER })))
 
-const [verified, light] = await parallel([verifyBlocking, lightReading])
-const byId = new Map((verified ?? []).filter(Boolean).map((f) => [f.id, f]))
-const lightById = new Map(((light && light.verdicts) || [])
-  .filter((v) => belowBlocking.some((f) => f.id === v.id))
-  .map((v) => [v.id, v]))
-for (const f of belowBlocking) {
-  const v = lightById.get(f.id)
-  if (v) byId.set(f.id, { ...f, status: v.verdict, verifier_reason: `${LIGHT_MARK} ${v.reason}` })
+// What an earlier round left open, read again at the head. It stood once: only a reading
+// that shows it gone lets it go, so a doubt keeps it open.
+const recheckOpen = () => pipeline(OPEN, (f) =>
+  agent([
+    'This finding was CONFIRMED on an earlier head of this delivery, and the branch has ' +
+    'moved since. Decide whether it STILL STANDS at the reviewed head.',
+    HEAD_TREE,
+    `Claim: ${f.claim}`,
+    `Consequence: ${f.consequence}`,
+    `Evidence it pointed at, on the earlier head: ${JSON.stringify(f.evidence)}`,
+    `What the push changed since that head: ${bundle}/slices/complete.patch`,
+    'Read the code at the head, not only the patch. `refuted` — the head no longer has ' +
+    'it: it was fixed, or what it pointed at is gone; say in `reason` what closed it. ' +
+    '`confirmed` — it is still there. When you cannot tell, `confirmed`.',
+    PROOF_BAR,
+    LANGUAGE,
+    RETURN_RULE,
+  ].filter(Boolean).join('\n'), {
+    agentType: agentFor('finding-verifier'),
+    label: `recheck:${f.id}`,
+    phase: 'Verification',
+    schema: VERIFICATION_SCHEMA,
+    ...tiered('heavy'),
+  }).then((v) => ({ id: f.id, v })))
+
+// A criterion an earlier round did not read as met, on a round where no reviewer runs.
+const CRITERION_SCHEMA = {
+  type: 'object',
+  required: ['state', 'record'],
+  additionalProperties: false,
+  properties: { state: { enum: ['met', 'not_met', 'not_verifiable'] },
+                record: { type: ['string', 'null'] } },
 }
-log(`${lightById.size} of ${belowBlocking.length} findings below the blocking severities ` +
-    'read once by the light sceptic')
-const NOT_SENT_BELOW_BLOCKING =
-  'the light sceptic did not return it: below the blocking severities a finding decides ' +
-  "no gate — the reviewer's word, unrefuted and unchecked"
+const OPEN_CRITERIA = ROUND.mode === 'recheck' ? (ROUND.open_criteria ?? []) : []
+const recheckCriteria = () => pipeline(OPEN_CRITERIA, (c) =>
+  agent([
+    'An earlier round of this review did not read this criterion of the item as met, and ' +
+    'the branch has moved since. Read it against the code at the reviewed head.',
+    HEAD_TREE,
+    `Criterion ${c.id}: ${c.text}`,
+    c.record || c.note ? `What the earlier round wrote: ${c.record || c.note}` : '',
+    `What the push changed since: ${bundle}/slices/complete.patch`,
+    '`met` with a `record` that states the fact — the code and the test that show it; ' +
+    '`not_met` with what is missing; `not_verifiable` when the code cannot decide it.',
+    PROOF_BAR,
+    LANGUAGE,
+    RETURN_RULE,
+  ].filter(Boolean).join('\n'), {
+    agentType: agentFor('finding-verifier'),
+    label: `recheck:${c.id}`,
+    phase: 'Verification',
+    schema: CRITERION_SCHEMA,
+    ...tiered('heavy'),
+  }).then((v) => (v ? { id: c.id, state: v.state, record: v.record } : null)))
+
+const [verified, rechecked, reread] = await parallel([verifyBlocking, recheckOpen, recheckCriteria])
+for (const c of (reread ?? []).filter(Boolean)) criteriaVerdicts.push(c)
+const recheckOf = new Map((rechecked ?? []).filter(Boolean).map((r) => [r.id, r.v]))
+const closed = []
+const stillOpen = []
+for (const f of OPEN) {
+  const v = recheckOf.get(f.id)
+  if (v && v.verdict === 'refuted') closed.push({ id: f.id, claim: f.claim, reason: v.reason })
+  else stillOpen.push({ ...f, status: 'confirmed', carried_from: ROUND.previous_package ?? null,
+                        verifier_reason: v ? v.reason
+                          : 'the re-check did not return — it stood once and stays open' })
+}
+if (OPEN.length) log(`${closed.length} of ${OPEN.length} open finding(s) closed by the push`)
+
+const byId = new Map((verified ?? []).filter(Boolean).map((f) => [f.id, f]))
+const BELOW_BLOCKING =
+  "below the blocking severities a finding decides no gate — the reviewer's word, read once"
 const SKIPPED_PRE_EXISTING =
   'not verified: marked attributable:false, and a finding the change did not cause never ' +
   'holds the proposal — the verifier would decide nothing'
-const final = findings.map((f) => byId.get(f.id)
-  // A severe finding that SHOULD have been verified and was not is `uncertain`: it goes
-  // to a person, never silently to the author. One that was deliberately not sent keeps
-  // what the reviewer said, with the reason it was not sent — the two are different
-  // states and collapsing them would read as a verifier failure that never happened.
+const final = [...stillOpen, ...findings.map((f) => byId.get(f.id)
   || (['critical', 'required'].includes(f.severity) && f.attributable !== false
-      ? { ...f, status: 'uncertain', verifier_reason: 'not verified' }
-      // Nobody read these twice, so they are not `confirmed`: two nits raised from the
-      // record's prose once went out as "confirmed" while the run file refuted both.
-      // `unverified` is what happened — the reviewer's word, unrefuted and unchecked.
+      ? { ...f, status: 'confirmed', verifier_reason: NO_VERIFIER }
       : { ...f, status: 'unverified',
-          verifier_reason: f.attributable === false
-            ? SKIPPED_PRE_EXISTING
-            : NOT_SENT_BELOW_BLOCKING }))
+          verifier_reason: f.attributable === false ? SKIPPED_PRE_EXISTING : BELOW_BLOCKING }))]
 
 phase('Manual plan')
 const manualCandidates = classes.filter(
@@ -788,6 +882,10 @@ const anchorsFor = (entries) => Object.fromEntries(entries
   .flatMap((c) => String(c.id).split(', '))
   .filter((id) => (profile?.anchors ?? {})[id])
   .map((id) => [id, profile.anchors[id]]))
+// A later round keeps the scripts the first one wrote: QA's input does not change with
+// a correction, and the spine carried them into this package.
+const carried = ROUND.mode !== 'full' && ROUND.scripts_carried
+if (carried) needsScript.length = 0
 const templatable = EFFORT === 'minimal' && needsScript.length > 0
   && needsScript.every((c) => c.cause && fallback[c.cause])
 if (templatable) {
@@ -818,6 +916,7 @@ const scripts = templatable
       `Criteria from the item: ${bundle}/criteria.json`,
       `The item itself: ${bundle}/item.md`,
       'The expected result is written BEFORE executing.',
+      LANGUAGE,
       RETURN_RULE,
     ].join('\n'), { agentType: agentFor('manual-verification-planner'), phase: 'Manual plan',
                     schema: SCRIPT_SCHEMA, ...tiered('standard') })
@@ -825,4 +924,5 @@ const scripts = templatable
 
 return { findings: final, coverage, conventions_observed: conventionsObserved,
          criteria: criteriaVerdicts, criteria_extracted: extracted, criteria_labels: labels,
-         scripts_manual: scripts ? scripts.scripts_manual : [] }
+         closed_findings: closed,
+         ...(carried ? {} : { scripts_manual: scripts ? scripts.scripts_manual : [] }) }

@@ -88,7 +88,8 @@ prumo/
 │   ├── deliver.py               the delivery: cut the worktree, plan, check once by size, judge, hand over, evidence
 │   ├── run.py                   the route: every next step read from disk, every stop classed
 │   ├── branch_guard.py          the hook's judge: nothing lands directly on a protected branch
-│   ├── delta.py, closure.py     the loops: re-judgement and item resolutions
+│   ├── delta.py, closure.py     the rounds of a review, and the item's resolutions
+│   ├── basis.py                 where a finding's demand comes from, looked up in the files
 │   ├── telemetry.py, metrics.py measured cost, never estimated
 │   ├── derive_profile.py        bootstraps a profile for a new repository
 │   ├── validate_profile.py      a profile against its contract
@@ -115,7 +116,7 @@ prumo/
 │   └── deliver.js               measure, write and run in one call; a story's tasks; the evidence, last
 ├── hooks/
 │   ├── review-guard.sh          blocks merge (unless delegated) and landing on a protected branch always; push/commit while a review runs;
-│                                inside a running delivery's worktree: push, `add -A`, the base, writes outside its roots or named files
+│                                inside a running delivery's worktree: push, `add -A`, the base, a write before a gated plan was approved
 │   └── hooks.json               registers the hook — you edit no settings.json
 │
 ├── messages/{en,pt-BR}.yml      every user-facing string
@@ -422,7 +423,7 @@ script cannot invoke it:
 ```
 review.py prepare --repo R [--proposal N | --branch B] --item C
                   --item-file ITEM.md [--proposal-file PROPOSAL.md]
-Workflow({name: 'prumo:task-review', args: {...}})    # prepare prints this, filled in, with the plugin's prefix
+Workflow({scriptPath: '<package>/workflow.js'})       # prepare writes this file, arguments inside, and prints the call
 review.py conclude --package P --workflow-result W    # the object the workflow returned, saved as JSON — or the task's own output file
 ```
 
@@ -446,9 +447,36 @@ are no criteria" and "I could not read them" is the whole point.
 > 4. what only QA can verify is handed to QA, with a script;
 > 5. and the four above were actually **measured**.
 
-Any closed gate is INTERVENTION REQUIRED. The report opens with that five-line table and
-only then with the routes — the route says *who does what*, the gate says *which
-condition failed*.
+Any closed gate is INTERVENTION REQUIRED. The report opens with one screen — what holds
+the approval, each with its address, where its demand comes from and what to do; what
+goes to QA; the questions that hold nothing — and everything else is the annex.
+
+### What a finding has to be before it holds anything
+
+- **Confirmed.** A sceptic in a clean context reads every blocking finding again. A doubt
+  it cannot settle is a question for a person, shown beside the verdict.
+- **With a basis.** A criterion of the item, a rule the project wrote down — quoted, and
+  looked up in the file by the harness — or a defect: the code doing the wrong thing on a
+  real path. A demand nobody stated is a suggestion, whatever its label.
+- **About the proof the item needs, not more.** A criterion is proven when a test fails if
+  the behaviour it states is removed; the delivery's own sceptic and the review read by
+  that one bar. A test that could pin more is a suggestion.
+- **A class the triage fired is a question**, put to the reviewer of that ground. It holds
+  only through a confirmed finding that carries it, or when a tool measured it.
+
+### Rounds
+
+The first review reads the whole delivery. The second reads only what the push changed
+and re-checks what the first left open. From the third on no reviewer runs: the only
+question is whether what is open was fixed. A finding raised on code a round already read
+is shown and holds nothing. `prepare --full` reads everything again when a person asks.
+
+### How this method changes
+
+A stop is the most expensive thing the method has: it costs a round, and it reads as a
+rule even when it was one incident. **An incident becomes a rule only when it shows up on
+a second item**, and a new stop names the one it replaces. What is true of one delivery
+goes into that delivery's report; what is true of one repository goes into its profile.
 
 ### Whose debt is it
 

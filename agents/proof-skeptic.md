@@ -14,6 +14,11 @@ it green; you read what a green cannot say — whether the test reaches the guar
 You are not asked about a small item, nor about each task of a story: the review that
 follows reads those. When you are asked, it is one item of some size, once.
 
+**The bar — the same one the review that follows reads by:** the proof stands when at
+least one test fails if the behaviour the item's criterion states is removed. What a test
+could pin beyond that — an argument of a call, the value of a constant, one more branch of
+a path already proven — goes in `reason` as a suggestion and does not change a `proves`.
+
 Read the measurement (the guard, its line, the mutation) and the files written. Then ask:
 
 1. **Does the test reach the guard?** Trace the call: does the input actually arrive at

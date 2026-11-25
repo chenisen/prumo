@@ -330,6 +330,26 @@ def read_json(path: pathlib.Path):
     return json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
 
 
+WORKFLOW_ARGS_CALL = "readArgs(args)"
+
+
+def write_workflow_script(package: pathlib.Path, name: str, args: dict,
+                          suffix: str = "") -> pathlib.Path:
+    """The workflow `name`, ready to run with `args` already inside it, written to the
+    package as `workflow<suffix>.js`. A workflow script has no filesystem, so its
+    arguments can only arrive in the tool call — and whoever drives a run should carry a
+    path, not the payload. The one `readArgs(args)` of the source is the seam."""
+    source = (PRUMO_ROOT / "workflows" / f"{name}.js").read_text(encoding="utf-8")
+    if source.count(WORKFLOW_ARGS_CALL) != 1:
+        raise UsageError(f"workflows/{name}.js must read its arguments exactly once, "
+                         f"through `{WORKFLOW_ARGS_CALL}`")
+    path = pathlib.Path(package) / f"workflow{suffix}.js"
+    path.write_text(source.replace(WORKFLOW_ARGS_CALL,
+                                   f"readArgs({json.dumps(args, ensure_ascii=True)})"),
+                    encoding="utf-8")
+    return path
+
+
 def glob_to_regex(pattern: str) -> re.Pattern:
     """Turn a path glob into a regex. `**` crosses directories, `*` does not."""
     out, i = [], 0

@@ -120,8 +120,8 @@ ROUTE_GATE = {
 # `vermelha_nao_atribuivel` on the suite, now applied to the route. Decided 2026-11-03.
 #
 # What remains the DELIVERY's debt, and goes on blocking:
-#   * an attributable, blocking finding                     (gate 1)
-#   * a §A class fired over what the diff changed           (gate 2)
+#   * an attributable, blocking, CONFIRMED finding          (gate 1)
+#   * such a finding on a §A class — a person's decision    (gate 2)
 #   * a criterion of the item unmet, or with no record      (gate 3)
 #   * mandatory reading empty — with no item there is       (gate 5)
 #     nothing to judge
@@ -175,7 +175,31 @@ def about_the_record(finding: dict, package_files: set[str] | None) -> bool:
 # the second reading is declared beside it, with the label as written. The other
 # direction, a nit that should have been required, still has no second reading: the
 # verifier never sees what nobody sent it, and sending everything is the axis that grows.
-SEVERITY_READ_DOWN = ("record", "convention")
+#   * `proof_extra` a test could pin more — an argument, a constant, one more branch —
+#                   but the criterion's behaviour already has a test that goes red
+#                   without it
+SEVERITY_READ_DOWN = ("record", "convention", "proof_extra")
+
+# A class the scanner itself fired, as opposed to one a path pattern matched.
+MEASURED_CAUSE = "check_red"
+
+
+def basis(finding: dict) -> str | None:
+    """Where a blocking finding's demand comes from: a criterion of the item, a rule the
+    project wrote down (quoted, and found where the quote says), or a defect — the code
+    doing the wrong thing on a real path, as the verifier read it. `None` is a demand
+    nobody stated: it is shown, and it holds nothing. A finding from before the `rule`
+    field existed is judged as it was then."""
+    if "rule" not in finding:
+        return "legacy"
+    if finding.get("criterion"):
+        return "criterion"
+    rule = finding.get("rule") or {}
+    if rule.get("file") and rule.get("quote") and rule.get("verified") is not False:
+        return "rule"
+    if finding.get("consequence_kind") == "behaviour":
+        return "defect"
+    return None
 
 
 def read_down(finding: dict) -> bool:
@@ -250,9 +274,13 @@ def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
     live = lambda c: (not c.get("not_applicable")
                       and not waiver_in_force(c.get("waiver"), today))
 
+    # A §A class the triage fired is a QUESTION for the reviewer of that ground, not a
+    # verdict: a path pattern matching says the change touched the surface, never that it
+    # went beyond what the item asked. It holds only when a tool measured it.
     route("human_decision",
           [c["id"] for c in classes
-           if c["section"] == "A" and c["state"] == "fired" and live(c)])
+           if c["section"] == "A" and c["state"] == "fired" and live(c)
+           and c.get("cause") == MEASURED_CAUSE])
     route("manual_check",
           [c["id"] for c in classes
            if c["section"] == "B" and c["state"] == "fired" and live(c)],
@@ -263,37 +291,44 @@ def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
     # --- findings. A refuted one disappears; an uncertain one goes to a person, not to
     #     the author; and a finding the change did not cause is not the debt of whoever
     #     wrote this proposal.
-    severe = lambda f: f.get("severity") in BLOCKING_SEVERITIES and not read_down(f)
-    on_record = [f["id"] for f in findings if severe(f) and about_the_record(f, package_files)
-                 and f.get("status") != "refuted"]
+    labelled = lambda f: (f.get("severity") in BLOCKING_SEVERITIES and not read_down(f)
+                          and f.get("status") != "refuted")
+    without_basis = [f["id"] for f in findings if labelled(f) and basis(f) is None]
+    already_reviewed = [f["id"] for f in findings if labelled(f) and f.get("already_reviewed")]
+    severe = lambda f: (labelled(f) and basis(f) is not None
+                        and not f.get("already_reviewed"))
+    on_record = [f["id"] for f in findings if severe(f) and about_the_record(f, package_files)]
     blocks = lambda f: severe(f) and f.get("attributable", True) and f["id"] not in on_record
+    # Only what was read twice and stood holds a proposal. A doubt is a question for a
+    # person, shown beside the verdict; it never closes a gate.
+    confirmed = lambda f: blocks(f) and f.get("status") == "confirmed"
+    uncertain = [f["id"] for f in findings if blocks(f) and f.get("status") == "uncertain"]
+    section_a = lambda f: str(f.get("class") or "").startswith("A")
     # A finding about an acceptance criterion of the item is charged where the item is
-    # charged — gate 3 — not at "standards and good practice". A finding that the
-    # mutation record did not prove the tests closed gate 1 once, and the reader was told
-    # the delivery broke a convention it had not touched.
+    # charged — gate 3 — not at "standards and good practice".
     about_criterion = lambda f: bool(f.get("criterion"))
+    route("human_decision",
+          [f["id"] for f in findings if confirmed(f) and section_a(f)
+           and f.get("class") not in resolved])
     route("author_fix",
-          [f["id"] for f in findings if blocks(f) and f.get("status") == "confirmed"
+          [f["id"] for f in findings if confirmed(f) and not section_a(f)
            and not about_criterion(f)])
     route("author_fix",
-          [f["id"] for f in findings if blocks(f) and f.get("status") == "confirmed"
+          [f["id"] for f in findings if confirmed(f) and not section_a(f)
            and about_criterion(f)],
           {"detail": t("verdict.detail_finding_on_criterion", **_words())}, gate=3)
-    route("confirm_finding",
-          [f["id"] for f in findings if blocks(f) and f.get("status") == "uncertain"])
     # A finding about a consumer the item does not name says HOW it closes: that consumer
     # back to the base. Eleven reviews of one item (2026-11-18) adapted a shared route to
     # each finding in turn, and each adaptation opened the next.
-    beyond = sorted(f["id"] for f in findings if blocks(f) and f.get("beyond_item")
-                    and f.get("status") in ("confirmed", "uncertain") and f["id"] not in resolved)
+    beyond = sorted(f["id"] for f in findings if confirmed(f) and f.get("beyond_item")
+                    and f["id"] not in resolved)
     if beyond:
         for r in routes:
-            if r["type"] in ("author_fix", "confirm_finding") and set(beyond) & set(r["items"]):
+            if r["type"] == "author_fix" and set(beyond) & set(r["items"]):
                 r["details"].append(t("verdict.detail_beyond_item",
                                       ids=", ".join(i for i in beyond if i in r["items"]), **_words()))
     non_attributable = [f["id"] for f in findings
-                        if severe(f) and not f.get("attributable", True)
-                        and f.get("status") != "refuted"]
+                        if severe(f) and not f.get("attributable", True)]
 
     # --- criteria of the item
     route("author_fix", [c["id"] for c in criteria if c.get("state") == "not_met"],
@@ -425,7 +460,12 @@ def judge_delivery(profile: dict, classes: list[dict], findings: list[dict],
             # both with their names.
             "profile_coverage": f"{len([c for c in classes if c['state'] != 'not_assessable'])}/18",
             "classes_assessed": f"{len([c for c in classes if c['state'] != 'not_assessable'])}/18",
-            "blocking_findings": len([f for f in findings if blocks(f)]),
+            "blocking_findings": len([f for f in findings if confirmed(f)]),
+            # Shown, never charged: a doubt the verifier could not settle, a demand
+            # nobody stated, and a finding on code an earlier round already read.
+            "findings_uncertain": uncertain,
+            "findings_without_basis": without_basis,
+            "findings_already_reviewed": already_reviewed,
             "findings_about_the_record": on_record,
             "findings_severity_read_down": [
                 {"id": f["id"], "severity": f["severity"], "consequence_kind": f["consequence_kind"]}

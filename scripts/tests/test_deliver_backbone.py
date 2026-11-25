@@ -27,6 +27,7 @@ import jsonschema
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 import common
 import deliver
+from i18n import t
 
 PRUMO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 
@@ -262,7 +263,10 @@ class Spine(Fixture):
         self.assertTrue(deliver.markers())
         mark = json.loads(deliver.markers()[0].read_text())
         self.assertEqual(mark["worktree"], str(self.repo))
-        self.assertEqual(mark["roots"], ["tests"], "a coverage gap may write tests, and nothing else")
+        script = (package / "workflow-deliver.js").read_text(encoding="utf-8")
+        self.assertIn(f'"package": "{package}"', script)
+        self.assertIn('"stage": "deliver"', script)
+        self.assertNotIn("readArgs(args)", script)
         args = json.loads((package / "workflow-args.json").read_text(encoding="utf-8"))
         self.assertEqual(args["small"], {"max_files": 3, "max_lines": 80})
         self.assertEqual(args["commands"]["lint"], "python3 lint.py")
@@ -335,18 +339,29 @@ class Spine(Fixture):
         self.assertIsNone(rec["plan"]["budget"])
         self.assertIn("budget none", (package / "plan.md").read_text(encoding="utf-8"))
 
-    def test_a_budget_raised_after_a_block_is_heard_by_the_next_conclude(self):
-        """The budget is read as the profile stands, like the waiver beside it. A person
-        who answers `blocked` by raising it — or removing it — concludes the same package
-        again; the manifest's number, frozen at prepare, used to keep the stop standing."""
+    def test_a_delivery_over_its_budget_is_delivered_with_a_warning(self):
+        """The budget is the size to aim for. Over it, everything still runs — the
+        mutant, the suite, the commit — and the record and the report say so."""
         package = self.prepare()
-        long_test = PROVING_TEST + "# a line of proof\n" * 400
-        code, rec = self.conclude(package, long_test)
-        self.assertEqual((code, rec["state"], rec["owner"]), (1, "blocked", "person"), rec)
-        self.profile_with(delivery__budget={"max_files": 2, "max_lines": 600})
-        code, rec = self.conclude(package, long_test)
+        code, rec = self.conclude(package, PROVING_TEST + "# a line of proof\n" * 400)
         self.assertEqual((code, rec["state"]), (0, "delivered"), rec)
+        self.assertFalse(rec["diff"]["within_budget"])
+        self.assertEqual(rec["proof"]["mutations"][0]["result"], "red")
+        self.assertTrue((package / "run-suite-branch.txt").exists())
+        warning = t("deliver.warning.budget_exceeded", files=1, lines=rec["diff"]["added"],
+                           max_files=2, max_lines=60)
+        self.assertEqual(rec["warnings"], [warning])
+        self.assertIn(warning, (package / "report.md").read_text(encoding="utf-8"))
+        log = subprocess.run(("git", "log", "--format=%s", "-1"), cwd=self.tree_of(package),
+                             capture_output=True, text=True).stdout
+        self.assertTrue(log.startswith("ITEM-1 - "), log)
+
+    def test_the_budget_in_the_record_is_the_profile_s_as_it_stands(self):
+        package = self.prepare()
+        self.profile_with(delivery__budget={"max_files": 2, "max_lines": 600})
+        code, rec = self.conclude(package, PROVING_TEST)
         self.assertEqual(rec["plan"]["budget"], {"max_files": 2, "max_lines": 600})
+        self.assertEqual(rec["warnings"], [])
 
     # ---- see also: the shape tests above
 
@@ -591,6 +606,11 @@ class Spine(Fixture):
         with contextlib.redirect_stdout(io.StringIO()):
             deliver.plan(argparse.Namespace(package=str(package), measure=str(package / "m.json")))
         self.assertIn("hotfix", (package / "plan.md").read_text(encoding="utf-8"))
+        first = (package / "workflow-measure.js").read_text(encoding="utf-8")
+        write = (package / "workflow-write.js").read_text(encoding="utf-8")
+        self.assertIn('"stage": "write"', write)
+        self.assertIn('"proving_tests": ["test_guard_refuses"]', write, "the next stage reads the measurement")
+        self.assertIn('"proving_tests": ["test_guard_refuses"]', first, "a script already written follows the arguments")
         code, rec = self.conclude(package, PROVING_TEST, measure_data=measure, source=SOURCE)
         self.assertEqual((rec["state"], rec["owner"]), ("blocked", "person"))
         self.assertIsNone(rec["proof"]["red_on_base"], "nothing ran behind a shut gate")
@@ -599,9 +619,12 @@ class Spine(Fixture):
             deliver.approve(argparse.Namespace(package=str(package), by="someone"))
         code, rec = self.conclude(package, PROVING_TEST, measure_data=measure, source=SOURCE)
         self.assertEqual(rec["plan"]["approved_by"], "someone")
-        # two files against a budget of one: the shape's half, not the profile's whole
-        self.assertEqual(rec["state"], "blocked")
-        self.assertIn("1", rec["reason"])
+        # two files against a budget of one — the shape's half, not the profile's whole:
+        # said in a warning, and the delivery is judged by its proof
+        self.assertEqual(rec["state"], "delivered", rec["reason"])
+        self.assertEqual(rec["plan"]["budget"], {"max_files": 1, "max_lines": 30})
+        self.assertFalse(rec["diff"]["within_budget"])
+        self.assertEqual(len(rec["warnings"]), 1)
 
     def test_a_refactor_is_proven_by_the_guards_that_stay_green(self):
         """The shape is `refactor`: gated, twice the budget, the kind `refactor`. The
@@ -741,21 +764,14 @@ class Spine(Fixture):
         code, rec = self.conclude_result(story, {"stage": "tasks", "tasks": [self.write_task("T2")]})
         self.assertEqual((code, rec["state"], rec["tasks"]), (0, "delivered", {"T1": "delivered", "T2": "delivered"}), rec)
 
-    def test_a_story_over_its_budget_waits_for_a_person_or_a_waiver(self):
+    def test_a_story_over_its_budget_is_delivered_with_a_warning(self):
         story = self.story()
-        tight = {"max_files": 1, "max_lines": 1}
-        self.profile_with(delivery__budget=tight)
+        self.profile_with(delivery__budget={"max_files": 1, "max_lines": 1})
         result = {"stage": "tasks", "tasks": [self.write_task("T1"), self.write_task("T2")]}
         code, over = self.conclude_result(story, result)
-        self.assertEqual((code, over["state"], over["owner"]), (1, "blocked", "person"))
-        self.profile_with(delivery__budget=tight,
-                          delivery__waiver={"approver": "someone", "reason": "a person said so", "expires": "2999-12-31"})
-        code, waived = self.conclude_result(story, result)
-        self.assertEqual((code, waived["state"]), (0, "delivered"), waived["reason"])
-        self.profile_with(delivery__budget=tight,
-                          delivery__waiver={"approver": "someone", "reason": "a person said so", "expires": "2000-01-01"})
-        code, expired = self.conclude_result(story, result)
-        self.assertEqual((code, expired["state"]), (1, "blocked"))
+        self.assertEqual((code, over["state"]), (0, "delivered"), over["reason"])
+        self.assertFalse(over["diff"]["within_budget"])
+        self.assertEqual(len(over["warnings"]), 1)
 
     def test_a_kind_the_shape_does_not_allow_is_refused(self):
         with self.assertRaises(common.UsageError):
@@ -772,44 +788,25 @@ class Spine(Fixture):
                               capture_output=True, text=True).stdout.strip()
         self.assertEqual(head, "base")
 
-    def test_a_file_outside_the_named_ones_is_outside_the_scope(self):
+    def test_a_file_outside_the_named_ones_is_declared_and_stops_nothing(self):
         package = self.prepare()
         (self.repo / "src" / "a.py").write_text(SOURCE + "\n", encoding="utf-8")
         code, rec = self.conclude(package, PROVING_TEST)
-        self.assertEqual(rec["state"], "blocked")
+        self.assertEqual((code, rec["state"]), (0, "delivered"), rec["reason"])
         self.assertEqual(rec["diff"]["outside_scope"], ["src/a.py"])
-        self.assertNothingRan(package, rec)
-
-    def assertNothingRan(self, package, rec):
-        self.assertEqual(list(package.glob("run-*.txt")), [], "a stop the diff decides is paid by no run")
-        self.assertEqual(rec["proof"]["mutations"], [])
-        self.assertEqual((rec["lint"]["state"], rec["measured"]["suite"]), ("not_run", None))
-
-    def test_a_stop_the_diff_decides_runs_no_mutant_no_suite_and_no_lint(self):
-        """The first real delivery on 3.0 was 146 lines against a budget of 120: its writer
-        had said so, and `conclude` still ran three mutants and two whole suites before
-        answering `blocked`. What the diff alone decides is read first."""
-        package = self.prepare()
-        long_test = PROVING_TEST + "# a line of proof\n" * 400
-        code, rec = self.conclude(package, long_test)
-        self.assertEqual((code, rec["state"], rec["owner"]), (1, "blocked", "person"), rec)
-        self.assertNothingRan(package, rec)
-        # the stop lifted, the same package is concluded again and everything runs — once
-        self.profile_with(delivery__budget=None)
-        code, rec = self.conclude(package, long_test)
-        self.assertEqual((code, rec["state"]), (0, "delivered"), rec)
+        self.assertEqual(rec["warnings"], [t("deliver.warning.outside_scope", paths="src/a.py")])
         self.assertEqual(rec["proof"]["mutations"][0]["result"], "red")
-        self.assertTrue((package / "run-suite-branch.txt").exists())
+        self.assertTrue(rec["proof"]["mutations"][0]["reverted"])
 
-    def test_the_diff_s_stop_is_named_ahead_of_any_stop_a_run_could_give(self):
-        diff = {"files": ["a"], "added": 1, "removed": 0, "outside_scope": ["src/z.py"], "within_budget": False}
-        self.assertEqual(deliver.diff_stop(diff, None), "outside_scope")
-        self.assertEqual(deliver.diff_stop(dict(diff, outside_scope=[]), None), "budget")
-        waiver = {"approver": "someone", "reason": "a person said so", "expires": "2999-12-31"}
-        self.assertIsNone(deliver.diff_stop(dict(diff, outside_scope=[]), waiver))
-        self.assertEqual(deliver.diff_stop(dict(diff, outside_scope=[]), dict(waiver, expires="2000-01-01")), "budget")
-        self.assertIsNone(deliver.diff_stop(dict(diff, outside_scope=[], within_budget=True), None))
-
+    def test_a_mutant_in_a_file_the_delivery_changed_leaves_that_change_standing(self):
+        package = self.prepare()
+        changed = SOURCE + "\n# the delivery's own line\n"
+        (self.repo / "src" / "a.py").write_text(changed, encoding="utf-8")
+        code, rec = self.conclude(package, PROVING_TEST)
+        self.assertEqual(rec["state"], "delivered", rec["reason"])
+        committed = subprocess.run(("git", "show", "HEAD:src/a.py"), cwd=self.tree_of(package),
+                                   capture_output=True, text=True).stdout
+        self.assertEqual(committed, changed)
 
     def test_a_named_document_under_doc_roots_is_inside_the_scope(self):
         """Measured on 2026-11-12: a README the change made stale could not travel with
@@ -1108,6 +1105,55 @@ class TheSizeDecidesWhatRuns(Fixture):
         self.assertEqual(subject, "ITEM-1 - refusing ten at the guard")
         self.assertEqual(rec["branch"]["sha"], subprocess.run(("git", "rev-parse", "HEAD"), cwd=tree,
                                                               capture_output=True, text=True).stdout.strip())
+
+    def written(self, files, message):
+        return {"files": files, "skipped": [], "reused": [], "blocked": None,
+                "tests_run": {"command": "x", "red_first": True, "green": True},
+                "commit_message": message}
+
+    def test_a_second_write_of_tests_does_not_rename_the_commit_that_carries_production(self):
+        """A first write left uncommitted by a block, then a second one of tests only:
+        the one commit holds both, and its subject is the write that changed production."""
+        package = self.prepare(kind="behaviour-change")
+        tree = self.tree_of(package)
+        (tree / "tests" / "test_guard.py").write_text(PROVING_TEST, encoding="utf-8")
+        (tree / "src" / "a.py").write_text(SOURCE, encoding="utf-8")
+        code, rec = self.conclude_result(package, {
+            "stage": "deliver", "size": "small", "measure": BEHAVIOUR,
+            "refutation": {"verdict": "does_not_prove", "reason": "asserts the wrong side"},
+            "written": self.written(BEHAVIOUR["files"], "refusing ten at the guard")})
+        self.assertEqual((code, rec["state"], rec["owner"]), (1, "blocked", "author"), rec)
+        again = (package / "workflow-write.js").read_text(encoding="utf-8")
+        self.assertIn('"stage": "write"', again)
+        self.assertIn('"previous": {"reason"', again)
+        (tree / "tests" / "test_guard.py").write_text(PROVING_TEST + "# a second pass\n", encoding="utf-8")
+        code, rec = self.conclude_result(package, {
+            "stage": "write", "size": "small", "measure": BEHAVIOUR,
+            "refutation": {"verdict": "proves", "reason": "the refusal is asserted"},
+            "written": self.written(["tests/test_guard.py"], "proving the refusal a second time")})
+        self.assertEqual(rec["state"], "delivered", rec)
+        log = subprocess.run(("git", "log", "--format=%s", "main..HEAD"), cwd=tree,
+                             capture_output=True, text=True).stdout.splitlines()
+        self.assertEqual(log, ["ITEM-1 - refusing ten at the guard"])
+
+    def test_the_commit_subject_is_the_write_that_changed_the_production_committed(self):
+        block = {"source_roots": ["src"], "test_roots": ["tests"]}
+        writes = [{"files": ["tests/test_a.py"], "commit_message": "tests first"},
+                  {"files": ["src/a.py", "tests/test_a.py"], "commit_message": "the change"},
+                  {"files": ["tests/test_a.py"], "commit_message": "tests again"}]
+        self.assertEqual(deliver.commit_subject(writes, ["src/a.py", "tests/test_a.py"], block), "the change")
+        self.assertEqual(deliver.commit_subject(writes, ["tests/test_a.py"], block), "tests first",
+                         "no production in the commit: the first write names it")
+        self.assertIsNone(deliver.commit_subject([], ["src/a.py"], block))
+
+    def test_a_write_concluded_twice_is_remembered_once_and_one_with_no_message_never(self):
+        package = self.root / "writes"
+        package.mkdir()
+        same = {"files": ["src/a.py"], "commit_message": " the change "}
+        deliver.remember_write(package, same)
+        deliver.remember_write(package, same)
+        writes = deliver.remember_write(package, {"files": ["tests/test_a.py"]})
+        self.assertEqual(writes, [{"files": ["src/a.py"], "commit_message": "the change"}])
 
     def test_a_writer_that_stopped_blocks_for_a_person_and_nothing_runs(self):
         package = self.prepare(kind="behaviour-change")

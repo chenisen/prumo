@@ -44,12 +44,21 @@ def build(package: pathlib.Path) -> dict:
     manifest = read_json(package / "manifest.json")
     repo_dir = dir_repositories() / manifest["repo"]
     rev_range = f"{manifest['merge_base']}..{manifest['head_sha']}"
+    # A later round reads what changed since the head the round before it reviewed, in the
+    # files the delivery itself touches — a base pulled in between rounds brings files of
+    # its own, and those are nobody's push.
+    since = (manifest.get("round") or {}).get("since")
+    scope: list[str] = []
+    if since:
+        own = [f for f in git(repo_dir, "diff", "--name-only", rev_range).splitlines() if f]
+        rev_range = f"{since}..{manifest['head_sha']}"
+        scope = ["--", *own] if own else ["--", ":(exclude)*"]
 
-    diff = git(repo_dir, "diff", "--no-color", rev_range)
+    diff = git(repo_dir, "diff", "--no-color", rev_range, *scope)
     (package / "diff.patch").write_text(diff, encoding="utf-8")
 
     status = {}
-    for line in git(repo_dir, "diff", "--name-status", rev_range).splitlines():
+    for line in git(repo_dir, "diff", "--name-status", rev_range, *scope).splitlines():
         parts = line.split("\t")
         if len(parts) >= 2:
             status[parts[-1]] = parts[0][:1]
@@ -61,7 +70,7 @@ def build(package: pathlib.Path) -> dict:
     # a 200-line migration. Binary files report `-` and count zero — a figure would be
     # invented, and the file still shows up in `files`.
     lines_by_file: dict[str, int] = {}
-    for l in git(repo_dir, "diff", "--numstat", rev_range).splitlines():
+    for l in git(repo_dir, "diff", "--numstat", rev_range, *scope).splitlines():
         parts = l.split("\t")
         if len(parts) < 3:
             continue

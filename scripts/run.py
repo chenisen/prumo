@@ -101,12 +101,6 @@ def bind(root: pathlib.Path, kind: str, target: str, task: str | None = None) ->
     log(root, t("run.bound", kind=f"{kind} {task}" if task else kind, path=target))
 
 
-def _wf(name: str) -> str:
-    """A plugin's workflow answers by the plugin's name in front — the same prefix its
-    agents carry, read by `triage.workflow_name` from the same three sources."""
-    from triage import workflow_name
-    return workflow_name(name)
-
 
 def _exists(base: str | None, name: str) -> bool:
     return bool(base) and (pathlib.Path(base) / name).is_file()
@@ -176,9 +170,12 @@ def decide(run: dict, root: pathlib.Path) -> dict:
 
 
 def _stage(d: str, stage: str) -> str:
-    """One stage of the deliver workflow, over the object `prepare` (and `plan`) wrote:
-    pasted with the stage's name, nothing composed."""
-    return f"Workflow({{name: '{_wf('deliver')}', args: <{d}/workflow-args.json + stage: '{stage}'>}})"
+    """One stage of the deliver workflow: the script the package holds for it, written
+    again here from the arguments as they stand."""
+    if _exists(d, "workflow-args.json"):
+        from deliver import stage_script
+        stage_script(pathlib.Path(d), stage)
+    return f"Workflow({{scriptPath: '{d}/workflow-{stage}.js'}})"
 
 
 def _review_read_another_head(r: str, rec: dict) -> bool:
@@ -260,7 +257,7 @@ def _review_step(run: dict, r: str, repo: str, stop, invoke) -> dict:
     if _exists(r, "workflow-result.json"):
         return invoke(f"review.py conclude --package {r} --workflow-result {r}/workflow-result.json")
     if not _exists(r, "findings.json"):
-        return invoke(f"Workflow({{name: '{_wf('task-review')}', args: <{r}/workflow-args.json>}})"
+        return invoke(f"Workflow({{scriptPath: '{r}/workflow.js'}})"
                       + f" → {t('run.save_result', path=f'{r}/workflow-result.json')}")
     return invoke(f"review.py conclude --package {r} --findings {r}/findings.json"
                   + (f" --criteria {r}/criteria-verdicts.json" if _exists(r, "criteria-verdicts.json") else ""))

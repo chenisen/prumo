@@ -175,10 +175,9 @@ properties:
           max_lines: {type: integer, minimum: 1}
         description: >-
           OPTIONAL, and a decision of the repository's — never drafted, never defaulted. Declared,
-          a delivery over it stops and proposes the split, and `waiver` lifts it, with a name and
-          an expiry. Absent, no delivery stops for its size: the plan says no budget is declared.
-          Read as the profile stands when `conclude` runs, so raising or removing it is heard by
-          the next conclude of the same package.
+          it travels to the agents as the size to aim for, and a delivery over it is declared
+          in the report as a warning: no delivery stops for its size. Read as the profile
+          stands when `conclude` runs.
       small:
         type: object
         additionalProperties: false
@@ -224,7 +223,7 @@ properties:
         type: array
         minItems: 1
         items: {type: string}
-        description: where production lives; a line outside the scope is a defect
+        description: where production lives; a file changed outside the declared roots is declared in the delivery's report, never refused
       test_roots:
         type: array
         minItems: 1
@@ -260,7 +259,9 @@ properties:
         type: array
         description: the kinds THIS repository accepts, from reference/delivery-kinds.md; anything else is unsupported
         items: {enum: [coverage-gap, behaviour-change, refactor]}
-      waiver: {$ref: "#/$defs/waiver"}
+      waiver:
+        $ref: "#/$defs/waiver"
+        description: accepted so a profile written while the budget stopped a delivery still validates; nothing reads it
 
   anchors:
     type: object

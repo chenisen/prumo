@@ -37,12 +37,12 @@ Each rule has a test that fails when it is broken (`scripts/tests/test_deliver.p
 | R2 | **Measure before touching.** Every premise of the item becomes `holds`, `fails` or `not_assessable`, with `file:line`. A story is measured by its design, which a person approves. | `premise-surveyor`, `task-planner` |
 | R3 | **A failed premise records, it does not erase.** A central premise that fails is a stop, before anything is written; a writer that finds the code other than assumed returns `blocked`. | script + writer |
 | R4 | **Red before green.** The writer sees its test red, then green. `conclude` reads it once more over the base's production files, the changed test files only: nothing red there is a test that passes without the change, and blocks. A coverage gap is proven by the mutant its test kills. | writer runs, script checks once |
-| R5 | **Smallest diff that pays the item.** No drive-by refactor, rename or whole-file formatting. | `scope_guard` over the diff |
+| R5 | **Smallest diff that pays the item.** No drive-by refactor, rename or whole-file formatting. A file the measurement did not name, or outside the roots the kind writes, is declared in the report — a warning, never a stop. | writer + `scope_guard` over the diff |
 | R6 | **The size decides the suite.** Small: the test files the change touched, plus the ones the measurement named beside them. Otherwise: the whole suite, once. A wide path is never small. | `shape.size_of` |
 | R7 | **Baseline by name, and only when needed.** A green branch owes no baseline. A red one is compared by name against the base — measured then, or reused from a package that measured the same tree. A new red stops. | script |
 | R8 | **Predicted versus executed.** A suite that did not finish is not green. | script |
 | R9 | **One commit per step**, in the profile's `commit_format`. Never `git add -A`; always a pathspec. A story's writer commits its own task. | hook + script |
-| R10 | **Budget, where the repository declares one.** `max_files` and `max_lines` from the profile, scaled by the shape. Over it stops; raising it, or a waiver with a name and an expiry, lifts it on the next `conclude`. A profile with no `delivery.budget` stops nothing for its size — the method defaults none. | script |
+| R10 | **Budget, where the repository declares one.** `max_files` and `max_lines` from the profile, scaled by the shape, are the size the agents aim for. A delivery over it is declared in the record and the report — a warning, never a stop. The method defaults none. | script |
 | R11 | **Stopping is a result.** `blocked`, with a reason and the next owner, weighs as much as `delivered`. | judge |
 | R12 | **Evidence illustrates, once, at the end.** No environment for showing a change is raised while the work is open; nothing the evidence finds changes the state. | route + `evidence-collector` |
 
@@ -55,7 +55,7 @@ is declared**.
 
 - push, merge, move the item, approve;
 - land on a protected branch (`forge.protected_branches`): the delivery is cut *from* one, never *on* one;
-- write outside the worktree, or outside the roots its kind may touch;
+- write inside the worktree before a gated plan was approved;
 - run the whole suite more than once per item, or at all for a small one;
 - raise an environment to *show* the change before the item is delivered;
 - write a script that writes code;
@@ -109,20 +109,21 @@ A profile without a `delivery:` block is `not_assessable`, and the stop hands
 
 ## Sequence
 
-Scripts under `${CLAUDE_PLUGIN_ROOT}/scripts/`. Each step prints the next; the object the
-workflow takes is always `<package>/workflow-args.json` plus a `stage` — pasted, never
-composed. Save each workflow return, whole, to the file the step names.
+Scripts under `${CLAUDE_PLUGIN_ROOT}/scripts/`. Each step prints the next. A workflow
+step is a script the package already holds — `<package>/workflow-<stage>.js`, the deliver
+workflow with the package's arguments and the stage inside — run by its path, with no
+`args`. Save each workflow return, whole, to the file the step names.
 
 **An item with no gate** (`debt`, `bug`, a fix) — three steps:
 
 ```
 deliver.py prepare --repo R --item C --item-file ITEM.md (--type T | --shape S) [--kind K] [--branch B] [--related-file RELATED.md]
     resolves the shape and the base, cuts the branch in its own worktree, marks. Runs no suite.
-Workflow({name: 'prumo:deliver', args: {...workflow-args.json, stage: 'deliver'}})
+Workflow({scriptPath: 'P/workflow-deliver.js'})
     premise-surveyor measures → the size is read → change-writer writes and runs its tests
     → proof-skeptic, unless the item is small          → save the return to <package>/workflow-result.json
 deliver.py conclude --package P --result P/workflow-result.json
-    scope and budget over the diff — a stop there runs nothing after it · the proof over
+    scope and budget over the diff, as warnings · the proof over
     the changed test files · the suite the size asks · lint · judge · one commit ·
     record and report · marker off
 ```
@@ -130,28 +131,28 @@ deliver.py conclude --package P --result P/workflow-result.json
 **A shape a person approves** (`hotfix`, `refactor`) — the gate sits between two stages:
 
 ```
-prepare → Workflow stage 'measure' → deliver.py plan --package P --measure <its return>
-→ /prumo:approve P, by a person → Workflow stage 'write' → deliver.py conclude --package P --result <its return>
+prepare → Workflow P/workflow-measure.js → deliver.py plan --package P --measure <its return>
+→ /prumo:approve P, by a person → Workflow P/workflow-write.js → deliver.py conclude --package P --result <its return>
 ```
 
 **A story** — designed, approved, written task by task in one call, checked once:
 
 ```
-prepare --shape story → Workflow stage 'design' → deliver.py plan --package P --design <its return>
-→ /prumo:approve P → Workflow stage 'tasks' → deliver.py conclude --package P --result <its return>
+prepare --shape story → Workflow P/workflow-design.js → deliver.py plan --package P --design <its return>
+→ /prumo:approve P → Workflow P/workflow-tasks.js → deliver.py conclude --package P --result <its return>
 ```
 
 **After the item is delivered** — and, on the `run` route, after the review approved:
 
 ```
-Workflow stage 'evidence'      only when the profile declares `delivery.evidence`
+Workflow P/workflow-evidence.js   only when the profile declares `delivery.evidence`
 deliver.py evidence --package P [--collected <its return>]
 deliver.py release  --package P      the worktree goes, the branch stays
 ```
 
 `plan` and `conclude` write what the next stage needs into `workflow-args.json` — the
-measurement, the design, the tasks already written, a blocked attempt's reason — so the
-next invocation is the same object with another stage.
+measurement, the design, the tasks already written, a blocked attempt's reason — and
+write the next stage's script from it, printing its invocation.
 
 **What the writer runs is the profile's.** `prepare` resolves `checks.suite.files_command`
 and `checks.lint.command` for the worktree and hands them over; nothing else is run by
@@ -169,9 +170,11 @@ cannot reach a worktree says `worktree: false`, and each prepare says so.
 
 A `blocked` delivery leaves the tree as it is, and `conclude` leaves in
 `workflow-args.json` what a second write needs: the measurement and `previous` — the
-judge's reason and what the run printed about each new red. Invoke the workflow again
-with `stage: 'write'` (a story: `stage: 'tasks'`, which skips the tasks already
-written), save the return, and `conclude` again on the same package. With a writer that
+judge's reason and what the run printed about each new red. `conclude` prints the
+invocation of the second write — `workflow-write.js` (a story: `workflow-tasks.js`, which
+skips the tasks already written); run it, save the return, and `conclude` again on the
+same package. The commit keeps the message of the write that changed production, not
+the last write's. With a writer that
 runs its own tests this is rare: it is what is left when the whole suite finds a red the
 touched tests could not.
 
@@ -188,8 +191,11 @@ answers `state`, `reason` and `owner`; same record, same answer:
   stopped; a story's task was not written; a new red by name; a red branch whose base
   could not be measured; a suite that did not finish; nothing red on the base under the
   new test; a mutation that survived, or was too wide; the sceptic's `does_not_prove`;
-  a red lint; a line outside the scope; the budget exceeded with no waiver in force;
+  a red lint;
 - `delivered` — otherwise.
+
+`warnings` holds what the diff says and stops nothing: files outside the scope, a size
+over the declared budget.
 
 The record says its `size`, the `scope` of the suite that ran (`focused` or `whole`),
 how the base was read (`not_needed`, `measured`, `reused`), and names every run the
@@ -202,7 +208,7 @@ the measurement's is `partial`: the proof stands and the report says which name.
 A `story` is cut before it is written: the `design` stage runs the `task-planner`, which
 returns the tasks — each with its files, its falsifiable criteria, its proving tests and
 what it builds on — and `deliver.py plan --design` renders them as the plan a person
-approves. Then **one** workflow call, `stage: 'tasks'`, writes them in order: each task
+approves. Then **one** workflow call, `workflow-tasks.js`, writes them in order: each task
 has one writer, which reads the tasks before it, writes, sees its tests green and
 **commits its own task** before the next begins. A writer that finds the code other
 than the design assumed returns `blocked`, and the tasks after it wait.

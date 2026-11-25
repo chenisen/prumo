@@ -52,10 +52,9 @@ class TestItem10001(unittest.TestCase):
         author = [r for r in self.v["routes"] if r["type"] == "author_fix"]
         self.assertEqual([], [r for r in author if "rebase" in r["items"]])
 
-    def test_A7_is_a_human_decision_and_not_the_authors(self):
-        self.assertIn("human_decision", route_types(self.v))
-        decision = [r for r in self.v["routes"] if r["type"] == "human_decision"][0]
-        self.assertEqual(decision["items"], ["A7"])
+    def test_A7_fired_with_no_finding_is_declared_and_holds_nothing(self):
+        self.assertNotIn("human_decision", route_types(self.v))
+        self.assertIn("A7", self.v["summary"]["classes_fired"])
 
     def test_an_undecidable_criterion_becomes_a_manual_check(self):
         check = [r for r in self.v["routes"] if r["type"] == "manual_check"][0]

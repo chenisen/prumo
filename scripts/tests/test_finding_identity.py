@@ -70,7 +70,7 @@ class TestTheWorkflowStampsTheId(unittest.TestCase):
         self.assertIn("reviewer: r.agent", self.source)
 
     def test_the_id_is_stamped_rather_than_passed_through(self):
-        self.assertIn("id: `${tags[i]}-${n + 1}`", self.source)
+        self.assertIn("id: `${tags[i]}-${taken(tags[i]) + n + 1}`", self.source)
 
     def test_colliding_tags_are_disambiguated_instead_of_merged(self):
         """A profile may name a local reviewer whose tag matches one of the method's."""

@@ -16,7 +16,7 @@ suite runs, how a red is named — all of it comes from the profile.
 | **Premises the surveyor measures** | the guard exists at `file:line`; no test in `test_roots` exercises it; the guard is the only point of control the item claims it is |
 | **What the writer may touch** | the test file only — a new one, or the existing one for that unit. Production code is out of scope for this kind |
 | **Proof** | **mutation by hand**: the writer turns the guard wrong and sees its test red as it works; then the script, once, turns the guarded code wrong at the named line (the operator, the boundary, the returned value), runs the test files the change touched — the whole suite only where the profile cannot run files — requires the new test **red**, and reverts the mutation. Then what the size asks on the branch, green by name |
-| **Done when** | the mutation went red, the revert left the tree clean, no new red by name, the diff is inside `test_roots` and inside the budget |
+| **Done when** | the mutation went red, the revert left the tree clean, no new red by name. A diff outside `test_roots`, or over the budget, is a warning in the report |
 | **Blocked when** | the guard is not where the item says; a test already covers it (the item's premise fails); the mutation survived — the test does not prove the guard |
 
 A mutant has two halves. `test` is what must go red; `stays_green` is what the item says
@@ -37,8 +37,8 @@ the run stops: a coverage delivery without its mutation is a test nobody proved.
 | **Premises the surveyor measures** | where the behaviour lives at `file:line`; what the code answers today; which test file proves it; `proving_tests` — the names the writer must use |
 | **What the writer may touch** | the production files the measurement named, and the test file |
 | **Proof** | **red before green**: the writer sees the test red, then green, as it works; then the script, once, restores the base's version of the production files and runs the changed test files — `red` when every proving test was read red, `partial` when something went red and a name was not read (the report says which), `green` when nothing did; then the writer's files are put back and what the size asks runs on the branch, green by name |
-| **Done when** | red on the base, green on the branch, no new red by name, the diff inside the named files and the budget, the profile's lint green |
-| **Blocked when** | nothing goes red on the base under the new test — it passes without the change; no test was written at all; a line outside the scope; a new red elsewhere |
+| **Done when** | red on the base, green on the branch, no new red by name, the profile's lint green. A diff outside the named files, or over the budget, is a warning in the report |
+| **Blocked when** | nothing goes red on the base under the new test — it passes without the change; no test was written at all; a new red elsewhere |
 
 An `author_fix` route a review opened is this kind: `deliver.py prepare --fix <review
 package>` writes the item from the routes' findings, stays on the review's branch, and
@@ -52,7 +52,7 @@ the review read.
 | **Trigger** | the item names code to reshape — a duplication, a dependency to invert, a module to split — and says the observable behaviour stays |
 | **Premises the surveyor measures** | the files being reshaped at `file:line`; `guarding_tests` — the existing tests, by name, that exercise them today |
 | **What the writer may touch** | the files the measurement named, production and tests alike |
-| **Proof** | **preservation**: every guarding test green on the branch, by name; the baseline by name; the diff inside the named files and the budget; the profile's lint green. No red before green — nothing new is proven, something old is kept |
+| **Proof** | **preservation**: every guarding test green on the branch, by name; the baseline by name; the profile's lint green. No red before green — nothing new is proven, something old is kept |
 | **Done when** | all of the above, and at least one guarding test named |
 | **Blocked when** | no guarding test exists — the behaviour has no proof to preserve, and the guard comes first, as a `coverage-gap`; a guarding test went red; a line outside the named files |
 

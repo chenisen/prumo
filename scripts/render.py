@@ -20,6 +20,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from common import (CLASSES, PRUMO_ROOT, BLOCKING_SEVERITIES, SEVERITY_ORDER, dir_reports, load_profile, forge, tracker, report_dir_name, review_file_names,
                    today, read_json, slug, waiver_in_force)
 from i18n import t
+from judge import basis
 
 VERSION = "2.0"
 DIR_TEMPLATES = PRUMO_ROOT / "templates"
@@ -52,6 +53,15 @@ def class_question(class_id: str) -> str:
     reads lives in the catalogue."""
     return t(f"class_question.{class_id}")
 
+
+# The template's own words — headings and labels — resolved from the catalogue, so a
+# report reads in one language from its first line to its last.
+REPORT_WORDS = ("h_title", "h_holds", "h_qa_short", "h_questions", "h_annex", "annex_note",
+                "h_rule", "h_routes", "h_ledger1", "h_ledger2", "h_ledger3", "h_section_a",
+                "h_section_b", "h_not_assessable", "h_findings", "h_observations",
+                "h_project_pending", "h_qa_full", "h_capabilities", "h_reviewers", "h_verdict",
+                "l_repository", "l_profile", "l_origin", "l_base", "l_commits", "l_size",
+                "l_effort", "l_generated")
 
 # Items a route or a gate can carry that are neither a class, a finding nor a criterion:
 # mechanical facts the judge names in a single word. The keys on the left are DATA,
@@ -256,6 +266,99 @@ def build_report(package: pathlib.Path) -> str:
     # otherwise come out bare, which is the defect this resolver exists to remove.
     meaning = meanings_for(classes, criteria, findings + observations)
     criteria = closed_on_item(criteria, list(resolved.values()))
+    summary = verd.get("summary") or {}
+    round_ = man.get("round") or {"n": 1, "mode": "full"}
+    by_finding = {f["id"]: f for f in findings}
+    by_criterion = {c["id"]: c for c in criteria}
+    held = [i for r in verd["routes"] if r.get("origin", "delivery") == "delivery"
+            for i in r["items"]]
+
+    def where(a):
+        return "; ".join(f"`{e['file']}`:{e.get('line') or '?'}" for e in a["evidence"][:2])
+
+    def basis_phrase(a):
+        """Where the finding's demand comes from, in a sentence a person can check."""
+        kind = basis(a)
+        if kind == "criterion":
+            text = " ".join(str((by_criterion.get(a["criterion"]) or {}).get("text") or a["criterion"]).split())
+            return t("report.basis_criterion", text=escape(text[:160]), **vocabulary())
+        if kind == "rule":
+            return t("report.basis_rule", file=a["rule"]["file"], quote=escape(a["rule"]["quote"][:200]))
+        return t("report.basis_" + kind) if kind in ("defect", "legacy") else ""
+
+    def sec_holds():
+        """The first screen: what holds the approval, each with its address, where the
+        demand comes from and what to do — and nothing else."""
+        lines = []
+        closed = optional("closed_findings.json", [])
+        if closed:
+            lines.append(t("report.closed_this_round", n=len(closed),
+                           claims="; ".join(escape(" ".join(c["claim"].split())[:120]) for c in closed)) + "\n")
+        if not held:
+            return "\n".join(lines + [t("report.nothing_holds")])
+        details = {i: " ".join(r.get("details") or []) or r["closes_when"]
+                   for r in verd["routes"] if r.get("origin", "delivery") == "delivery"
+                   for i in r["items"]}
+        for i in dict.fromkeys(held):
+            if i in by_finding:
+                a = by_finding[i]
+                todo = (t("report.todo_fix", form=escape(a["form"])) if a.get("form")
+                        else t("report.todo_decide") if str(a.get("class") or "").startswith("A")
+                        else t("report.todo_none"))
+                lines.append(t("report.holds_finding", claim=escape(" ".join(a["claim"].split())),
+                               where=where(a), basis=basis_phrase(a), todo=todo, id=i))
+            elif i in by_criterion:
+                c = by_criterion[i]
+                note = c.get("record") or c.get("note")
+                lines.append(t("report.holds_criterion", state=t("report.state_" + c["state"]),
+                               text=escape(c.get("text", i)),
+                               record=f" — {escape(note)}" if note else ""))
+            else:
+                lines.append(t("report.holds_other", what=meaning(i) or f"`{i}`", detail=details[i]))
+        return "\n".join(lines)
+
+    def sec_qa_short():
+        pending = summary.get("qa_pending") or []
+        scripts = optional("scripts_manual.json", [])
+        if not pending:
+            return t("report.qa_short_none")
+        lines = [t("report.qa_short", what=meaning(i) or f"`{i}`") for i in pending]
+        if scripts:
+            lines.append("\n" + t("report.qa_short_scripts", n=len(scripts)))
+        return "\n".join(lines)
+
+    QUESTIONS_SHOWN = 8
+
+    def sec_questions():
+        """What a person may want to act on and nothing obliges: the verifier's doubts
+        first, then what was labelled blocking and is not charged, then the suggestions."""
+        read_down = {x["id"]: x["consequence_kind"] for x in summary.get("findings_severity_read_down", [])}
+        flat = lambda a: escape(" ".join(a["claim"].split())[:220])
+        lines, shown = [], set()
+        for key, ids in (("q_uncertain", summary.get("findings_uncertain") or []),
+                         ("q_without_basis", summary.get("findings_without_basis") or []),
+                         ("q_already_reviewed", summary.get("findings_already_reviewed") or []),
+                         ("q_read_down", list(read_down))):
+            for i in ids:
+                a = by_finding.get(i)
+                if not a or i in shown:
+                    continue
+                shown.add(i)
+                lines.append(t("report." + key, claim=flat(a), where=where(a), id=i,
+                               reason=escape(a.get("verifier_reason") or ""),
+                               kind=t("report.consequence_kind_" + read_down[i]) if i in read_down else ""))
+        rest = [a for a in findings if a["id"] not in shown and a["id"] not in held
+                and a.get("status") != "refuted"]
+        rest.sort(key=lambda a: SEVERITY_ORDER.index(a["severity"]))
+        room = max(0, QUESTIONS_SHOWN - len(lines))
+        lines += [t("report.q_suggestion", claim=flat(a), where=where(a), id=a["id"]) for a in rest[:room]]
+        if len(rest) > room:
+            lines.append("\n" + t("report.q_more", n=len(rest) - room))
+        return "\n".join(lines) or t("report.q_none")
+
+    def round_line():
+        return t("report.round_" + round_.get("mode", "full"), n=round_.get("n") or 1,
+                 since=(round_.get("since") or "")[:12])
 
     def sec_criteria():
         if not criteria:
@@ -316,12 +419,21 @@ def build_report(package: pathlib.Path) -> str:
                 mark += "  " + t("report.finding_resolved_mark")
             if a.get("status") == "refuted":
                 mark += "  " + t("report.finding_refuted_mark")
+            if a.get("carried_from"):
+                mark += "  " + t("report.finding_carried")
+            if a["id"] in summary.get("findings_already_reviewed", []):
+                mark += "  " + t("report.finding_already_reviewed")
+            if a["id"] in summary.get("findings_without_basis", []):
+                mark += "  " + t("report.finding_without_basis")
             parts.append(
                 f"### {a['id']} — `{a['severity']}`{mark}\n\n"
                 f"{escape(a['claim'])}\n\n"
                 f"- {t('report.evidence')}: {ev}\n"
                 f"- {t('report.consequence')}: {escape(a['consequence'])}\n"
                 f"- {t('report.status')}: `{a['status']}`\n"
+                + (f"- {t('report.finding_basis')}: {basis_phrase(a)}\n" if basis_phrase(a) else "")
+                + (f"- {t('report.also_raised_by', who=', '.join(a['also_raised_by']))}\n"
+                   if a.get("also_raised_by") else "")
                 + (f"- {t('report.about_the_record')}\n"
                    if a['id'] in (verd.get('summary') or {}).get('findings_about_the_record', []) else "")
                 + (f"- {t('report.severity_read_down', severity=a['severity'], kind=t('report.consequence_kind_' + rd[a['id']]))}\n"
@@ -413,15 +525,21 @@ def build_report(package: pathlib.Path) -> str:
 
     named_by_findings = verd["summary"].get("classes_named_by_findings") or {}
     template = (DIR_TEMPLATES / "report.md").read_text(encoding="utf-8")
+    words = {k: t("report." + k, **vocabulary()) for k in REPORT_WORDS}
     return template.format(
+        **words,
         repo=man["repo"], item_id=man["item"]["id"] or t("report.unresolved"),
-        profile_status=profile.get("status", "absent"),
-        profile_version=profile.get("version", 0),
-        coverage=verd["summary"].get("classes_assessed", verd["summary"]["profile_coverage"]),
-        anchors=(cap.get("profile") or {}).get("coverage", "?"), origin=man["origin"],
+        profile_line=t("report.profile_line", status=profile.get("status", "absent"),
+                       version=profile.get("version", 0),
+                       coverage=summary.get("classes_assessed", summary["profile_coverage"]),
+                       anchors=(cap.get("profile") or {}).get("coverage", "?")),
+        size_line=t("report.size_line", lines=size["lines"], band=size["band"]),
+        round_line=round_line(), section_holds=sec_holds(),
+        section_qa_short=sec_qa_short(), section_questions=sec_questions(),
+        origin=man["origin"],
         base_ref=man["base"]["ref"], base_sha_short=man["base"]["sha"][:12],
         base_source=man["base"]["source"], sha_initial=man["merge_base"][:12],
-        sha_final=man["head_sha"][:12], lines=size["lines"], band=size["band"],
+        sha_final=man["head_sha"][:12],
         effort_line=effort_line(), date=today(), version=VERSION,
         # The tracker's vocabulary runs through the template: `card`, `issue`, `ticket`.
         # It lives here and not in the template because a report on disk has to say the
@@ -431,7 +549,8 @@ def build_report(package: pathlib.Path) -> str:
         section_gates=sec_gates(), section_routes=sec_routes(),
         section_criteria=sec_criteria(), section_proof=sec_proof(),
         section_conventions=sec_conventions(),
-        section_a=class_list(classes, "A", "fired") + "\n\n" + t("report.did_not_fire")
+        section_a=t("report.section_a_note") + "\n\n" + class_list(classes, "A", "fired")
+                  + "\n\n" + t("report.did_not_fire")
                   + "\n\n" + class_list(classes, "A", "did_not_fire", named_by_findings),
         section_b=class_list(classes, "B", "fired") + "\n\n" + t("report.did_not_fire")
                   + "\n\n" + class_list(classes, "B", "did_not_fire", named_by_findings),

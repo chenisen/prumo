@@ -76,8 +76,15 @@ class TestProfileStates(unittest.TestCase):
 
 
 class TestClasses(unittest.TestCase):
-    def test_fired_A_becomes_a_human_decision(self):
+    def test_fired_A_is_a_question_for_the_reviewer_and_holds_nothing(self):
         v = judge(cl=classes(A3="fired"))
+        self.assertEqual(v["verdict"], APPROVED)
+        self.assertEqual(v["summary"]["classes_fired"], ["A3"])
+
+    def test_an_A_class_a_tool_measured_is_a_human_decision(self):
+        cl = classes(A9="fired")
+        next(c for c in cl if c["id"] == "A9")["cause"] = "check_red"
+        v = judge(cl=cl)
         self.assertEqual(v["verdict"], INTERVENTION)
         self.assertIn("human_decision", route_types(v))
 
@@ -146,9 +153,19 @@ class TestFindings(unittest.TestCase):
         v = judge(findings=[self.finding(**{"class": "A8"}),
                             self.finding(id="X-2", status="refuted", **{"class": "A3"})])
         self.assertEqual(v["summary"]["classes_named_by_findings"], {"A8": ["X-1"]})
-        # named is not fired: the reviewer's label opens no human decision
         self.assertNotIn("A8", v["summary"]["classes_fired"])
-        self.assertTrue(v["gates"][1]["passed"])
+
+    def test_a_confirmed_finding_on_an_A_class_is_the_human_decision(self):
+        v = judge(findings=[self.finding(**{"class": "A8"})])
+        decision = [r for r in v["routes"] if r["type"] == "human_decision"]
+        self.assertEqual(decision[0]["items"], ["X-1"])
+        self.assertFalse(v["gates"][1]["passed"])
+        self.assertTrue(v["gates"][0]["passed"])
+
+    def test_a_decision_recorded_on_the_class_closes_its_findings(self):
+        v = judge(findings=[self.finding(**{"class": "A8"})],
+                  resolutions=[{"type": "decision", "item": "A8", "text": "ok", "decided_by": "p"}])
+        self.assertEqual(v["verdict"], APPROVED)
 
     def test_the_summary_names_what_this_review_assessed_apart_from_the_profile_s_anchors(self):
         self.assertEqual(judge()["summary"]["classes_assessed"], "18/18")
@@ -157,10 +174,37 @@ class TestFindings(unittest.TestCase):
         self.assertEqual(
             judge(findings=[self.finding(status="refuted")])["verdict"], APPROVED)
 
-    def test_an_uncertain_finding_goes_to_a_person_not_to_the_author(self):
+    def test_an_uncertain_finding_is_a_question_and_closes_no_gate(self):
         v = judge(findings=[self.finding(status="uncertain")])
-        self.assertIn("confirm_finding", route_types(v))
-        self.assertNotIn("author_fix", route_types(v))
+        self.assertEqual(v["verdict"], APPROVED)
+        self.assertEqual(v["summary"]["findings_uncertain"], ["X-1"])
+
+    def test_a_blocking_label_with_no_stated_basis_is_shown_and_holds_nothing(self):
+        v = judge(findings=[self.finding(rule=None, consequence_kind="proof")])
+        self.assertEqual(v["verdict"], APPROVED)
+        self.assertEqual(v["summary"]["findings_without_basis"], ["X-1"])
+
+    def test_a_criterion_a_verified_rule_or_a_confirmed_defect_is_a_basis(self):
+        for kw in ({"rule": None, "criterion": "AC-1"},
+                   {"rule": {"file": "CLAUDE.md", "quote": "never log a document", "verified": True}},
+                   {"rule": None, "consequence_kind": "behaviour"}):
+            with self.subTest(**kw):
+                self.assertEqual(judge(findings=[self.finding(**kw)])["verdict"], INTERVENTION)
+
+    def test_a_rule_whose_quote_was_not_found_is_no_basis(self):
+        v = judge(findings=[self.finding(
+            rule={"file": "CLAUDE.md", "quote": "tests must pin every argument", "verified": False})])
+        self.assertEqual(v["verdict"], APPROVED)
+
+    def test_a_proof_that_could_pin_more_is_charged_as_a_nit(self):
+        v = judge(findings=[self.finding(criterion="AC-1", consequence_kind="proof_extra")])
+        self.assertEqual(v["verdict"], APPROVED)
+        self.assertEqual(v["summary"]["findings_severity_read_down"][0]["consequence_kind"], "proof_extra")
+
+    def test_a_finding_on_code_an_earlier_round_already_read_holds_nothing(self):
+        v = judge(findings=[self.finding(already_reviewed=True)])
+        self.assertEqual(v["verdict"], APPROVED)
+        self.assertEqual(v["summary"]["findings_already_reviewed"], ["X-1"])
 
     def test_a_blocking_finding_whose_evidence_names_only_package_files_closes_no_gate(self):
         """Raised `required` from the record's prose, evidence `delivery-record.json`:
@@ -328,10 +372,10 @@ class TestPurity(unittest.TestCase):
     def test_every_route_has_an_owner_and_a_closing_event(self):
         v = judge(profile=PROFILE_DRAFT,
                   cl=classes(A3="fired", B4="fired", B1="not_assessable"),
-                  findings=[{"id": "X", "severity": "critical", "status": "uncertain"}],
+                  findings=[{"id": "X", "severity": "critical", "status": "confirmed", "class": "A3"}],
                   criteria=[{"id": "C1", "state": "not_met"}],
                   evidence={"suite": "not_run"})
-        self.assertEqual(len(v["routes"]), 7)
+        self.assertEqual(len(v["routes"]), 6)
         for r in v["routes"]:
             self.assertTrue(r["owner"] and r["closes_when"], r)
             self.assertIn(r["origin"], ("delivery", "project", "qa"), r)
@@ -396,10 +440,11 @@ class TestTheRule(unittest.TestCase):
         self.assertEqual(self.gate(v, 1)["items"], ["X"])
         self.assertTrue(self.gate(v, 3)["passed"])
 
-    def test_a_section_A_class_closes_the_business_rules_gate(self):
-        v = judge(cl=classes(A3="fired"))
+    def test_a_finding_on_a_section_A_class_closes_the_business_rules_gate(self):
+        v = judge(cl=classes(A3="fired"),
+                  findings=[{"id": "X", "severity": "required", "status": "confirmed", "class": "A3"}])
         self.assertFalse(self.gate(v, 2)["passed"])
-        self.assertEqual(self.gate(v, 2)["items"], ["A3"])
+        self.assertEqual(self.gate(v, 2)["items"], ["X"])
 
     def test_an_unmet_criterion_closes_the_item_gate(self):
         """Same route as the finding (`author_fix`), different gate: the item, not the
@@ -482,7 +527,7 @@ class TestTheRule(unittest.TestCase):
 
     def test_a_closed_gate_is_always_intervention(self):
         for kw in ({"findings": [{"id": "X", "severity": "critical", "status": "confirmed"}]},
-                   {"cl": classes(A3="fired")},
+                   {"findings": [{"id": "X", "severity": "required", "status": "confirmed", "class": "A3"}]},
                    {"criteria": [{"id": "C1", "state": "not_met"}]},
                    {"cl": classes(B4="fired"), "qa_scripts": 0}):
             with self.subTest(**kw):
@@ -650,9 +695,10 @@ class TestAFindingBeyondTheItem(unittest.TestCase):
         self.assertEqual(v["verdict"], INTERVENTION)
         self.assertEqual(len(self.detail_of(v, "author_fix")), 1)
 
-    def test_an_uncertain_one_carries_it_to_the_person(self):
+    def test_an_uncertain_one_holds_nothing_and_is_named(self):
         v = judge(findings=[self.finding(status="uncertain")])
-        self.assertEqual(len(self.detail_of(v, "confirm_finding")), 1)
+        self.assertEqual(v["verdict"], APPROVED)
+        self.assertEqual(v["summary"]["findings_uncertain"], ["COR-1"])
 
     def test_a_finding_on_the_item_s_own_path_carries_nothing(self):
         v = judge(findings=[self.finding(beyond_item=False)])

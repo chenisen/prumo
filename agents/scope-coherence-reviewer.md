@@ -68,6 +68,19 @@ criterion of the item is not met, or not proven, put that criterion's id in the
 finding's `criterion`, verbatim from the list you were given. The judge then charges
 it where the item is charged, not as a breach of the project's standards.
 
+**A blocking finding says where its demand comes from.** `required` and `critical` are
+for one of three things: a criterion of the item broken — name it in `criterion`; a rule
+the project wrote down — quote it in `rule`, with the file, verbatim (the harness looks
+the quote up, and a quote it does not find is no rule); or a defect — this code doing the
+wrong thing on a real path, with the input and the wrong result stated. A demand with none
+of the three is a `nit` at most. Never charge what the item did not ask for and nobody
+wrote down.
+
+**A class the triage fired is a question, not a finding.** The triage matched a path or a
+pattern, nothing more. Raise a finding with that `class` only when, on that surface, the
+change does something the item did not ask for, or settles what only a person can settle.
+What the item itself asks for is a decision already taken: raise nothing.
+
 **You review what THIS change did, not the repository.** A defect that already existed
 and that the change did not touch is **not your finding** — do not raise it as though it
 were the author's work. If your reading surfaced it and losing it would be a waste,

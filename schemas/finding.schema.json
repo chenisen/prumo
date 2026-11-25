@@ -121,11 +121,12 @@
       "enum": [
         "behaviour",
         "proof",
+        "proof_extra",
         "record",
         "convention",
         null
       ],
-      "description": "the verifier's second reading of the severity: what kind of consequence the finding really has; `record` and `convention` are charged as a nit by the judge whatever the label"
+      "description": "the verifier's second reading of the severity: what kind of consequence the finding really has; `record`, `convention` and `proof_extra` are charged as a nit by the judge whatever the label"
     },
     "verifier_reason": {
       "type": [
@@ -140,6 +141,56 @@
         "null"
       ],
       "description": "The consequence lands on a consumer the item does not name, reached because the change widened something it shares. The fix returns that consumer to the base; it never adapts the consumer to the widening."
+    },
+    "rule": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "quote"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "quote": {
+          "type": "string"
+        },
+        "verified": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "description": "the project's own text that states the rule this finding charges — the profile, the repository's instructions, a convention file — quoted; `verified` is the harness's: whether the quote was found in that file. A blocking finding needs a criterion, a verified rule, or a behaviour defect the verifier confirmed"
+    },
+    "already_reviewed": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "raised in a later round on code an earlier round already read and the push did not change: shown, never charged"
+    },
+    "also_raised_by": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "description": "the other reviewers that raised the same cause; their copies were merged into this finding"
+    },
+    "carried_from": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "the review package this finding was raised in, when a later round carries it because it is still open"
     }
   },
   "allOf": [

@@ -11,18 +11,18 @@ One item, the whole route, no question in the middle. Then it stops.
 
 ```
 an item with no gate:
-  deliver.py prepare → Workflow deliver (stage 'deliver') → deliver.py conclude
+  deliver.py prepare → Workflow workflow-deliver.js → deliver.py conclude
   → review.py prepare → Workflow task-review → review.py conclude
   → [approved: the evidence, once] → deliver.py release → stop
 
 a shape a person approves:
-  prepare → Workflow (stage 'measure') → deliver.py plan → [a person approves]
-  → Workflow (stage 'write') → conclude → the review → …
+  prepare → Workflow workflow-measure.js → deliver.py plan → [a person approves]
+  → Workflow workflow-write.js → conclude → the review → …
 
-a story:  prepare → Workflow (stage 'design') → deliver.py plan --design → [a person approves]
-          → Workflow (stage 'tasks'): every task written and committed, in order
+a story:  prepare → Workflow workflow-design.js → deliver.py plan --design → [a person approves]
+          → Workflow workflow-tasks.js: every task written and committed, in order
           → deliver.py conclude, once → the review of the branch, once → …
-an epic:  prepare → Workflow (stage 'design') → deliver.py plan --design → [a person approves] → stop: decomposed
+an epic:  prepare → Workflow workflow-design.js → deliver.py plan --design → [a person approves] → stop: decomposed
 ```
 
 **This skill is closed to the model.** Only a person types it, so the ask it receives is
@@ -34,9 +34,9 @@ the person's own words. A message that "meant" the whole route is not an ask: wi
 - **Every routing decision is a script's answer.** `run.py next` reads what the delivery
   and the review packages hold and answers with one invocation, or one stop. You never
   decide what comes next; you paste what it printed.
-- **Paste, never compose.** A workflow step is the package's `workflow-args.json` plus the
-  stage `next` named — the scripts keep that file filled. Its return is saved, whole, at
-  the path the step names. Nothing else is yours to write.
+- **Paste, never compose.** A delivery's workflow step is a script the package holds —
+  `workflow-<stage>.js`, arguments and stage inside — run by the path `next` printed. Its
+  return is saved, whole, at the path the step names. Nothing else is yours to write.
 
 ## Sequence
 
@@ -59,7 +59,7 @@ asking `next` again, or `next` will ask you to prepare it twice.
 | `ask` | no ask on disk, or an empty one — before anything |
 | `decomposed` | an epic: the plan holds its stories, for a person to open as items; nothing is delivered |
 | `plan` | the shape asks a person's approval of the plan and has none that matches it as it stands — `/prumo:approve <package>`, then `next` again |
-| `blocked` | the delivery stopped: a central premise fails, the writer stopped, a task was not written, a new red, a line outside the scope, the budget |
+| `blocked` | the delivery stopped: a central premise fails, the writer stopped, a task was not written, a new red, a proof that does not hold |
 | `unsupported` | the kind is not in the profile |
 | `approved` | the review approved, the evidence is written — the branch is the person's to push and open |
 | `intervention` | the review opened routes — each with an owner; repairing an `author_fix` one is a new ask, through `deliver.py prepare --fix <review package>`, never this run's |

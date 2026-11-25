@@ -33,10 +33,9 @@ still rendered and still read: it is what the review's scope reads against.
 
 **The budget is the profile's, scaled by the shape — when the profile declares one.** A
 hotfix buys half of what the profile allows; a refactor twice; a story three times, over
-all its tasks. It is optional and never defaulted: a profile with no `delivery.budget`
-stops no delivery for its size, and the plan says so. It is read as the profile stands
-when `conclude` runs, so a person who raises or removes it concludes the same package
-again and is heard.
+all its tasks. It is optional and never defaulted, and it stops nothing: it is the size
+the agents aim for, and a delivery over it is declared in the report as a warning. It is
+read as the profile stands when `conclude` runs.
 
 ## The size
 

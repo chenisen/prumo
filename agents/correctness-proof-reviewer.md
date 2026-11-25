@@ -105,19 +105,24 @@ holds, name the state the crash between them leaves behind and which process rec
 
 ### Proof
 
+**The bar — the same one the delivery's own sceptic reads by:** a criterion is proven when
+at least one test fails if the behaviour the criterion states is removed. That is all a
+`required` finding may ask of a test.
+
 For **every** behaviour the change introduces or alters, ask: **which test goes red if I
 revert this line?**
 
-- A test that exercises the path but does not **assert** the property is weak proof:
-  name it.
-- A test whose two ends use the same constant discriminates no value at all — a
-  hard-coded value would pass just as well. This is the most common and most expensive
-  failure mode.
-- A guard proven only by accident — the test would pass just the same without it — is a
-  `required` finding.
-- A match proven only on values picked to match discriminates nothing either: every
-  identifier equal on both sides, no empty value where the column admits one. Read what
-  the column admits — its schema, its writers — and name the row the test never seeds.
+- No test goes red when the behaviour a criterion states is removed — the path is never
+  exercised, the property never asserted, both ends of the assertion come from the same
+  constant, a fake answers for the guard — is a `required` finding, with the criterion
+  named.
+- A test that could pin more — an argument of a call, the value of a constant, a timeout,
+  one more branch of a path already proven — is a `nit`, unless the criterion states that
+  detail in its own words.
+- A mutant the delivery's digest shows killed is proven. Never ask for it again.
+- A match proven only on values picked to match discriminates nothing: every identifier
+  equal on both sides, no empty value where the column admits one. Read what the column
+  admits — its schema, its writers — and name the row the test never seeds.
 - A test removed or weakened is a **human decision**: do not propose the fix.
 
 When the property cannot be proven by any finite test, say so and describe what a person
@@ -159,6 +164,19 @@ apply to this slice.
 criterion of the item is not met, or not proven, put that criterion's id in the
 finding's `criterion`, verbatim from the list you were given. The judge then charges
 it where the item is charged, not as a breach of the project's standards.
+
+**A blocking finding says where its demand comes from.** `required` and `critical` are
+for one of three things: a criterion of the item broken — name it in `criterion`; a rule
+the project wrote down — quote it in `rule`, with the file, verbatim (the harness looks
+the quote up, and a quote it does not find is no rule); or a defect — this code doing the
+wrong thing on a real path, with the input and the wrong result stated. A demand with none
+of the three is a `nit` at most. Never charge what the item did not ask for and nobody
+wrote down.
+
+**A class the triage fired is a question, not a finding.** The triage matched a path or a
+pattern, nothing more. Raise a finding with that `class` only when, on that surface, the
+change does something the item did not ask for, or settles what only a person can settle.
+What the item itself asks for is a decision already taken: raise nothing.
 
 **You review what THIS change did, not the repository.** A defect that already existed
 and that the change did not touch is **not your finding** — do not raise it as though it

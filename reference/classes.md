@@ -10,7 +10,7 @@ report:
 
 | State | Means | In the judge |
 |---|---|---|
-| `fired` | the anchor matched what the change touches | human decision route (§A) or manual check (§B) |
+| `fired` | the anchor matched what the change touches | §A: a question for the reviewer of that ground — it holds only through a confirmed finding that carries the class, or when a tool measured it. §B: a manual check, QA's, after the approval |
 | `did_not_fire` | the anchor exists and did not match | nothing — but it is **named** in the report |
 | `not_assessable` | there is no anchor, or the capability to measure it is missing | `missing_capability` route, until someone records `not_applicable` or waives it |
 
@@ -18,6 +18,13 @@ Silence never counts as absence of risk. It is the difference between "there is 
 here" and "nobody looked", and a report that does not separate the two lies.
 
 ## §A — human decision
+
+A §A class that fires is a QUESTION, not a verdict: the anchor matched a path, and whether
+the change went beyond what the item asked is a reading. The reviewer of that ground
+answers it, and raises a finding with the class only when the change does, on that
+surface, what the item did not ask for. What the item itself asks for is a decision
+already taken. The one class that holds on its own is the one a tool measured: `A9`, when
+the secrets scan comes back red.
 
 No §A finding proposes a fix. How to resolve it is a person's call; the harness states
 the question and the doors available. The finding schema **refuses** a non-null `form`

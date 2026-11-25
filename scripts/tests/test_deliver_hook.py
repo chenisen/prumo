@@ -1,7 +1,7 @@
 """The guard while deliveries run: rule 6, held by the hook and not by the prompt.
 
 One marker per delivery in `.claude/.prumo-deliver-ativo.d/` — the worktree the writer
-may touch, its branch and the files the measurement named. A write or a git command is
+works in, its branch and its package. A write or a git command is
 judged by the delivery whose worktree it lands in, and by nobody outside every worktree:
 several agents deliver several items in one repository at once, and the guard must not
 take one delivery's rules for the whole workspace.
@@ -37,19 +37,28 @@ class DeliveryGuard(unittest.TestCase):
         self.markers = self.project / ".claude" / ".prumo-deliver-ativo.d"
         self.markers.mkdir(parents=True)
         self.repo = self.project / "repo"
-        self.worktree = self.deliver("item-1", self.repo / ".worktrees" / "item-1", ["tests/test_a.py"])
+        self.worktree = self.deliver("item-1", self.repo / ".worktrees" / "item-1")
 
     def tearDown(self):
         os.environ.clear()
         os.environ.update(self.env)
         self.tmp.cleanup()
 
-    def deliver(self, branch, worktree, allowed, package=None):
+    def deliver(self, branch, worktree, package=None):
         worktree.mkdir(parents=True, exist_ok=True)
         (self.markers / f"{branch}.json").write_text(json.dumps({
-            "worktree": str(worktree), "branch": branch, "allowed": allowed,
+            "worktree": str(worktree), "branch": branch,
             "package": str(package) if package else None}), encoding="utf-8")
         return worktree
+
+    def gated(self, name, approved=False):
+        """A package whose plan asks a person's approval."""
+        package = self.project / name
+        package.mkdir()
+        (package / "plan.json").write_text(json.dumps({"gate": True, "digest": "d1"}), encoding="utf-8")
+        if approved:
+            (package / "approval.json").write_text(json.dumps({"by": "x", "digest": "d1"}), encoding="utf-8")
+        return package
 
     def bash(self, command):
         return run_hook(self.project, "Bash", command=command)
@@ -79,45 +88,27 @@ class DeliveryGuard(unittest.TestCase):
     def test_moving_the_item_is_blocked(self):
         self.assertEqual(run_hook(self.project, "mcp__tracker__move_card_batch"), 2)
 
-    def test_a_write_inside_the_worktree_but_outside_the_named_files_is_blocked(self):
-        self.assertEqual(self.write(self.worktree / "src" / "a.py"), 2)
-
-    def test_before_the_measurement_names_a_file_no_write_passes(self):
-        """The marker is on from `prepare`; the files come with `measure.json`. In
-        between, the surveyor reads and nobody writes."""
-        self.deliver("item-1", self.worktree, [], package=self.project / "no-such-pkg")
-        self.assertEqual(self.write(self.worktree / "tests" / "test_a.py"), 2)
-
-    def test_before_a_measurement_the_writer_is_held_to_the_roots_its_kind_may_touch(self):
-        """An item with no gate is measured and written in ONE workflow call: no
-        measure.json sits on disk when the writer starts. The marker names the roots,
-        and `conclude` holds the diff to the scope afterwards."""
-        (self.markers / "item-1.json").write_text(json.dumps({
-            "worktree": str(self.worktree), "branch": "item-1", "allowed": [],
-            "roots": ["src", "tests", "docs/guide.md"], "package": str(self.project / "no-such-pkg")}), encoding="utf-8")
-        self.assertEqual(self.write(self.worktree / "tests" / "test_a.py"), 0)
-        self.assertEqual(self.write(self.worktree / "src" / "deep" / "a.py"), 0)
-        self.assertEqual(self.write(self.worktree / "docs" / "guide.md"), 0)
-        self.assertEqual(self.write(self.worktree / "docs" / "other.md"), 2)
-        self.assertEqual(self.write(self.worktree / "build.cfg"), 2)
-
-    def test_the_roots_do_not_open_a_gate_nobody_approved(self):
+    def test_a_write_inside_the_worktree_is_not_refused_for_where_it_lands(self):
+        """Outside the roots the profile declares, or a file no measurement named: the
+        writer is not stopped, and `conclude` declares it in the report."""
         package = self.project / "pkg"
         package.mkdir()
-        (package / "plan.json").write_text(json.dumps({"gate": True, "digest": "d1"}), encoding="utf-8")
-        (self.markers / "item-1.json").write_text(json.dumps({
-            "worktree": str(self.worktree), "branch": "item-1", "allowed": [],
-            "roots": ["src", "tests"], "package": str(package)}), encoding="utf-8")
-        self.assertEqual(self.write(self.worktree / "src" / "a.py"), 2)
-        (package / "approval.json").write_text(json.dumps({"by": "x", "digest": "d1"}), encoding="utf-8")
-        self.assertEqual(self.write(self.worktree / "src" / "a.py"), 0, "an approved story writes from its design")
+        (package / "measure.json").write_text(json.dumps({"files": ["tests/test_b.py"]}), encoding="utf-8")
+        self.deliver("item-1", self.worktree, package=package)
+        for path in ("tests/test_b.py", "tests/test_c.py", "src/deep/a.py", "config/app.cfg", "build.cfg"):
+            with self.subTest(path=path):
+                self.assertEqual(self.write(self.worktree / path), 0)
+
+    def test_a_write_before_any_measurement_is_on_disk_passes(self):
+        self.deliver("item-1", self.worktree, package=self.project / "no-such-pkg")
+        self.assertEqual(self.write(self.worktree / "tests" / "test_a.py"), 0)
 
     def test_a_plan_that_asks_a_gate_admits_no_write_until_the_approval_matches(self):
         package = self.project / "pkg"
         package.mkdir()
         (package / "measure.json").write_text(json.dumps({"files": ["tests/test_b.py"]}), encoding="utf-8")
         (package / "plan.json").write_text(json.dumps({"gate": True, "digest": "d1"}), encoding="utf-8")
-        self.deliver("item-1", self.worktree, [], package=package)
+        self.deliver("item-1", self.worktree, package=package)
         target = self.worktree / "tests" / "test_b.py"
         self.assertEqual(self.write(target), 2)
         (package / "approval.json").write_text(json.dumps({"by": "x", "digest": "old"}), encoding="utf-8")
@@ -125,20 +116,9 @@ class DeliveryGuard(unittest.TestCase):
         (package / "approval.json").write_text(json.dumps({"by": "x", "digest": "d1"}), encoding="utf-8")
         self.assertEqual(self.write(target), 0)
 
-    def test_the_named_files_are_read_from_the_package_s_measure(self):
-        package = self.project / "pkg"
-        package.mkdir()
-        (package / "measure.json").write_text(json.dumps({"files": ["tests/test_b.py"]}), encoding="utf-8")
-        self.deliver("item-1", self.worktree, [], package=package)
-        self.assertEqual(self.write(self.worktree / "tests" / "test_b.py"), 0)
-        self.assertEqual(self.write(self.worktree / "tests" / "test_c.py"), 2)
-
     def test_a_commit_with_a_pathspec_and_adding_a_named_path_pass(self):
         self.assertEqual(self.bash(f"git -C {self.worktree} commit -m 'ITEM-1 - prove' -- tests/test_a.py"), 0)
         self.assertEqual(self.bash(f"git -C {self.worktree} add tests/test_a.py"), 0)
-
-    def test_a_write_inside_the_named_files_passes(self):
-        self.assertEqual(self.write(self.worktree / "tests" / "test_a.py"), 0)
 
     # ---- outside every delivery's worktree nothing of this applies
     def test_outside_the_worktree_writes_and_git_pass(self):
@@ -153,16 +133,13 @@ class DeliveryGuard(unittest.TestCase):
                 self.assertEqual(self.bash(f"git -C {self.repo} {cmd}"), 0)
 
     def test_two_deliveries_in_one_repository_judge_each_its_own_worktree(self):
-        other = self.deliver("item-2", self.repo / ".worktrees" / "item-2", ["src/b.py"])
-        self.assertEqual(self.write(other / "src" / "b.py"), 0)
-        self.assertEqual(self.write(self.worktree / "tests" / "test_a.py"), 0)
-        self.assertEqual(self.write(self.worktree / "src" / "b.py"), 2, "item-2's file is not item-1's")
-        self.assertEqual(self.write(other / "tests" / "test_a.py"), 2, "item-1's file is not item-2's")
+        other = self.deliver("item-2", self.repo / ".worktrees" / "item-2", package=self.gated("pkg-2"))
+        self.assertEqual(self.write(other / "src" / "b.py"), 2, "item-2's plan waits for a person")
+        self.assertEqual(self.write(self.worktree / "src" / "b.py"), 0, "item-2's gate is not item-1's")
 
     def test_a_delivery_made_in_place_holds_the_checkout_but_not_another_s_worktree(self):
-        self.deliver("item-3", self.repo, ["src/c.py"])
-        self.assertEqual(self.write(self.repo / "src" / "c.py"), 0)
-        self.assertEqual(self.write(self.repo / "src" / "d.py"), 2)
+        self.deliver("item-3", self.repo, package=self.gated("pkg-3"))
+        self.assertEqual(self.write(self.repo / "src" / "c.py"), 2, "the checkout is item-3's, and its plan waits")
         self.assertEqual(self.write(self.worktree / "tests" / "test_a.py"), 0, "the worktree is item-1's")
 
     def test_a_stale_marker_judges_nothing(self):

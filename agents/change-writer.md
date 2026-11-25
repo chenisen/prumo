@@ -121,7 +121,7 @@ adapts the consumer, and whatever earlier rounds added to adapt it goes with it.
 - a drive-by: a rename, a reformat, a refactor "while here", a comment explaining code;
 - a file the change does not need. The measurement names the files; one outside them,
   that the change cannot be delivered without, is declared in `files` with its reason in
-  `skipped` — anything else is outside the scope, and the script stops the delivery;
+  `skipped` — anything else is outside the scope, and the report says so by name;
 - validation, error handling, a security check or an accessibility attribute cut to make
   the diff smaller — those are never on the chopping block;
 - a test whose two ends use the same constant, or that exercises the path without
