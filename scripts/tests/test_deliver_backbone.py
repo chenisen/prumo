@@ -1429,3 +1429,183 @@ class DecisionsOnRelatedItemsTravel(Fixture):
                   / "workflows" / "deliver.js").read_text(encoding="utf-8")
         self.assertIn("embed('related.md'", source)
         self.assertIn("never ask it again", source)
+
+
+FIXED = {"files": ["src/a.py", "tests/test_guard.py"], "skipped": [], "reused": [], "blocked": None,
+         "tests_run": {"command": "python3 run_files.py tests/test_guard.py", "red_first": True, "green": True},
+         "commit_message": "refuse ten at the guard", "commit": None, "lines_changed": 9}
+INCIDENT = {"symptom": "ten is accepted in production",
+            "root_cause": {"what": "the guard compares with > where the rule is >=", "where": "src/a.py:2",
+                           "introduced_by": None},
+            "fix": "compare with >= at the guard", "verify": ["accept(10) answers False"],
+            "follow_ups": [{"what": "the limit is a literal", "where": "src/a.py:2"}]}
+RESOLVES = {"verdict": "resolves", "reason": "ten no longer passes the comparison", "cause_read": "src/a.py:2",
+            "evidence": [], "follow_ups": [{"what": "no test at eleven", "where": None}]}
+
+
+def incident_result(reading=RESOLVES, incident=INCIDENT, written=FIXED):
+    measure = {"premises": [], "files": written["files"], "mutations": [], "checked": [],
+               "proving_tests": ["test_guard_refuses"], "related_tests": ["tests/test_a.py"]}
+    return {"stage": "incident", "measure": measure, "written": written, "refutation": None,
+            "incident": incident, "reading": reading}
+
+
+class AnIncidentGoesStraightToItsCause(Fixture):
+    """Production is failing. The first incident delivered by the method went as a hotfix
+    (2026-11-26) and waited at a plan, at a whole suite that did not load on the base and
+    at three review rounds. An incident is diagnosed, fixed and read in one workflow
+    call, checked by the tests it touched, and stops once: for the person who ships it."""
+
+    def setUp(self):
+        super().setUp()
+        (self.repo / "run_files.py").write_text(RUN_FILES, encoding="utf-8")
+        (self.repo / "src" / "a.py").write_text(BUGGY, encoding="utf-8")
+        git(self.repo, "add", "-A"); git(self.repo, "commit", "-q", "-m", "buggy base")
+        self.profile_with(suite__files_command="python3 run_files.py {tests}")
+
+    def fix(self, package, test_text=PROVING_TEST, source=SOURCE):
+        tree = self.tree_of(package)
+        (tree / "tests" / "test_guard.py").write_text(test_text, encoding="utf-8")
+        (tree / "src" / "a.py").write_text(source, encoding="utf-8")
+
+    def test_prepare_cuts_it_where_production_runs_and_hands_one_stage_with_no_gate(self):
+        out = io.StringIO()
+        args = argparse.Namespace(repo="repo-x", item="ITEM-1", item_file=str(self.root / "item.md"),
+                                  kind=None, branch=None, package=str(self.root / "pkg"), fix=None,
+                                  shape="incident", type=None)
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(deliver.prepare(args), 0)
+        package = self.root / "pkg"
+        man = json.loads((package / "deliver-manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual((man["shape"], man["gate"], man["plan_depth"], man["base"]["name"], man["item"]["kind"]),
+                         ("incident", False, "root-cause", "main", "behaviour-change"))
+        self.assertIn(f"Workflow({{scriptPath: '{package}/workflow-incident.js'}})", out.getvalue())
+        self.assertNotIn("deliver.py plan", out.getvalue(), "nothing waits for a person before the write")
+        self.assertIn('"stage": "incident"', (package / "workflow-incident.js").read_text(encoding="utf-8"))
+        self.assertFalse((package / "workflow-measure.js").exists())
+
+    def test_a_profile_that_names_no_production_branch_is_a_stop(self):
+        self.profile_with(delivery__hotfix_base=None)
+        args = argparse.Namespace(repo="repo-x", item="ITEM-1", item_file=str(self.root / "item.md"),
+                                  kind=None, branch=None, package=str(self.root / "pkg"), fix=None,
+                                  shape="incident", type=None)
+        with self.assertRaises(common.UsageError) as stop:
+            with contextlib.redirect_stdout(io.StringIO()):
+                deliver.prepare(args)
+        self.assertEqual(str(stop.exception), t("deliver.cli.hotfix_base_missing", shape="incident"))
+
+    def test_it_is_delivered_by_the_tests_it_touched_with_its_cause_on_top(self):
+        package = self.prepare(shape="incident")
+        self.fix(package)
+        code, rec = self.conclude_result(package, incident_result())
+        self.assertEqual((code, rec["state"], rec["baseline"]["scope"]), (0, "delivered", "focused"), rec)
+        self.assertEqual(rec["proof"]["red_on_base"]["result"], "red", "the incident is reproduced on the base")
+        self.assertEqual(rec["incident"]["root_cause"]["where"], "src/a.py:2")
+        self.assertEqual([f["by"] for f in rec["incident"]["follow_ups"]], ["fixer", "reader"])
+        self.assertFalse((package / "run-suite-branch.txt").exists(), "the whole suite never ran")
+        self.assertIn("Ran 2 of 2", (package / "run-suite-branch-focused.txt").read_text(encoding="utf-8"),
+                      "the changed test file and the related one the fixer named")
+        self.assertIn(t("deliver.warning.whole_suite_not_run"), rec["warnings"])
+        self.assertEqual(rec["plan"], {"shape": "incident", "depth": "root-cause", "gate": False,
+                                       "approved_by": None, "budget": {"max_files": 1, "max_lines": 30}})
+        log = subprocess.run(("git", "log", "-1", "--format=%s"), cwd=self.tree_of(package),
+                             capture_output=True, text=True).stdout.strip()
+        self.assertEqual(log, "ITEM-1 - refuse ten at the guard")
+
+    def test_the_report_opens_with_symptom_cause_fix_and_reading_and_ends_at_the_push(self):
+        package = self.prepare(shape="incident")
+        self.fix(package)
+        self.conclude_result(package, incident_result())
+        report = (package / "report.md").read_text(encoding="utf-8")
+        top = report.split(t("deliver.report.proof"), 1)[0]
+        for label in ("symptom", "cause", "fix", "reading"):
+            self.assertIn(t(f"deliver.report.{label}"), top, label)
+        self.assertIn("the guard compares with > where the rule is >= — src/a.py:2", top)
+        self.assertIn("resolves — ten no longer passes the comparison", top)
+        self.assertNotIn(t("deliver.report.premises"), report, "an incident has a cause, not premises")
+        self.assertNotIn(t("deliver.report.sceptic"), report, "the reader stands where the sceptic would")
+        self.assertIn("  accept(10) answers False", report)
+        self.assertIn("  the limit is a literal — src/a.py:2 (fixer)", report)
+        self.assertIn("  no test at eleven (reader)", report)
+        self.assertIn("ITEM-1-prove-the-refusal-above-ten", report.rsplit(t("deliver.report.next"), 1)[1])
+
+    def test_a_large_fix_is_still_checked_by_its_tests_and_only_warned_about_its_size(self):
+        self.profile_with(delivery__small={"max_files": 1, "max_lines": 1},
+                          suite__files_command="python3 run_files.py {tests}")
+        package = self.prepare(shape="incident")
+        self.fix(package)
+        code, rec = self.conclude_result(package, incident_result())
+        self.assertEqual((rec["state"], rec["size"]["size"], rec["baseline"]["scope"]),
+                         ("delivered", "standard", "focused"), rec)
+
+    def test_a_symptom_that_survives_blocks_nothing_is_committed_and_the_fixer_is_handed_the_reason(self):
+        package = self.prepare(shape="incident")
+        self.fix(package)
+        head = self.tree_of(package)
+        before = subprocess.run(("git", "rev-parse", "HEAD"), cwd=head, capture_output=True, text=True).stdout
+        reading = {"verdict": "does_not_resolve", "reason": "a second entry accepts ten", "cause_read": None,
+                   "evidence": [{"file": "src/a.py", "line": 4, "excerpt": "return True"}], "follow_ups": []}
+        code, rec = self.conclude_result(package, incident_result(reading=reading))
+        self.assertEqual((code, rec["state"], rec["owner"]), (1, "blocked", "author"))
+        self.assertIn("src/a.py:4", rec["reason"])
+        after = subprocess.run(("git", "rev-parse", "HEAD"), cwd=head, capture_output=True, text=True).stdout
+        self.assertEqual(before, after, "a blocked tree stays as it is")
+        again = json.loads((package / "workflow-args.json").read_text(encoding="utf-8"))
+        self.assertIn("a second entry accepts ten", again["previous"]["reason"])
+        self.assertIn('"stage": "incident"', (package / "workflow-incident.js").read_text(encoding="utf-8"))
+        self.assertIn("a second entry accepts ten", (package / "workflow-incident.js").read_text(encoding="utf-8"))
+
+    def test_an_uncertain_reading_is_in_the_report_and_holds_nothing(self):
+        package = self.prepare(shape="incident")
+        self.fix(package)
+        reading = {"verdict": "uncertain", "reason": "could not find who else calls accept", "cause_read": None,
+                   "evidence": [], "follow_ups": []}
+        code, rec = self.conclude_result(package, incident_result(reading=reading))
+        self.assertEqual((code, rec["state"]), (0, "delivered"), rec)
+        self.assertIn("? uncertain — could not find who else calls accept",
+                      (package / "report.md").read_text(encoding="utf-8"))
+
+    def test_a_fix_with_no_address_for_its_cause_is_blocked_for_a_person(self):
+        package = self.prepare(shape="incident")
+        self.fix(package)
+        nowhere = dict(INCIDENT, root_cause={"what": "unknown", "where": None, "introduced_by": None})
+        code, rec = self.conclude_result(package, incident_result(incident=nowhere))
+        self.assertEqual((rec["state"], rec["owner"], rec["reason"]),
+                         ("blocked", "person", t("deliver.blocked.incident_no_root_cause")))
+
+    def test_a_fixer_that_stopped_hands_its_diagnosis_and_nothing_runs(self):
+        package = self.prepare(shape="incident")
+        stopped = dict(FIXED, files=[], blocked="the limit comes from a setting outside this repository",
+                       tests_run={"command": None, "red_first": None, "green": None})
+        outside = dict(INCIDENT, root_cause={"what": "the setting is wrong", "where": None, "introduced_by": None})
+        code, rec = self.conclude_result(package, incident_result(reading=None, incident=outside, written=stopped))
+        self.assertEqual((code, rec["state"], rec["owner"]), (1, "blocked", "person"))
+        self.assertIn("outside this repository", rec["reason"])
+        self.assertEqual(list(package.glob("run-suite-*.txt")), [])
+        self.assertIn("the setting is wrong", (package / "report.md").read_text(encoding="utf-8"),
+                      "a diagnosis with no fix is still what the person reads")
+
+    def test_a_test_that_passes_without_the_fix_reproduces_nothing_and_blocks(self):
+        package = self.prepare(shape="incident")
+        self.fix(package, test_text=WEAK_TEST)
+        code, rec = self.conclude_result(package, incident_result())
+        self.assertEqual(rec["state"], "blocked")
+        self.assertIn("test_guard_refuses", rec["reason"])
+
+    def test_concluded_again_without_the_workflow_s_file_it_still_knows_the_incident(self):
+        package = self.prepare(shape="incident")
+        self.fix(package)
+        self.conclude_result(package, incident_result())
+        with contextlib.redirect_stdout(io.StringIO()):
+            deliver.conclude(argparse.Namespace(package=str(package)))
+        rec = json.loads((package / "delivery.json").read_text(encoding="utf-8"))
+        self.assertEqual((rec["state"], rec["incident"]["root_cause"]["where"]), ("delivered", "src/a.py:2"))
+
+    def test_the_run_is_recorded_with_its_shape(self):
+        package = self.prepare(shape="incident")
+        self.fix(package)
+        self.conclude_result(package, incident_result())
+        runs = (self.root / "reports" / "runs.jsonl")
+        if runs.exists():       # written only when the harness left transcripts to measure
+            self.assertEqual(json.loads(runs.read_text(encoding="utf-8").splitlines()[-1])["shape"], "incident")
+

@@ -424,6 +424,7 @@
             "debt",
             "bug",
             "hotfix",
+            "incident",
             "refactor",
             "story",
             "epic"
@@ -433,6 +434,7 @@
           "enum": [
             "measure",
             "reproduce",
+            "root-cause",
             "preserve",
             "design",
             "decompose"
@@ -554,6 +556,129 @@
       "description": "what the diff says that a person should read and that stops nothing: files outside the scope, a size over the declared budget",
       "items": {
         "type": "string"
+      }
+    },
+    "incident": {
+      "description": "an incident's record only: what production showed, the line it is born at, what the change does there, the one independent reading it got, how a person sees the symptom gone after the deploy, and what was seen and left for after. Read by deliver_judge(): no address for the cause, no reading, or a reading that shows the symptom survives or something regressed, and the delivery does not stand.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "symptom",
+        "root_cause",
+        "fix",
+        "verify",
+        "follow_ups",
+        "reading"
+      ],
+      "properties": {
+        "symptom": {
+          "type": "string"
+        },
+        "root_cause": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "what",
+            "where",
+            "introduced_by"
+          ],
+          "properties": {
+            "what": {
+              "type": "string"
+            },
+            "where": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "file:line in this repository; null is a delivery that does not stand"
+            },
+            "introduced_by": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "fix": {
+          "type": "string"
+        },
+        "verify": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "follow_ups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "what",
+              "where",
+              "by"
+            ],
+            "properties": {
+              "what": {
+                "type": "string"
+              },
+              "where": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "by": {
+                "enum": [
+                  "fixer",
+                  "reader"
+                ]
+              }
+            }
+          }
+        },
+        "reading": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "verdict",
+                "reason"
+              ],
+              "properties": {
+                "verdict": {
+                  "enum": [
+                    "resolves",
+                    "does_not_resolve",
+                    "regresses",
+                    "uncertain"
+                  ]
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "cause_read": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "evidence": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          ]
+        }
       }
     }
   },

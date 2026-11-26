@@ -113,7 +113,7 @@ tracker:
   # article: o              # Portuguese gender, for pt-BR output: "o card", "a issue"
 
   # The tracker's item types, by the name it gives them, mapped to the shapes the
-  # method knows: debt, bug, hotfix, refactor, story, epic. The shape decides how deep
+  # method knows: debt, bug, hotfix, incident, refactor, story, epic. The shape decides how deep
   # a delivery plans before writing, whether a person approves the plan first, which
   # kinds may deliver it and how much diff it may buy (reference/shapes.md). A type
   # not mapped here is a stop, never a guess.
@@ -121,6 +121,7 @@ tracker:
   #   "Technical debt": debt
   #   "Bug": bug
   #   "Hotfix": hotfix
+  #   "Production incident": incident   # no plan, no gate: root cause, fix, one reading
   #   "Refactoring": refactor
   #   "Story": story
   #   "Epic": epic

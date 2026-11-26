@@ -108,6 +108,10 @@ deliver:
     plan_not_approved: 'o plano pede aprovação de pessoa e não tem — `{command}`'
     premise_failed: 'premissa central falha — {premise} ({evidence})'
     refuted: 'o cético leu o teste e ele não prova a guarda — {reason}'
+    incident_no_root_cause: 'a correção não nomeia a linha onde o sintoma nasce — incidente se resolve na causa raiz, com endereço'
+    incident_not_read: 'ninguém leu a correção — um incidente é lido uma vez, por um leitor que não a escreveu'
+    incident_does_not_resolve: 'o leitor mostrou que o sintoma sobrevive à correção — {reason} ({where})'
+    incident_regresses: 'o leitor mostrou que a correção quebra o que funcionava — {reason} ({where})'
     suite_incomplete: 'a suíte executou {executed} de {predicted} — não é verde'
     progress_not_declared: 'a suíte rodou, mas ninguém a contou. O perfil não declara `checks.suite.progress_pattern`.'
     suite_not_run: 'a suíte não rodou: {reason}'
@@ -123,7 +127,7 @@ deliver:
     plan_no_gate: ''
     shape_not_deliverable: 'um {shape} não se entrega — decompõe-se; o plano diz em quê'
     kind_not_for_shape: 'kind `{kind}` não entrega um {shape} — permitidas: {kinds}'
-    hotfix_base_missing: 'o perfil não declara `delivery.hotfix_base` — um hotfix não tem de onde ser cortado'
+    hotfix_base_missing: 'o perfil não declara `delivery.hotfix_base` — a forma {shape} não tem de onde ser cortada'
     decomposed: 'um {shape} se decompõe, nunca se entrega — o plano tem as histórias, para uma pessoa abrir'
     branch_at: 'branch `{branch}` em {path}, cortada de {base}'
     delivery_block_draft: 'rascunho de `delivery:` para `{repo}` — cole no perfil e confirme:'
@@ -155,6 +159,8 @@ deliver:
     worktree_removed: 'worktree {path} removida; a branch `{branch}` fica'
     release_hint: 'a worktree fica até: deliver.py release --package {path}'
   next: 'próximo, por uma pessoa: {command}'
+  incident:
+    next: 'push de `{branch}` e abertura da proposta, por uma pessoa. A revisão completa lê depois, nunca antes: {review}'
   not_assessable:
     no_delivery_block: 'perfil `{repo}` sem bloco `delivery:` — rode `{command}` e confirme'
     mutation_not_applied: 'a mutação não pôde ser aplicada em {file}:{line} — {reason}'
@@ -182,6 +188,15 @@ deliver:
     proof: PROVA
     sceptic: cético
     sceptic_not_read: 'não leu — pequena antes da escrita, standard sobre o diff ({reason}); a revisão lê a prova'
+    symptom: SINTOMA
+    cause: CAUSA
+    fix: CORREÇÃO
+    reading: LEITURA
+    introduced_by: 'trazida por {change}'
+    cause_read: 'o leitor leu a causa em {where}'
+    reading_none: 'ninguém leu a correção'
+    verify: 'CONFERIR EM PRODUÇÃO — como ver que o sintoma sumiu depois do deploy'
+    follow_ups: 'DEPOIS DO INCIDENTE — visto e deixado de fora: vira item próprio, nunca motivo para este esperar'
     skipped: PULADO
     measured: MEDIDO
   record:
@@ -193,6 +208,7 @@ deliver:
   unsupported:
     kind: 'kind `{kind}` não está no perfil — ele aceita: {kinds}'
   warning:
+    whole_suite_not_run: 'suíte inteira não rodou aqui: incidente é conferido pelos testes que tocou. O resto é da pipeline da proposta'
     budget_exceeded: 'acima do orçamento, declarado e sem travar: {files} arquivos e {lines} linhas; o perfil define {max_files} e {max_lines}'
     outside_scope: 'fora do escopo, sem travar — não nomeado pela medição, ou fora das raízes deste tipo: {paths}'
 delta:
@@ -646,6 +662,7 @@ run:
   bound: 'pacote de {kind} ligado: {path}'
   fix_door: 'as rotas author_fix são uma entrega nova, nas suas palavras: {text}'
   plan_stop: 'o plano em {path} espera uma pessoa — leia, depois: {command}'
+  incident_delivered: 'incidente corrigido e lido uma vez — {report}. O push de `{branch}` é da pessoa. Depois dele: deliver.py evidence --package {package}, e então deliver.py release --package {package}'
   next: 'próximo: {text}'
   started: 'execução de {item} em {repo}: {path}'
   stop: 'parada: {klass} — {fact}'

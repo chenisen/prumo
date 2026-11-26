@@ -8,7 +8,7 @@ from shape import SHAPES, resolve, budget_for, UnknownShape, size_of, small_limi
 from providers import config_for_tests, InvalidConfiguration
 
 
-class TestTheSixShapes(unittest.TestCase):
+class TestTheSevenShapes(unittest.TestCase):
     def test_every_shape_declares_the_whole_contract(self):
         for name, rules in SHAPES.items():
             with self.subTest(shape=name):
@@ -37,9 +37,41 @@ class TestTheSixShapes(unittest.TestCase):
         with self.assertRaises(UnknownShape):
             resolve(None, None, {})
 
-    def test_a_shape_outside_the_six_is_refused(self):
+    def test_a_shape_outside_the_seven_is_refused(self):
         with self.assertRaises(UnknownShape):
             resolve("chore", None, {})
+
+
+class TestAnIncidentIsTheShapeThatDoesNotWait(unittest.TestCase):
+    """The first incident delivered by the method went as a hotfix (2026-11-26): two hours,
+    twenty-two minutes of them worked by an agent. The rest was a plan waiting for a person,
+    a whole suite that did not load on the base, and three review rounds that held nothing
+    about the fix itself."""
+
+    def test_nobody_approves_a_plan_before_the_first_line(self):
+        self.assertFalse(SHAPES["incident"]["gate"])
+        self.assertEqual(SHAPES["incident"]["plan"], "root-cause")
+
+    def test_it_is_cut_from_where_production_runs_like_a_hotfix(self):
+        self.assertEqual(SHAPES["incident"]["base"], SHAPES["hotfix"]["base"])
+
+    def test_it_changes_behaviour_and_nothing_else(self):
+        self.assertEqual(SHAPES["incident"]["kinds"], ("behaviour-change",))
+
+    def test_it_has_a_stage_of_its_own_and_every_other_ungated_shape_the_common_one(self):
+        from shape import stage_of
+        self.assertEqual(stage_of("incident"), "incident")
+        for shape in ("debt", "bug"):
+            self.assertEqual(stage_of(shape), "deliver", shape)
+
+    def test_it_alone_is_checked_by_the_tests_it_touched_whatever_its_size(self):
+        from shape import checked_by_touched_tests
+        self.assertEqual([s for s in SHAPES if checked_by_touched_tests(s)], ["incident"])
+        self.assertEqual(size_of("incident", ["a", "b", "c", "d", "e"], 400, {})["size"], "standard",
+                         "the size stays what was touched: it is the suite that the shape decides")
+
+    def test_the_tracker_can_map_a_type_to_it(self):
+        self.assertEqual(resolve(None, "Production incident", {"Production incident": "incident"}), "incident")
 
 
 class TestTheBudgetScalesWithTheShape(unittest.TestCase):
@@ -66,7 +98,7 @@ class TestTheMappingLivesInTheConfiguration(unittest.TestCase):
         self.assertEqual(cfg.tracker.shape_of("Bug"), "bug")
         self.assertIsNone(cfg.tracker.shape_of("Melhoria"))
 
-    def test_a_type_mapped_outside_the_six_is_refused_at_load(self):
+    def test_a_type_mapped_outside_the_seven_is_refused_at_load(self):
         with self.assertRaises(InvalidConfiguration):
             config_for_tests(tracker={"type": "businessmap", "shapes": {"Bug": "chore"}})
 

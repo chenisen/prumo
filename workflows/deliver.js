@@ -1,12 +1,14 @@
 export const meta = {
   name: 'deliver',
   description: 'Delivers a prepared item: measures it, and a writer with a shell writes it and runs its tests in the item\'s own worktree; a story is written task by task; the evidence is collected once, at the end',
-  whenToUse: 'Called by the deliver skill after `deliver.py prepare`, with the stage that script printed: `deliver` (an item with no gate: measure and write in one call), `design` (a story or an epic), `measure` then `write` (a shape a person approves in between), `tasks` (an approved story), `evidence` (a delivered item). Do not invoke it directly: with no package there is nothing to deliver.',
+  whenToUse: 'Called by the deliver skill after `deliver.py prepare`, with the stage that script printed: `deliver` (an item with no gate: measure and write in one call), `incident` (production is failing: root cause, fix and one reading in one call), `design` (a story or an epic), `measure` then `write` (a shape a person approves in between), `tasks` (an approved story), `evidence` (a delivered item). Do not invoke it directly: with no package there is nothing to deliver.',
   phases: [
     { title: 'Design', detail: 'a story cut into tasks, an epic into stories, before anything is written' },
     { title: 'Measure', detail: 'every premise of the item against the code, with an address' },
     { title: 'Write', detail: 'the smallest change, written and run by one agent in the item\'s worktree' },
     { title: 'Refute', detail: 'a sceptic that has not seen the writer tries to break the proof — on a small item only when it answers a review or is itself a proof' },
+    { title: 'Fix', detail: 'an incident: from the symptom to its root cause, the test that reproduces it, the smallest fix — one agent, one pass' },
+    { title: 'Read', detail: 'an incident: one reader that has not seen the fixer says whether the cause is gone and whether anything that worked broke' },
     { title: 'Evidence', detail: 'what was done, shown — once, after the item is delivered' },
   ],
 }
@@ -52,8 +54,11 @@ const spawn = (name, opts) => prompts[name]
 // tier (resolved by the spine from `prumo.yml`); each agent's tier is the method's
 // reading of how hard its question is: planning a story and refuting a proof decide
 // what ships (`heavy`); measuring and writing are ordinary readings (`standard`);
-// collecting evidence illustrates and decides nothing (`light`). An absent map or tier
-// spreads nothing, and the agent inherits the session's model.
+// collecting evidence illustrates and decides nothing (`light`). An incident is two
+// readings that both decide what ships to a production that is failing — where the
+// cause is, and whether the fix removed it — so both are `heavy`: a wrong cause costs
+// a second pass, and the incident has no time for one. An absent map or tier spreads
+// nothing, and the agent inherits the session's model.
 const MODELS = input.models ?? {}
 const TIER = {
   'premise-surveyor': 'standard',
@@ -61,6 +66,8 @@ const TIER = {
   'task-planner': 'heavy',
   'proof-skeptic': 'heavy',
   'evidence-collector': 'light',
+  'incident-fixer': 'heavy',
+  'incident-reader': 'heavy',
 }
 const run = (name, body, opts) => {
   const o = spawn(name, opts)
@@ -195,6 +202,54 @@ const DESIGN_SCHEMA = {
       },
     },
     checked: { type: 'array', items: { type: 'string' } },
+  },
+}
+
+const FOLLOW_UPS = {
+  type: 'array',
+  items: {
+    type: 'object', required: ['what', 'where'], additionalProperties: false,
+    properties: { what: { type: 'string' }, where: { type: ['string', 'null'] } },
+  },
+}
+
+const INCIDENT_SCHEMA = {
+  type: 'object',
+  required: ['symptom', 'root_cause', 'fix', 'files', 'proving_tests', 'related_tests', 'verify',
+             'follow_ups', 'skipped', 'reused', 'tests_run', 'blocked'],
+  additionalProperties: false,
+  properties: {
+    symptom: { type: 'string' },
+    root_cause: {
+      type: 'object', required: ['what', 'where', 'introduced_by'], additionalProperties: false,
+      properties: { what: { type: 'string' }, where: { type: ['string', 'null'] },
+                    introduced_by: { type: ['string', 'null'] } },
+    },
+    fix: { type: 'string' },
+    files: { type: 'array', items: { type: 'string' } },
+    proving_tests: { type: 'array', items: { type: 'string' } },
+    related_tests: { type: 'array', items: { type: 'string' } },
+    verify: { type: 'array', items: { type: 'string' } },
+    follow_ups: FOLLOW_UPS,
+    skipped: { type: 'array', items: { type: 'string' } },
+    reused: { type: 'array', items: { type: 'string' } },
+    tests_run: WRITTEN_SCHEMA.properties.tests_run,
+    blocked: { type: ['string', 'null'] },
+    commit_message: { type: 'string' },
+    lines_changed: { type: ['integer', 'null'] },
+  },
+}
+
+const READING_SCHEMA = {
+  type: 'object',
+  required: ['verdict', 'reason', 'evidence', 'follow_ups'],
+  additionalProperties: false,
+  properties: {
+    verdict: { enum: ['resolves', 'does_not_resolve', 'regresses', 'uncertain'] },
+    reason: { type: 'string' },
+    cause_read: { type: ['string', 'null'] },
+    evidence: REFUTATION_SCHEMA.properties.evidence,
+    follow_ups: FOLLOW_UPS,
   },
 }
 
@@ -445,6 +500,86 @@ async function refute(measure, written, previous = null) {
   return refutation ?? { verdict: 'uncertain', reason: 'the sceptic did not answer', evidence: [] }
 }
 
+// An incident, fixed: one agent goes from the symptom to the line it is born at, writes
+// the test that reproduces it and the smallest change at the cause. No surveyor before
+// it and no plan between: the first incident delivered here (2026-11-26) waited forty
+// minutes at a plan's gate, and its plan held the item's premises, never its cause.
+async function fixIncident(previous = null) {
+  phase('Fix')
+  const again = previous
+    ? 'A PREVIOUS ATTEMPT AT THIS INCIDENT WAS BLOCKED on this same tree — the files already ' +
+      'hold it. Start from the reason: a reader who showed the symptom survives the fix is ' +
+      `saying the cause is elsewhere. Reason: ${previous.reason}` +
+      (previous.output ? `\nWhat the run printed:\n${previous.output}` : '')
+    : ''
+  const base = input.base ?? {}
+  const fixed = await run('incident-fixer', [
+    ...common,
+    again,
+    `This branch was cut from ${base.name ?? '?'} at ${base.sha ?? '?'} — what production runs.`,
+    'Go from the symptom to its root cause, with an address, before the first line. Then the ' +
+    'test that reproduces the incident, red; the smallest fix at the cause, green; the lint.',
+    ...shell,
+    '`commit_message` in your return: what the change does, in the voice of this repository\'s ' +
+    'recent commit subjects and its conventions — without the item\'s id, which the format adds.',
+    '`lines_changed` in your return: read from `git diff --numstat HEAD` in the working directory, ' +
+    'plus every line of a file you created. A number, never a guess.',
+    // The reader has no shell: the change reaches it as the file git wrote, never as a
+    // diff an agent typed.
+    'Before you return, save the change for the reader, exactly so: `git add -N -- <every file ' +
+    `you created>\`, then \`git diff ${base.sha ?? 'HEAD'} > ${bundle}/incident.diff\`.`,
+    'Do NOT commit: the script commits a delivery that stands.',
+    previous
+      ? '`files` in your return lists EVERY file changed since the base — the earlier ' +
+        'attempt\'s included — not only the ones you touched in this pass.'
+      : '',
+  ].filter(Boolean).join('\n'), { label: 'incident-fixer', phase: 'Fix', schema: INCIDENT_SCHEMA })
+  if (!fixed) throw new Error('incident-fixer returned nothing — nothing was diagnosed')
+  log(fixed.blocked
+    ? `fixer stopped: ${fixed.blocked}`
+    : `cause at ${fixed.root_cause.where ?? '?'} · ${fixed.files.length} file(s) written · ` +
+      `tests ${fixed.tests_run.green ? 'green' : 'not green'} · ${fixed.follow_ups.length} follow-up(s)`)
+  return fixed
+}
+
+// The one reading an incident gets before a person ships it. The reader sees the item
+// and the change, never the fixer's account of the cause: it walks from the symptom on
+// its own, and two readings that end at the same line are worth more than one repeated.
+async function readFix(fixed) {
+  phase('Read')
+  const reading = await run('incident-reader', [
+    ...common,
+    `The change, as git wrote it against the base: ${bundle}/incident.diff — read it first. ` +
+    `Files changed: ${fixed.files.join(', ')}.`,
+    'When that file is not there, read the files listed and say so in `reason`.',
+    'Two questions, and only those: does this change remove the cause of the symptom the item ' +
+    'describes, and does it break anything that worked on the base. Whatever else you see is a ' +
+    'follow-up. When you cannot name the path or the consumer, `uncertain`.',
+  ].join('\n'), { label: 'incident-reader', phase: 'Read', schema: READING_SCHEMA })
+  log(reading ? `reader: ${reading.verdict} — ${reading.reason}`
+              : 'reader returned nothing — recorded as uncertain')
+  return reading ?? { verdict: 'uncertain', reason: 'the reader did not answer', cause_read: null,
+                      evidence: [], follow_ups: [] }
+}
+
+if (stage === 'incident') {
+  // Production is failing: diagnosed, reproduced, fixed and read in ONE call, and
+  // nothing waits on the conductor or on a person in between. `conclude` checks what
+  // landed by the tests it touched, and the person reads cause, fix and reading at once.
+  const fixed = await fixIncident(input.previous ?? null)
+  // What `conclude` reads of any delivery, in the shape it already reads it.
+  const measure = { premises: [], files: fixed.files, mutations: [], checked: [],
+                    proving_tests: fixed.proving_tests, related_tests: fixed.related_tests }
+  const written = { files: fixed.files, skipped: fixed.skipped, reused: fixed.reused,
+                    tests_run: fixed.tests_run, blocked: fixed.blocked,
+                    commit_message: fixed.commit_message ?? '', commit: null,
+                    lines_changed: fixed.lines_changed ?? null }
+  const incident = { symptom: fixed.symptom, root_cause: fixed.root_cause, fix: fixed.fix,
+                     verify: fixed.verify, follow_ups: fixed.follow_ups }
+  const reading = fixed.blocked ? null : await readFix(fixed)
+  return { stage, measure, written, refutation: null, incident, reading }
+}
+
 if (stage === 'design') {
   // A story is cut into tasks, an epic into stories, before anything is measured or
   // written. The cut is read by a person at the gate; nothing here decides what a task
@@ -567,4 +702,4 @@ if (stage === 'evidence') {
                                            environment: { raised: [], taken_down: true } } }
 }
 
-throw new Error(`unknown stage \`${stage}\` — deliver, design, measure, write, tasks or evidence`)
+throw new Error(`unknown stage \`${stage}\` — deliver, incident, design, measure, write, tasks or evidence`)

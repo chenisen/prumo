@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """The shape of an item decides how deep the plan goes before anything is written.
 
-Six shapes, closed. Each carries the plan's depth, whether a person approves the plan
+Seven shapes, closed. Each carries the plan's depth, whether a person approves the plan
 before the first line, the kinds that may deliver it, the factor on the profile's budget
-and the effort the review reads it with. The shape is never inferred from the item's
+and the effort the review reads it with. An `incident` carries two things more: the
+stage that delivers it, and the suite it is checked by. The shape is never inferred from the item's
 text: it is the tracker's type, mapped in `prumo.yml`, or the invocation's `--shape`.
 
 Usage (as a module):
@@ -19,6 +20,17 @@ SHAPES: dict[str, dict] = {
     "hotfix":   {"plan": "reproduce", "gate": True,  "kinds": ("behaviour-change",),
                  "budget": 0.5, "review": "full",     "deliverable": True,  "decomposes": False,
                  "base": "hotfix_base"},
+    # Production is failing now. The first incident delivered here went as a hotfix
+    # (2026-11-26) and took two hours of which the agents worked twenty-two minutes: forty
+    # waiting at the plan's gate, forty-five on a base whose whole suite did not load,
+    # twenty-seven in three review rounds whose seven blocking findings said the test
+    # could prove more or the new code could be sturdier — none that the fix failed or
+    # broke what worked. So: no gate before the write, the root cause in place of the
+    # premises, the tests the change touched in place of the whole suite, and one reader
+    # in place of the review, who holds only a fix that misses the cause or regresses.
+    "incident": {"plan": "root-cause", "gate": False, "kinds": ("behaviour-change",),
+                 "budget": 0.5, "review": "one-reader", "deliverable": True, "decomposes": False,
+                 "base": "hotfix_base", "stage": "incident", "suite": "touched"},
     "refactor": {"plan": "preserve",  "gate": True,  "kinds": ("refactor",),
                  "budget": 2.0, "review": "standard", "deliverable": True,  "decomposes": False},
     "story":    {"plan": "design",    "gate": True,  "kinds": ("behaviour-change",),
@@ -29,7 +41,7 @@ SHAPES: dict[str, dict] = {
 
 
 class UnknownShape(ValueError):
-    """A shape outside the six, or a tracker type the installation did not map."""
+    """A shape outside the seven, or a tracker type the installation did not map."""
 
 
 def resolve(shape: str | None, tracker_type: str | None, mapping: dict | None) -> str:
@@ -89,6 +101,18 @@ def size_of(shape: str, files: list[str], lines: int | None, block: dict) -> dic
         return {"size": "standard", "reason": f"{lines} lines, small is up to {limit['max_lines']}"}
     return {"size": "small", "reason": f"{len(files)} file(s)"
             + (f", {lines} line(s)" if lines is not None else "") + ", no wide path"}
+
+
+def stage_of(shape: str) -> str:
+    """The workflow stage that delivers a shape with no gate: `deliver`, unless the shape
+    names its own."""
+    return SHAPES[shape].get("stage", "deliver")
+
+
+def checked_by_touched_tests(shape: str) -> bool:
+    """A shape whose delivery is checked by the tests it touched whatever its size: the
+    whole suite is the proposal's pipeline's, and the record says it did not run here."""
+    return SHAPES[shape].get("suite") == "touched"
 
 
 def budget_for(block: dict, shape: str) -> dict | None:

@@ -15,6 +15,9 @@ an item with no gate:
   → review.py prepare → Workflow task-review → review.py conclude
   → [approved: the evidence, once] → deliver.py release → stop
 
+an incident:
+  deliver.py prepare → Workflow workflow-incident.js → deliver.py conclude → stop
+
 a shape a person approves:
   prepare → Workflow workflow-measure.js → deliver.py plan → [a person approves]
   → Workflow workflow-write.js → conclude → the review → …
@@ -62,6 +65,7 @@ asking `next` again, or `next` will ask you to prepare it twice.
 | `blocked` | the delivery stopped: a central premise fails, the writer stopped, a task was not written, a new red, a proof that does not hold |
 | `unsupported` | the kind is not in the profile |
 | `approved` | the review approved, the evidence is written — the branch is the person's to push and open |
+| `delivered` | an incident: fixed at its cause and read once, inside its own workflow call — the branch is the person's to push **now**; no review, evidence or release stands before it |
 | `intervention` | the review opened routes — each with an owner; repairing an `author_fix` one is a new ask, through `deliver.py prepare --fix <review package>`, never this run's |
 
 A stop names its class and its fact, and `orchestration.md` under the run's package ends

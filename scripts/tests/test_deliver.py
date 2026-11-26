@@ -532,3 +532,158 @@ class TestTheEvidenceIsCollectedOnceAtTheEnd(unittest.TestCase):
     def test_without_a_declared_way_the_stage_raises_nothing(self):
         self.assertIn("if (!input.evidence) {", self.WORKFLOW)
         self.assertIn("return { stage, evidence: null }", self.WORKFLOW)
+
+
+def incident(**override):
+    """An incident fixed at its cause and read once — the clean path of the shape."""
+    block = {"symptom": "the route answers 500 for a customer with no plan",
+             "root_cause": {"what": "the plan is read before it is checked for null",
+                            "where": "src/a.py:41", "introduced_by": "abc1234 read the plan earlier"},
+             "fix": "check the plan before reading it",
+             "verify": ["GET /plan for a customer with no plan answers 200"],
+             "follow_ups": [{"what": "the same read has no timeout", "where": "src/a.py:60", "by": "reader"}],
+             "reading": {"verdict": "resolves", "reason": "the null plan can no longer reach the read",
+                         "cause_read": "src/a.py:41", "evidence": []}}
+    block.update(override)
+    return block
+
+
+def incident_record(**override):
+    proof = {"red_on_base": {"test": "t_no_plan", "result": "red"},
+             "green_on_branch": {"test": "t_no_plan", "result": "green"}, "mutations": []}
+    plan = {"shape": "incident", "depth": "root-cause", "gate": False, "approved_by": None, "budget": None}
+    return record(item={"id": "ITEM-1", "kind": "behaviour-change", "source": "tracker"},
+                  premises=[], proof=proof, plan=plan, incident=incident(**override))
+
+
+INCIDENT_PROFILE = {"profile": "repo-x", "delivery": {"kinds": ["behaviour-change"]}}
+
+
+class TestAnIncidentIsHeldOnlyByItsCauseAndByARegression(unittest.TestCase):
+    """The seven findings that held the first incident for three review rounds said the
+    test could prove more or the new code could be sturdier. None said the fix missed the
+    cause or broke what worked — the only two things worth keeping production failing for."""
+
+    def judge(self, **override):
+        from deliver import deliver_judge
+        return deliver_judge(incident_record(**override), INCIDENT_PROFILE)
+
+    def test_the_record_of_an_incident_validates(self):
+        jsonschema.validate(incident_record(), SCHEMA)
+
+    def test_fixed_at_its_cause_and_read_once_it_is_delivered(self):
+        self.assertEqual(self.judge()["state"], "delivered")
+
+    def test_a_fix_with_no_address_for_its_cause_does_not_stand(self):
+        out = self.judge(root_cause={"what": "something upstream", "where": None, "introduced_by": None})
+        self.assertEqual((out["state"], out["owner"]), ("blocked", "person"))
+        self.assertEqual(out["reason"], t("deliver.blocked.incident_no_root_cause"))
+
+    def test_a_symptom_that_survives_the_fix_holds_it_with_the_address(self):
+        reading = {"verdict": "does_not_resolve", "reason": "the batch route reads the plan the same way",
+                   "evidence": [{"file": "src/b.py", "line": 12, "excerpt": "plan.id"}]}
+        out = self.judge(reading=reading)
+        self.assertEqual((out["state"], out["owner"]), ("blocked", "author"))
+        self.assertIn("src/b.py:12", out["reason"])
+        self.assertIn("the batch route", out["reason"])
+
+    def test_a_fix_that_breaks_what_worked_holds_it(self):
+        reading = {"verdict": "regresses", "reason": "the export now skips customers with a plan",
+                   "evidence": [{"file": "src/export.py", "line": 7}]}
+        out = self.judge(reading=reading)
+        self.assertEqual(out["state"], "blocked")
+        self.assertEqual(out["reason"], t("deliver.blocked.incident_regresses", reason=reading["reason"],
+                                          where="src/export.py:7"))
+
+    def test_an_uncertain_reading_is_shown_and_holds_nothing(self):
+        out = self.judge(reading={"verdict": "uncertain", "reason": "could not trace the second caller"})
+        self.assertEqual(out["state"], "delivered")
+
+    def test_a_follow_up_is_never_a_reason_to_hold(self):
+        many = [{"what": f"sturdier {n}", "where": None, "by": "reader"} for n in range(9)]
+        self.assertEqual(self.judge(follow_ups=many)["state"], "delivered")
+
+    def test_a_fix_nobody_read_is_not_an_incident_s_delivery(self):
+        out = self.judge(reading=None)
+        self.assertEqual((out["state"], out["reason"]), ("blocked", t("deliver.blocked.incident_not_read")))
+
+    def test_it_still_owes_the_test_that_reproduces_it(self):
+        rec = incident_record()
+        rec["proof"]["red_on_base"] = None
+        from deliver import deliver_judge
+        out = deliver_judge(rec, INCIDENT_PROFILE)
+        self.assertEqual(out["reason"], t("deliver.blocked.no_red_on_base"))
+
+    def test_it_ends_at_a_person_s_push_and_the_review_comes_after(self):
+        out = self.judge()
+        self.assertFalse(NEXT.match(out["next"]), "an incident does not end at a review's invocation")
+        self.assertIn("ITEM-1-guard", out["next"])
+        self.assertIn("/prumo:task-review --repo repo-x --branch ITEM-1-guard --item ITEM-1", out["next"])
+
+    def test_same_record_same_answer(self):
+        self.assertEqual({json.dumps(self.judge(), sort_keys=True) for _ in range(50)}.__len__(), 1)
+
+
+class TestTheIncidentsRecordIsBuiltFromWhatTheAgentsReturned(unittest.TestCase):
+    def test_the_follow_ups_of_both_agents_are_kept_each_signed(self):
+        from deliver import incident_record as build
+        out = build({"symptom": "s", "root_cause": {"what": "w", "where": "src/a.py:1", "introduced_by": None},
+                     "fix": "f", "verify": ["v"], "follow_ups": [{"what": "seen by the fixer", "where": None}]},
+                    {"verdict": "resolves", "reason": "r", "evidence": [],
+                     "follow_ups": [{"what": "seen by the reader", "where": "src/a.py:9"}]})
+        self.assertEqual([(f["what"], f["by"]) for f in out["follow_ups"]],
+                         [("seen by the fixer", "fixer"), ("seen by the reader", "reader")])
+        jsonschema.validate(out, SCHEMA["properties"]["incident"])
+
+    def test_what_the_workflow_did_not_return_is_empty_never_invented(self):
+        from deliver import incident_record as build
+        out = build(None, None)
+        self.assertIsNone(out["root_cause"]["where"])
+        self.assertIsNone(out["reading"])
+        jsonschema.validate(out, SCHEMA["properties"]["incident"])
+
+
+class TestTheIncidentStageIsOneCallAndTheReaderIsBlind(unittest.TestCase):
+    WORKFLOW = (PRUMO_ROOT / "workflows" / "deliver.js").read_text(encoding="utf-8")
+    FIXER = (PRUMO_ROOT / "agents" / "incident-fixer.md").read_text(encoding="utf-8")
+    READER = (PRUMO_ROOT / "agents" / "incident-reader.md").read_text(encoding="utf-8")
+
+    def stage(self):
+        return self.WORKFLOW.split("if (stage === 'incident') {", 1)[1].split("\nif (stage === ", 1)[0]
+
+    def test_the_fixer_has_a_shell_and_the_reader_does_not(self):
+        self.assertIn("tools: Read, Write, Edit, Grep, Glob, Bash", self.FIXER)
+        self.assertIn("tools: Read, Grep, Glob\n", self.READER)
+
+    def test_no_surveyor_no_plan_and_no_sceptic_stand_in_the_stage(self):
+        stage = self.stage()
+        for absent in ("measureItem", "refute(", "writeItem"):
+            self.assertNotIn(absent, stage, absent)
+        self.assertIn("fixIncident", stage)
+        self.assertIn("readFix", stage)
+
+    def test_the_reader_is_handed_the_change_and_never_the_fixer_s_account_of_the_cause(self):
+        reader = self.WORKFLOW.split("async function readFix(fixed) {", 1)[1].split("\n}\n", 1)[0]
+        self.assertIn("incident.diff", reader)
+        for told in ("root_cause", "fixed.fix", "fixed.symptom", "follow_ups"):
+            self.assertNotIn(told, reader.split("schema: READING_SCHEMA", 1)[0].replace("`follow-up`", ""), told)
+
+    def test_a_fixer_that_stopped_is_not_read(self):
+        self.assertIn("const reading = fixed.blocked ? null : await readFix(fixed)", self.stage())
+
+    def test_the_stage_returns_what_conclude_reads_of_any_delivery(self):
+        self.assertIn("return { stage, measure, written, refutation: null, incident, reading }", self.stage())
+
+    def test_the_reader_holds_two_answers_and_everything_else_is_a_follow_up(self):
+        self.assertIn("**Nothing else holds an incident.**", self.READER)
+        self.assertIn('"resolves" | "does_not_resolve" | "regresses" | "uncertain"', self.READER)
+
+    def test_the_fixer_goes_to_the_cause_and_stops_when_it_is_not_in_the_repository(self):
+        self.assertIn("not the line where it\n   surfaces", self.FIXER)
+        self.assertIn("the cause is **outside this repository**", self.FIXER)
+        self.assertIn("The whole suite;", self.FIXER)
+
+    def test_both_readings_are_asked_of_the_heavy_tier(self):
+        self.assertIn("'incident-fixer': 'heavy'", self.WORKFLOW)
+        self.assertIn("'incident-reader': 'heavy'", self.WORKFLOW)
+

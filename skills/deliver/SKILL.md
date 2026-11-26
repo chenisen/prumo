@@ -56,7 +56,7 @@ is declared**.
 - push, merge, move the item, approve;
 - land on a protected branch (`forge.protected_branches`): the delivery is cut *from* one, never *on* one;
 - write inside the worktree before a gated plan was approved;
-- run the whole suite more than once per item, or at all for a small one;
+- run the whole suite more than once per item, or at all for a small one or an incident;
 - raise an environment to *show* the change before the item is delivered;
 - write a script that writes code;
 - invent a premise, a kind or a profile block that is not there.
@@ -68,7 +68,7 @@ because the model can err and an item can carry text that tries.
 
 ## The shape and the size
 
-The item's **shape** — `debt`, `bug`, `hotfix`, `refactor`, `story`, `epic` — is the
+The item's **shape** — `debt`, `bug`, `hotfix`, `incident`, `refactor`, `story`, `epic` — is the
 tracker's type mapped in `prumo.yml` (`--type`), or `--shape`; never inferred from the
 text. It decides whether a person approves a plan before a line is written, which kinds
 may deliver it and how much diff it buys. `reference/shapes.md` is the table.
@@ -82,6 +82,10 @@ when absent) and its `delivery.wide_paths`. It decides the sceptic and the suite
 | `small` | a shape with no gate, inside `delivery.small`, no wide path | no | the test files the change touched + `related_tests` |
 | `standard` | everything else that is one item | once | the whole suite, once |
 | `large` | a story | no — the review reads the branch | the whole suite, once, over all its tasks |
+
+An `incident` is the exception to that table: whatever its size, it is checked by the
+test files it touched and the ones the fixer named beside them, and its reader stands
+where the sceptic would.
 
 A profile with no `checks.suite.files_command` cannot run named test files: every
 delivery there runs the whole suite, and the fix is one line in the profile.
@@ -127,6 +131,25 @@ deliver.py conclude --package P --result P/workflow-result.json
     the changed test files · the suite the size asks · lint · judge · one commit ·
     record and report · marker off
 ```
+
+**An incident** — production is failing; three steps, and nobody is waited for before the fix:
+
+```
+deliver.py prepare --repo R --item C --item-file ITEM.md --shape incident
+    cuts the branch from the profile's `hotfix_base`, in its own worktree. No plan, no gate.
+Workflow({scriptPath: 'P/workflow-incident.js'})
+    incident-fixer: symptom → root cause, with an address → the test that reproduces it, red
+    → the smallest fix at the cause, green → incident-reader reads the change, once, blind
+                                                        → save the return to <package>/workflow-result.json
+deliver.py conclude --package P --result P/workflow-result.json
+    the proof over the changed test files · the tests it touched and the ones beside them,
+    never the whole suite · lint · judge · one commit · the report, cause on top
+```
+
+The item of an incident is the symptom: what production shows, where, since when, and
+the change it began after when somebody knows. `conclude` ends at a person's push — the
+report says so in its last line — and `task-review` reads the branch afterwards, never
+before. What holds an incident, and what does not: `reference/shapes.md`.
 
 **A shape a person approves** (`hotfix`, `refactor`) — the gate sits between two stages:
 
@@ -188,7 +211,8 @@ answers `state`, `reason` and `owner`; same record, same answer:
 
 - `unsupported` — the kind is not in the profile's `kinds`;
 - `blocked` — a central premise fails; the plan's gate has no approval; the writer
-  stopped; a story's task was not written; a new red by name; a red branch whose base
+  stopped; an incident whose fix names no address for its cause, was read by nobody, or
+  was shown by its reader to leave the symptom standing or to break what worked; a story's task was not written; a new red by name; a red branch whose base
   could not be measured; a suite that did not finish; nothing red on the base under the
   new test; a mutation that survived, or was too wide; the sceptic's `does_not_prove`;
   a red lint;
@@ -259,6 +283,10 @@ irreversible act. It ends with the next command:
 ```
 
 Never the review itself. Reviewing is another step and another decision.
+
+An incident's report opens with four lines — symptom, cause with its address, fix, the
+reader's answer — and closes with how to see the symptom gone in production, what was
+seen and left for after the incident, and the push as the next step.
 
 ## Where the item comes from
 

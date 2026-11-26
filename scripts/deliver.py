@@ -25,6 +25,10 @@ what landed once, hand the branch to task-review, and illustrate it at the very 
 
 Who writes does not approve: nothing here reads a finding or issues a verdict. The end of
 a delivery is the invocation of `task-review`, printed and never run.
+
+An `incident` is the one shape that does not wait for that review: production is failing,
+so it is diagnosed, fixed and read by one independent reader in a single workflow call,
+checked by the tests it touched, and handed to a person with its root cause on top.
 """
 from __future__ import annotations
 
@@ -46,7 +50,7 @@ from common import (MissingConfiguration, InvalidConfiguration, UsageError, cfg,
                     casa_algum, capabilities_after_preflight, hint_config, models_map)
 from i18n import t
 from shape import (SHAPES, resolve as resolve_shape, budget_for, UnknownShape, size_of,
-                   small_limits)
+                   small_limits, stage_of, checked_by_touched_tests)
 import hashlib
 
 ROOT = pathlib.Path(__file__).resolve().parent
@@ -86,6 +90,12 @@ def deliver_judge(record: dict, profile: dict) -> dict:
         out.update(state=state, reason=reason, owner=owner)
         return out
 
+    # An incident ends at a person's push, not at a review: one reader already read it,
+    # and the review that may follow never stands between the fix and production.
+    incident = record.get("incident")
+    if incident is not None:
+        out["next"] = t("deliver.incident.next", branch=record["branch"]["name"], review=out["next"])
+
     kinds = list(block.get("kinds") or [])
     kind = record["item"]["kind"]
     if kind not in kinds:
@@ -109,6 +119,10 @@ def deliver_judge(record: dict, profile: dict) -> dict:
     waiting = [k for k, v in (record.get("tasks") or {}).items() if v != DELIVERED]
     if waiting:
         return stop(BLOCKED, t("deliver.blocked.tasks_pending", tasks=", ".join(waiting)), "author")
+    # An incident is resolved at its cause. A change that names no line the symptom is
+    # born at patched where it shows, and the next incident is the same one.
+    if incident is not None and not (incident.get("root_cause") or {}).get("where"):
+        return stop(BLOCKED, t("deliver.blocked.incident_no_root_cause"), "person")
 
     # A refactor with nothing standing guard has no proof to preserve, and the suite
     # never ran for it: the stop is the person's, before "the suite did not run".
@@ -171,10 +185,54 @@ def deliver_judge(record: dict, profile: dict) -> dict:
         return stop(BLOCKED, t("deliver.blocked.refuted", reason=refutation.get("reason", "")),
                     "author")
 
+    # The one reading an incident gets. Two answers hold it, each with an address: the
+    # symptom survives the fix, or something that worked no longer does. `uncertain` is
+    # shown and holds nothing; a fix nobody read is not an incident's delivery.
+    if incident is not None:
+        reading = incident.get("reading")
+        if not reading:
+            return stop(BLOCKED, t("deliver.blocked.incident_not_read"), "author")
+        if reading.get("verdict") in INCIDENT_HOLDS:
+            return stop(BLOCKED, t(f"deliver.blocked.incident_{reading['verdict']}",
+                                   reason=reading.get("reason", ""),
+                                   where=evidence_addresses(reading) or "?"), "author")
+
     lint = record.get("lint") or {}
     if lint.get("state") == "red":
         return stop(BLOCKED, t("deliver.blocked.lint_red", reason=lint.get("reason", "")), "author")
     return out
+
+
+INCIDENT_HOLDS = ("does_not_resolve", "regresses")
+
+
+def evidence_addresses(reading: dict) -> str:
+    return "; ".join(f"{e.get('file')}:{e.get('line')}" if e.get("line") else str(e.get("file"))
+                     for e in reading.get("evidence") or [] if e.get("file"))
+
+
+def incident_record(incident: dict | None, reading: dict | None) -> dict:
+    """What an incident's delivery says about itself, as the record holds it: the symptom,
+    the cause with its address, the fix, the one reading, what a person checks after the
+    deploy, and what both agents saw and left for after — each follow-up signed by who
+    saw it. Absent fields are empty, never invented: the judge reads the gaps."""
+    incident = incident or {}
+    cause = incident.get("root_cause") or {}
+    follow = [{"what": f.get("what") or "", "where": f.get("where") or None, "by": who}
+              for who, source in (("fixer", incident), ("reader", reading or {}))
+              for f in source.get("follow_ups") or [] if f.get("what")]
+    return {
+        "symptom": incident.get("symptom") or "",
+        "root_cause": {"what": cause.get("what") or "", "where": cause.get("where") or None,
+                       "introduced_by": cause.get("introduced_by") or None},
+        "fix": incident.get("fix") or "",
+        "verify": [v for v in incident.get("verify") or [] if v],
+        "follow_ups": follow,
+        "reading": ({"verdict": reading["verdict"], "reason": reading.get("reason", ""),
+                     "cause_read": reading.get("cause_read") or None,
+                     "evidence": list(reading.get("evidence") or [])}
+                    if reading and reading.get("verdict") else None),
+    }
 
 
 def diff_warnings(diff: dict, budget: dict | None) -> list[str]:
@@ -836,7 +894,7 @@ def prepare(args) -> int:
     if rules.get("base") and not fix:
         hotfix_base = block.get(rules["base"])
         if not hotfix_base:
-            raise UsageError(t("deliver.cli.hotfix_base_missing"))
+            raise UsageError(t("deliver.cli.hotfix_base_missing", shape=shape))
         base_sha = (git(repo_dir, "rev-parse", "--verify", "-q", f"origin/{hotfix_base}", check=False)
                     or git(repo_dir, "rev-parse", "--verify", "-q", hotfix_base, check=False))
         if not base_sha:
@@ -900,7 +958,7 @@ def prepare(args) -> int:
         print(_invocation(package, "measure"))
         print(f"deliver.py plan --package {package} --measure <the file its return was saved to>")
     else:
-        print(_invocation(package, "deliver"))
+        print(_invocation(package, stage_of(shape)))
         print("\n" + t("deliver.cli.then_conclude", path=package))
     return 0
 
@@ -1295,6 +1353,18 @@ def conclude(args) -> int:
         else:
             refutation = stage_return(result, "refutation", optional=True) if result else None
         write_json(package / "measure.json", measure)
+    incident = None
+    if shape == "incident":
+        # Kept beside the package: a conclude run again without the workflow's file still
+        # says what the incident was.
+        kept_incident = package / "incident.json"
+        told = {"incident": stage_return(result, "incident", optional=True) if result else None,
+                "reading": stage_return(result, "reading", optional=True) if result else None}
+        if told["incident"] is None and kept_incident.exists():
+            told = read_json(kept_incident)
+        else:
+            write_json(kept_incident, told)
+        incident = incident_record(told["incident"], told["reading"])
 
     premises = measure.get("premises") or []
     allowed = list(measure.get("files") or []) + list(written.get("files") or [])
@@ -1345,7 +1415,10 @@ def conclude(args) -> int:
                if f not in changed_tests]
     focused = changed_tests + related
     by_files = bool(check.get("files_command") and focused)
-    scope = "focused" if size["size"] == "small" and by_files else "whole"
+    # An incident is checked by the tests it touched whatever landed: the whole suite is
+    # the proposal's pipeline's. The first one delivered here lost forty-five minutes to a
+    # base whose whole suite did not load, with its own tests green all along.
+    scope = "focused" if (size["size"] == "small" or checked_by_touched_tests(shape)) and by_files else "whole"
 
     from evidence import compare_reds, red_names, progress
     central_failed = any(p["central"] and p["state"] == "fails" for p in premises)
@@ -1482,6 +1555,10 @@ def conclude(args) -> int:
     }
     if story:
         record["tasks"] = task_states
+    if incident is not None:
+        record["incident"] = incident
+        if scope == "focused":
+            record["warnings"].append(t("deliver.warning.whole_suite_not_run"))
     import jsonschema
     jsonschema.validate(record, read_json(ROOT.parent / "schemas" / "delivery.schema.json"))
     record.update(deliver_judge(record, profile))
@@ -1513,7 +1590,8 @@ def conclude(args) -> int:
         carry(package, previous=None)
     again = None
     if record["state"] == BLOCKED and record.get("owner") == "author":
-        again = _invocation(package, "tasks" if story else "write")
+        again = _invocation(package, "tasks" if story else
+                            "incident" if incident is not None else "write")
     elif record["state"] == DELIVERED and block.get("evidence"):
         stage_script(package, "evidence")
     report = render(record, mutations)
@@ -1603,6 +1681,7 @@ def record_run(package: pathlib.Path, record: dict, tel: dict) -> None:
     line = {
         "date": today(), "capability": "deliver", "repo": record["repo"],
         "item": record["item"]["id"], "kind": record["item"]["kind"],
+        "shape": (record.get("plan") or {}).get("shape"),
         "size": (record.get("size") or {}).get("size"),
         "suite_scope": record["baseline"].get("scope"),
         "state": record["state"], "owner": record.get("owner"),
@@ -1636,6 +1715,7 @@ def sceptic_owed(record: dict) -> bool:
     `large` and read by the review; a blocked write was never handed to a sceptic."""
     return (record.get("state") == DELIVERED
             and (record.get("size") or {}).get("size") == "standard"
+            and record.get("incident") is None          # an incident has its reader instead
             and not (record.get("proof") or {}).get("refutation"))
 
 
@@ -1656,7 +1736,11 @@ def render(record: dict, mutations: list[dict]) -> str:
         lines.append(f"{L('size'):9}{size['size']} — {size['reason']}")
     for task, state in (record.get("tasks") or {}).items():
         lines.append(f"{'':9}{SYMBOL.get({'delivered': 'holds', 'blocked': 'fails'}.get(state), '?')} {task} {state}")
-    lines += ["", L("premises")]
+    incident = record.get("incident")
+    if incident is not None:
+        lines += [""] + render_incident(incident)
+    if record["premises"] or incident is None:
+        lines += ["", L("premises")]
     for p in record["premises"] or []:
         lines.append(f"{SYMBOL[p['state']]} {p['text']} — {p.get('evidence') or '?'}")
     lines += ["", L("proof")]
@@ -1704,8 +1788,51 @@ def render(record: dict, mutations: list[dict]) -> str:
         lines += ["", f"{L('measured'):9}{', '.join(runs)}"]
     if record["skipped"]:
         lines += ["", L("skipped") + " — " + measured.get("note", "")] + [f"? {s}" for s in record["skipped"]]
+    if incident is not None:
+        lines += render_after_the_incident(incident)
     lines += ["", f"{L('next'):9}{record['next']}", ""]
     return "\n".join(lines)
+
+
+READING_SYMBOL = {"resolves": "holds", "does_not_resolve": "fails", "regresses": "fails"}
+
+
+def render_incident(incident: dict) -> list[str]:
+    """The top of an incident's report: what production showed, where it is born, what
+    the change does there, and what the one reader said — the four lines a person reads
+    before deciding to ship."""
+    L = lambda key: t(f"deliver.report.{key}")  # noqa: E731
+    cause = incident.get("root_cause") or {}
+    lines = [f"{L('symptom'):9}{incident.get('symptom') or '?'}",
+             f"{L('cause'):9}{cause.get('what') or '?'} — {cause.get('where') or '?'}"
+             + (f" · {t('deliver.report.introduced_by', change=cause['introduced_by'])}"
+                if cause.get("introduced_by") else ""),
+             f"{L('fix'):9}{incident.get('fix') or '?'}"]
+    reading = incident.get("reading")
+    if not reading:
+        return lines + [f"{L('reading'):9}{SYMBOL['not_assessable']} {t('deliver.report.reading_none')}"]
+    mark = SYMBOL[READING_SYMBOL.get(reading["verdict"], "not_assessable")]
+    lines.append(f"{L('reading'):9}{mark} {reading['verdict']} — {reading.get('reason', '')}"
+                 + (f" · {t('deliver.report.cause_read', where=reading['cause_read'])}"
+                    if reading.get("cause_read") else ""))
+    where = evidence_addresses(reading)
+    if where and reading["verdict"] != "resolves":
+        lines.append(f"{'':9}{where}")
+    return lines
+
+
+def render_after_the_incident(incident: dict) -> list[str]:
+    """What stays for after: how a person sees the symptom gone once it is deployed, and
+    what the fixer and the reader saw and left out — an item of its own, never a reason
+    this one waited."""
+    lines = []
+    if incident.get("verify"):
+        lines += ["", t("deliver.report.verify")] + [f"  {v}" for v in incident["verify"]]
+    if incident.get("follow_ups"):
+        lines += ["", t("deliver.report.follow_ups")]
+        lines += [f"  {f['what']}" + (f" — {f['where']}" if f.get("where") else "") + f" ({f['by']})"
+                  for f in incident["follow_ups"]]
+    return lines
 
 
 def main() -> int:

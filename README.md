@@ -49,7 +49,7 @@ what is judgement.
 | | |
 |---|---|
 | **Python scripts** | Resolve the base, assemble the package, triage the risk, judge; cut the worktree, check what landed once, hand over. No dependency beyond `yaml` and `jsonschema`. Both judges are pure functions: same input, same answer. |
-| **15 agents** | One question each. Ten read-only for the review — seven reviewers of one axis, a criteria extractor, a manual-verification planner, and a **sceptical verifier** that tries to *refute* every finding without having seen the reasoning behind it. Five for the delivery — a surveyor that measures, a **writer with a shell** that edits the code and runs the tests it touches, a sceptic that never saw the writer, a planner that cuts a story into tasks, and a collector that shows a finished delivery. |
+| **17 agents** | One question each. Ten read-only for the review — seven reviewers of one axis, a criteria extractor, a manual-verification planner, and a **sceptical verifier** that tries to *refute* every finding without having seen the reasoning behind it. Five for the delivery — a surveyor that measures, a **writer with a shell** that edits the code and runs the tests it touches, a sceptic that never saw the writer, a planner that cuts a story into tasks, and a collector that shows a finished delivery. Two for an incident — a **fixer** that goes from the symptom to its root cause and fixes it there, and a reader that never saw the fixer. |
 | **3 knowledge skills** | What the reviewers load to read a diff: five axes, OWASP/ASVS, personal data. Neutral of language, framework and project. |
 | **18 risk classes** | A guardrail has three states — `fired`, `did_not_fire`, `not_assessable`. |
 | **2 message catalogues** | The same keys in each, compared one by one by a test. Everything a person reads, in the configured language. |
@@ -84,7 +84,7 @@ prumo/
 │   ├── judge.py                 F7 — pure function: gates, routes, verdict
 │   ├── render.py                F9 — report and comments
 │   ├── review.py                the two entry points: `prepare` and `conclude`
-│   ├── shape.py                 the six shapes — plan depth, gate, kinds, budget — and the size of what was touched
+│   ├── shape.py                 the seven shapes — plan depth, gate, kinds, budget — and the size of what was touched
 │   ├── deliver.py               the delivery: cut the worktree, plan, check once by size, judge, hand over, evidence
 │   ├── run.py                   the route: every next step read from disk, every stop classed
 │   ├── branch_guard.py          the hook's judge: nothing lands directly on a protected branch
@@ -139,7 +139,7 @@ Four steps, and the second writes itself.
 
 ### 1. Install the plugin (Claude Code)
 
-The fifteen agents, the skills, the two workflows and the hook travel with the
+The seventeen agents, the skills, the two workflows and the hook travel with the
 plugin. You copy nothing into `.claude/agents/`, you edit no `settings.json`, you
 register no hook by hand:
 
@@ -158,7 +158,7 @@ What that registers:
 | What | How it shows up |
 |---|---|
 | the skills | `/prumo:task-review <item url>`, `/prumo:deliver`, and `/prumo:run` / `/prumo:approve` (a person's, closed to the model) |
-| the 15 agents | `prumo:scope-coherence-reviewer`, `prumo:change-writer`, `prumo:finding-verifier`, … |
+| the 17 agents | `prumo:scope-coherence-reviewer`, `prumo:change-writer`, `prumo:finding-verifier`, … |
 | the knowledge skills | loaded by the reviewers, not invoked by hand |
 | the two workflows | `prumo:task-review` and `prumo:deliver`, invoked by their skills |
 | the `PreToolUse` hook | from `hooks/hooks.json` |
@@ -523,8 +523,8 @@ its own skill, its own record and its own tests — never a flag on an existing 
 | **deliver** | what is the smallest change that delivers this item, and what proves it? | `deliver.py prepare` → `Workflow deliver` (one call) → `deliver.py conclude` | `delivered`, `blocked` or `unsupported`, and the `task-review` invocation ready to paste |
 | **run** | carry this item end to end, on my own words, and stop where only I decide | `/prumo:run --ask-file ASK.md …` — closed to the model | the review's verdict, or a stop with its class |
 
-**The shape decides the depth.** An item is a `debt`, a `bug`, a `hotfix`, a `refactor`,
-a `story` or an `epic` — the tracker's type, mapped in `prumo.yml`, never inferred —
+**The shape decides the depth.** An item is a `debt`, a `bug`, a `hotfix`, an `incident`,
+a `refactor`, a `story` or an `epic` — the tracker's type, mapped in `prumo.yml`, never inferred —
 and the shape decides how deep the plan goes before a line is written, whether a
 person approves it first, which kinds may deliver it, how much diff it buys and how
 hard the review reads it (`reference/shapes.md`). The plan is a file, rendered from
@@ -538,6 +538,18 @@ An item nobody has to approve is measured and written in **one** workflow call, 
 one `prepare` and one `conclude`. Until 3.0 the writer wrote blind and a script ran the
 whole suite after it: six of the first story's thirteen tasks were written twice, and
 the conductor filled the gaps with throwaway scripts.
+
+**An incident goes straight to its cause.** Production is failing, and the shape
+`incident` spends nothing before the fix exists: no survey, no plan, no approval. One
+agent with a shell goes from the symptom to the line it is born at, writes the test that
+reproduces it and the smallest change at the cause; one reader who never saw that agent
+reads the change, once, in the same workflow call. `conclude` checks it by the tests it
+touched — never the whole suite — and the report opens with symptom, cause, fix and
+reading. Two answers hold it, each with an address: the symptom survives the fix, or
+something that worked no longer does. Everything else either agent saw is a line under
+*after the incident*. The delivery ends at a person's push; the review reads the branch
+afterwards. The first incident the method delivered, as a hotfix, took two hours of
+which the agents worked twenty-two minutes (`reference/shapes.md`).
 
 **The size decides what is paid.** The shape says what was asked; the size — `small`,
 `standard`, `large`, computed from the diff, the profile's `delivery.small` and its

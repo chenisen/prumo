@@ -104,6 +104,34 @@ class TestEveryRoutingDecisionIsReadFromDisk(unittest.TestCase):
         self.assertEqual(self.decide()["text"],
                          f"deliver.py conclude --package {self.deliver} --result {self.deliver}/workflow-result.json")
 
+    def test_an_incident_is_one_workflow_call_of_its_own_stage(self):
+        self.put(self.deliver, "deliver-manifest.json", {"gate": False, "shape": "incident"})
+        out = self.decide()["text"]
+        self.assertIn("/workflow-incident.js'})", out)
+        self.put(self.deliver, "workflow-result.json", {})
+        self.assertEqual(self.decide()["text"],
+                         f"deliver.py conclude --package {self.deliver} --result {self.deliver}/workflow-result.json")
+
+    def test_a_delivered_incident_ends_the_run_with_no_review_between_the_fix_and_the_person(self):
+        """The first incident delivered here waited twenty-seven minutes in three review
+        rounds. An incident was read once inside its own call: the run stops at the
+        delivery, worktree standing, and hands the push to a person."""
+        self.put(self.deliver, "deliver-manifest.json", {"gate": False, "shape": "incident"})
+        self.put(self.deliver, "delivery.json", {"state": "delivered", "branch": {"name": "ITEM-1-x", "sha": "a" * 40},
+                                                 "incident": {"root_cause": {"where": "src/a.py:2"}}})
+        out = self.decide()
+        self.assertEqual((out["kind"], out["class"]), ("stop", "delivered"))
+        self.assertIn("ITEM-1-x", out["text"])
+        self.assertNotIn("review.py", out["text"])
+        self.assertIn(f"deliver.py release --package {self.deliver}", out["text"])
+
+    def test_a_blocked_incident_is_a_stop_with_its_reason_like_any_delivery(self):
+        self.put(self.deliver, "deliver-manifest.json", {"gate": False, "shape": "incident"})
+        self.put(self.deliver, "delivery.json", {"state": "blocked", "reason": "the symptom survives",
+                                                 "incident": {}})
+        out = self.decide()
+        self.assertEqual((out["class"], out["text"]), ("blocked", "the symptom survives"))
+
     def test_a_shape_with_a_gate_is_measured_planned_and_waits_for_a_person(self):
         self.put(self.deliver, "deliver-manifest.json", {"gate": True})
         self.assertIn("/workflow-measure.js'})", self.decide()["text"])

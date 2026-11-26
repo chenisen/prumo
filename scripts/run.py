@@ -18,8 +18,10 @@ did not already hand over, and it decides nothing the disk does not show.
 The route is fixed: deliver (prepare · ONE workflow call · conclude) → task-review
 (prepare · workflow · conclude) → evidence, once, when the review approved → stop. A
 shape a person approves waits at its plan, between a measure (or a design) and the
-write. What the review decides ends the run. Nothing here merges, pushes, moves the
-item, or repairs a finding.
+write. What the review decides ends the run. An incident ends sooner, at its delivery:
+it was read once inside its own workflow call, and no review stands between the fix and
+the person who ships it. Nothing here merges, pushes, moves the item, or repairs a
+finding.
 """
 from __future__ import annotations
 
@@ -41,7 +43,8 @@ class AskMissing(UsageError):
     """No ask, or an empty one. The route does not start on an inference."""
 
 
-STOP_CLASSES = ("blocked", "unsupported", "approved", "intervention", "ask", "plan", "decomposed")
+STOP_CLASSES = ("blocked", "unsupported", "approved", "intervention", "ask", "plan", "decomposed",
+                "delivered")
 
 
 def read_ask(path: str | None) -> str:
@@ -133,10 +136,16 @@ def decide(run: dict, root: pathlib.Path) -> dict:
         if rec.get("state") != "delivered":
             return stop(rec.get("state", "blocked"), rec.get("reason", "?"))
         branch = rec["branch"]["name"]
+        if rec.get("incident") is not None:
+            # An incident stops here, with the worktree standing: production is waiting
+            # on a person's push, not on a review, an evidence or a release.
+            return stop("delivered", t("run.incident_delivered", report=f"{d}/report.md",
+                                       branch=branch, package=d))
     elif not man.get("gate"):
-        # No gate: measured, sized and written in ONE workflow call, checked once.
+        # No gate: measured, sized and written in ONE workflow call, checked once — or,
+        # for an incident, diagnosed, fixed and read in one.
         if not _exists(d, "workflow-result.json"):
-            return invoke(_stage(d, "deliver") + f" → {t('run.save_result', path=result)}")
+            return invoke(_stage(d, _stage_of(man)) + f" → {t('run.save_result', path=result)}")
         return invoke(f"deliver.py conclude --package {d} --result {result}")
     elif not _exists(d, "measure.json"):
         if not _exists(d, "measure-result.json"):
@@ -167,6 +176,11 @@ def decide(run: dict, root: pathlib.Path) -> dict:
     if not _exists(r, "manifest.json") or _review_read_another_head(r, rec):
         return invoke(f"review.py prepare --repo {repo} --branch {branch} --item {item} --item-file {item_file} --delivery {d}")
     return _review_step(run, r, repo, stop, invoke)
+
+
+def _stage_of(man: dict) -> str:
+    from shape import SHAPES, stage_of
+    return stage_of(man["shape"]) if man.get("shape") in SHAPES else "deliver"
 
 
 def _stage(d: str, stage: str) -> str:
